@@ -1156,9 +1156,26 @@ def prime_camera(client, sid, shifts=(6.0, 3.5, 0.3)):
     assert wait_until(lambda: not client.get(f"/session/{sid}/state").json()["slow_busy"])
     session = client.app.state.orch.sessions.get(sid)
     now = time.time()
-    for snap, ago in zip(session.recent_frames, shifts):
+    base = cv2_imdecode(JPEG)
+    for i, (snap, ago) in enumerate(zip(session.recent_frames, shifts)):
         snap.ts = now - ago
+        snap.jpeg = cv2_variant(base, i)         # a real camera sees different things over seconds
     return session
+
+
+def cv2_imdecode(data):
+    import cv2
+    import numpy as np
+    return cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+
+
+def cv2_variant(img, i):
+    """A copy of the picture with a bright bar somewhere else for each i: a different scene to the thumbnail check."""
+    import cv2
+    out = img.copy()
+    out[:, 20 + (i % 11) * 65:20 + (i % 11) * 65 + 50] = 255
+    ok, buf = cv2.imencode(".jpg", out)
+    return buf.tobytes()
 
 
 def test_a_spoken_turn_shows_claude_two_frames_a_close_up_the_yolo_tracks_and_the_words(client):

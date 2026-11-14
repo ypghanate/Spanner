@@ -25,11 +25,14 @@ import cv2
 import numpy as np
 
 from .contracts import Detection
-from .frames import crop as crop_pixels, encode_jpeg
+from .frames import crop as crop_pixels, encode_jpeg, thumb
 from .session import FrameSnap, Session
 
 MAX_FRAME_AGE_S = 10.0       # a frame older than this is not "what the camera sees now"
 MIN_SEPARATION_S = 1.0       # the earlier frame must be at least this much older than the latest
+# The earlier frame is only worth its tokens if the scene changed. Mean abs difference of 32x18 grey
+# thumbnails: sensor noise and re-encoding stay under 2, a hand entering the frame is over 5.
+EARLIER_MIN_CHANGE = 3.0
 AGE_TAG_MIN_S = 1.5          # only mention an observation's age when it is at least this old
 CROP_MAX_AREA = 0.40         # no crop when the object already fills this much of the frame
 CROP_MIN_SCORE = 0.40        # detections below this confidence are not worth a close-up
@@ -118,9 +121,24 @@ def _crop_for(snap: FrameSnap) -> tuple[bytes, str] | None:
     return encode_jpeg(close_up, long_edge=CROP_LONG_EDGE, quality=85), name
 
 
+def _scene_change(a: FrameSnap, b: FrameSnap) -> float | None:
+    """How different two frames look (0 = identical). None when a frame can't be decoded."""
+    ia = cv2.imdecode(np.frombuffer(a.jpeg, np.uint8), cv2.IMREAD_COLOR)
+    ib = cv2.imdecode(np.frombuffer(b.jpeg, np.uint8), cv2.IMREAD_COLOR)
+    if ia is None or ib is None:
+        return None
+    return float(np.abs(thumb(ia) - thumb(ib)).mean())
+
+
 def _earlier(ring: list[FrameSnap], latest: FrameSnap, speech_start: float) -> FrameSnap | None:
+    """The frame nearest the start of speech, unless the scene looks the same as the latest one
+    (a static scene: a second picture costs tokens and tells Claude nothing)."""
     older = [f for f in ring if latest.ts - f.ts >= MIN_SEPARATION_S]
-    return min(older, key=lambda f: abs(f.ts - speech_start), default=None)
+    best = min(older, key=lambda f: abs(f.ts - speech_start), default=None)
+    if best is None:
+        return None
+    change = _scene_change(best, latest)
+    return best if change is None or change >= EARLIER_MIN_CHANGE else None
 
 
 def build(session: Session, speech_end_ts: float | None = None, duration_s: float | None = None,

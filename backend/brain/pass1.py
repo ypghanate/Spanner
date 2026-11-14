@@ -196,20 +196,41 @@ def _user_content(inp: Pass1Input, images: list[bytes] | None) -> str | list[dic
     return [*image_blocks(images), {"type": "text", "text": text}]
 
 
-async def call_claude(inp: Pass1Input, images: list[bytes] | None = None) -> SituationReport:
-    """One Haiku call. Raises Pass1Error on any failure (the dataset teacher uses this).
-    `images` are JPEGs shown before the text, in the order inp.image_notes lists them."""
+def model_for(has_images: bool) -> str:
+    """Spoken turns with camera pictures go to the vision model (Sonnet 5.5: it reads small details in
+    photos far better than Haiku); everything else stays on the cheap text model."""
     s = get_settings()
+    return s.pass1_vision_model if has_images and s.pass1_vision_model else s.pass1_model
+
+
+def thinking_for(model: str) -> dict | None:
+    """How to run `model` with thinking off. Sonnet 5.5 rejects {"type": "disabled"} (400) and takes
+    "between_tools" instead; Haiku 5.5 accepts "disabled"; anything else keeps its own default."""
+    if model.startswith("claude-sonnet-5-5"):
+        return {"type": "between_tools"}
+    if model.startswith("claude-haiku-5-5"):
+        return {"type": "disabled"}
+    return None
+
+
+async def call_claude(inp: Pass1Input, images: list[bytes] | None = None) -> SituationReport:
+    """One Claude call. Raises Pass1Error on any failure (the dataset teacher uses this).
+    `images` are JPEGs shown before the text, in the order inp.image_notes lists them; with images the
+    vision model is used (see model_for), without them the cheap text model."""
+    s = get_settings()
+    model = model_for(bool(images))
+    thinking = thinking_for(model)
     try:
         msg = await _get_client().messages.parse(
-            model=s.pass1_model,
+            model=model,
             max_tokens=1024,
-            system=load_system_prompt(),
+            # the same ~1.5k-token system prompt every call: cached (reads cost 5-10% of normal input)
+            system=[{"type": "text", "text": load_system_prompt(), "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": _user_content(inp, images)}],
             output_format=SituationReport,
-            thinking={"type": "disabled"},
-            output_config={"effort": "low"},
+            output_config={"effort": s.pass1_effort},
             timeout=s.claude_timeout_s,
+            **({"thinking": thinking} if thinking else {}),
         )
     except anthropic.APITimeoutError as e:
         raise Pass1Error("claude timed out") from e

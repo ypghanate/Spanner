@@ -176,12 +176,13 @@ The camera, the YOLO detector and the person's speech reach Claude together (`ba
 | Piece | Rule |
 |---|---|
 | Latest frame | the newest sharp frame, at most 10 s old (blurry and dark frames never enter the ring) |
-| Earlier frame | the frame nearest to when the user started speaking, only if it is at least 1 s older than the latest |
+| Earlier frame | the frame nearest to when the user started speaking, only if it is at least 1 s older than the latest **and the scene changed** (thumbnail difference of at least 3; a static scene gets one picture, not two) |
 | Close-up | a crop of the main detected object (largest non-person, score at least 0.4) when it fills under 40% of the frame and the crop is at least 160 px a side |
 | YOLO tracks | the detections on the latest frame: label, track id, confidence, position |
 | Text observation age | `seen N s ago` on the newest observation when it is at least 1.5 s old |
 
 - **Pass 1** gets these as images (before the text) plus prompt lines `IMAGES ATTACHED` and `DETECTOR (YOLO, latest frame)`. Stage signature: `backend.brain.pass1.run(inp, session_id, store=None, images=None)`. The fine-tuned Pass 1 backend is text-only (it still sees the detector line).
+- **Which model (cost):** a spoken turn that carries pictures uses `PASS1_VISION_MODEL` (default `claude-sonnet-5-5`, low effort, thinking off via `between_tools`); every other Pass 1 call (keyframe-only turns, the dataset teacher) stays on Haiku. Set `PASS1_VISION_MODEL=` (empty) to use Haiku for everything. Why: on real Royal Kludge photos Haiku (low effort) often named the wrong removed key and Sonnet got it right every time. Measured with a real key: a warm spoken turn with two pictures costs about $0.0056 for Pass 1 (about $0.011 for the first call of a 5-minute window, which writes the prompt cache); a static scene (one picture) about $0.0048; a Haiku keyframe turn about $0.0004. The fixed system prompt is cached. Latency about 2.5 s with pictures against about 1.7 s on Haiku.
 - **Pass 2** reads `session.perception` (`.images`, `.image_notes`, `.detections`, `.observation_age_s`, `.crop_label`). `backend/brain/pass2.py` `_answer` already uses it to answer questions.
 - A keyframe-only turn (nobody spoke) has the detector list and the age but no images: that keyframe was just described by `understand`.
 - The step tracker and `understand` still work from the newest keyframe's text; they are not given the live frame.

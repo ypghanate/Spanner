@@ -147,12 +147,13 @@ def test_call_claude_request_shape(monkeypatch):
     out = run(pass1.call_claude(inp("which key")))
     assert out == report()
     kw = parse.kwargs
-    assert kw["model"] == "claude-haiku-5-5"
+    assert kw["model"] == "claude-haiku-5-5", "no pictures: the cheap text model"
     assert kw["output_format"] is SituationReport
     assert kw["thinking"] == {"type": "disabled"}
     assert kw["output_config"] == {"effort": "low"}
     assert kw["timeout"] == 10.0 and kw["max_tokens"] >= 1024
-    assert kw["system"] == pass1.load_system_prompt()
+    assert kw["system"] == [{"type": "text", "text": pass1.load_system_prompt(),
+                             "cache_control": {"type": "ephemeral"}}], "the fixed system prompt is cached"
     assert kw["messages"] == [{"role": "user", "content": pass1.render_user(inp("which key"))}]
     for banned in ("temperature", "top_p", "top_k"):
         assert banned not in kw, "Haiku 5.5 rejects sampling parameters"
@@ -525,7 +526,9 @@ def test_call_claude_puts_the_images_first_then_the_text(monkeypatch):
         assert _b64.b64decode(block["source"]["data"]) == raw
     assert content[3]["text"] == pass1.render_user(seen())
     assert parse.kwargs["messages"][0]["role"] == "user" and parse.kwargs["messages"][-1]["role"] == "user"
-    assert parse.kwargs["model"] == "claude-haiku-5-5" and "temperature" not in parse.kwargs
+    assert parse.kwargs["model"] == "claude-sonnet-5-5" and "temperature" not in parse.kwargs
+    assert parse.kwargs["thinking"] == {"type": "between_tools"}, "Sonnet 5.5 rejects thinking disabled"
+    assert parse.kwargs["output_config"] == {"effort": "low"}
 
 
 def test_call_claude_without_images_keeps_the_plain_text_content(monkeypatch):
@@ -583,3 +586,50 @@ def test_the_system_prompt_explains_the_pictures_and_the_detector():
     p = pass1.load_system_prompt()
     for needle in ("IMAGES ATTACHED", "DETECTOR (YOLO)", "seen N s ago", "trust them over", "this", "earlier frame"):
         assert needle in p, needle
+
+
+# --- which model, thinking and effort (cost) --------------------------------------------------------
+
+def test_pictures_go_to_the_vision_model_and_plain_text_stays_on_the_cheap_one():
+    assert pass1.model_for(True) == "claude-sonnet-5-5"
+    assert pass1.model_for(False) == "claude-haiku-5-5"
+
+
+def test_the_vision_model_can_be_switched_off_with_an_empty_setting(monkeypatch):
+    set_env(monkeypatch, PASS1_VISION_MODEL="")
+    assert pass1.model_for(True) == "claude-haiku-5-5" == pass1.model_for(False)
+    set_env(monkeypatch, PASS1_VISION_MODEL="claude-opus-5-5")
+    assert pass1.model_for(True) == "claude-opus-5-5" and pass1.model_for(False) == "claude-haiku-5-5"
+
+
+@pytest.mark.parametrize("model,expected", [
+    ("claude-sonnet-5-5", {"type": "between_tools"}),
+    ("claude-haiku-5-5", {"type": "disabled"}),
+    ("claude-opus-5-5", None),                 # thinking can't be disabled there: leave the model's default
+    ("claude-fable-5-2", None),
+])
+def test_thinking_is_set_the_way_each_model_accepts(model, expected):
+    assert pass1.thinking_for(model) == expected
+
+
+def test_a_model_without_a_thinking_setting_is_called_without_the_field(monkeypatch):
+    set_env(monkeypatch, PASS1_VISION_MODEL="claude-opus-5-5")
+    client, parse = parse_client(ok_message(report()))
+    monkeypatch.setattr(pass1, "_get_client", lambda: client)
+    run(pass1.call_claude(seen(), [b"\xff\xd8x"]))
+    assert "thinking" not in parse.kwargs and parse.kwargs["model"] == "claude-opus-5-5"
+
+
+def test_sonnet_is_never_sent_the_thinking_disabled_setting(monkeypatch):
+    client, parse = parse_client(ok_message(report()))
+    monkeypatch.setattr(pass1, "_get_client", lambda: client)
+    run(pass1.call_claude(seen(), [b"\xff\xd8x"]))
+    assert parse.kwargs["thinking"] != {"type": "disabled"}
+
+
+def test_the_dataset_teacher_still_uses_the_text_model(monkeypatch):
+    """call_claude(inp) with no pictures (make_dataset's teacher) must stay on Haiku, not Sonnet."""
+    client, parse = parse_client(ok_message(report()))
+    monkeypatch.setattr(pass1, "_get_client", lambda: client)
+    run(pass1.call_claude(inp("x")))
+    assert parse.kwargs["model"] == "claude-haiku-5-5"

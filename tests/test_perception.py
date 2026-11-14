@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import re
+import zlib
 
 import cv2
 import numpy as np
@@ -17,10 +19,20 @@ W, H = 768, 576
 NOW = 1000.0
 
 
-def jpeg(w=W, h=H) -> bytes:
+def shade_for(frame_id: str) -> int:
+    """Frames f0, f1, ... get shades 0, 1, ...; any other id a stable pseudo-random one."""
+    m = re.fullmatch(r"f(\d+)", frame_id)
+    return int(m.group(1)) if m else zlib.crc32(frame_id.encode()) % 11
+
+
+def jpeg(w=W, h=H, shade=0) -> bytes:
+    """A test picture. Different `shade` values put a bright bar in a different place, so two frames with
+    different shades look like different scenes and equal shades look identical."""
     img = np.zeros((h, w, 3), np.uint8)
     img[:, :, 0] = np.linspace(0, 255, w, dtype=np.uint8)[None, :]
     img[:, :, 1] = np.linspace(0, 255, h, dtype=np.uint8)[:, None]
+    x = 20 + (shade % 11) * 65
+    img[:, x:x + 50] = 255
     ok, buf = cv2.imencode(".jpg", img)
     assert ok
     return buf.tobytes()
@@ -31,7 +43,8 @@ def det(label="keyboard", score=0.9, x=0.2, y=0.3, w=0.5, h=0.4, tid=3) -> Detec
 
 
 def snap(frame_id, ts, dets=None, data=None) -> FrameSnap:
-    return FrameSnap(frame_id=frame_id, ts=ts, jpeg=data if data is not None else jpeg(), detections=dets or [])
+    return FrameSnap(frame_id=frame_id, ts=ts, jpeg=data if data is not None else jpeg(shade=shade_for(frame_id)),
+                     detections=dets or [])
 
 
 def session_with(frames, observed_at=None) -> Session:
@@ -248,3 +261,37 @@ def test_the_ring_keeps_only_the_most_recent_twelve_frames():
     for i in range(20):
         s.recent_frames.append(snap(f"f{i}", float(i)))
     assert [f.frame_id for f in s.recent_frames] == [f"f{i}" for i in range(8, 20)]
+
+
+# --- the earlier frame is only sent when the scene changed (cost) ------------------------------------------
+
+def test_a_static_scene_gets_one_picture_not_two():
+    same = jpeg(shade=3)
+    frames = [snap("a", NOW - 4, data=same), snap("b", NOW - 0.3, data=same)]
+    p = pc.build(session_with(frames), speech_end_ts=NOW, duration_s=3.0, now=NOW)
+    assert [f.frame_id for f in p.snaps] == ["b"] and p.image_notes == ["latest frame, 0.3 s old"]
+
+
+def test_sensor_noise_and_re_encoding_do_not_count_as_change():
+    base = cv2.imdecode(np.frombuffer(jpeg(shade=3), np.uint8), cv2.IMREAD_COLOR)
+    noisy = np.clip(base.astype(np.int16) + np.random.default_rng(0).normal(0, 4, base.shape), 0, 255).astype(np.uint8)
+    for variant in (noisy, cv2.imdecode(cv2.imencode(".jpg", base, [cv2.IMWRITE_JPEG_QUALITY, 50])[1], 1)):
+        frames = [snap("a", NOW - 4, data=jpeg(shade=3)), snap("b", NOW - 0.3, data=cv2.imencode(".jpg", variant)[1].tobytes())]
+        assert len(pc.build(session_with(frames), speech_end_ts=NOW, duration_s=3.0, now=NOW).snaps) == 1
+
+
+def test_a_real_change_keeps_the_earlier_frame():
+    frames = [snap("a", NOW - 4, data=jpeg(shade=2)), snap("b", NOW - 0.3, data=jpeg(shade=7))]
+    p = pc.build(session_with(frames), speech_end_ts=NOW, duration_s=3.0, now=NOW)
+    assert [f.frame_id for f in p.snaps] == ["a", "b"]
+
+
+def test_the_change_threshold_sits_between_noise_and_a_small_real_change():
+    """Measured on real photos: noise/re-encoding < 2, a hand entering the frame > 5."""
+    assert 2.0 < pc.EARLIER_MIN_CHANGE < 5.0
+
+
+def test_a_frame_that_cannot_be_decoded_is_kept_rather_than_guessed_about():
+    frames = [snap("a", NOW - 4, data=b"not a jpeg"), snap("b", NOW - 0.3)]
+    p = pc.build(session_with(frames), speech_end_ts=NOW, duration_s=3.0, now=NOW)
+    assert [f.frame_id for f in p.snaps] == ["a", "b"]
