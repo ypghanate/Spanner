@@ -62,6 +62,7 @@ const M = {
   leather: P({ color: 0x1b1a1c, roughness: 0.75, clearcoat: 0.15 }), foam: S({ color: 0x26272b, roughness: 1 }),
   copper: S({ color: 0xc98a4b, metalness: 1, roughness: 0.35 }), lens: P({ color: 0x0b1a2e, roughness: 0.05, clearcoat: 1, metalness: 0.3 }),
   gold: S({ color: 0xd4a548, metalness: 1, roughness: 0.28 }), silver: S({ color: 0xd9dde3, metalness: 1, roughness: 0.25 }),
+  flex: S({ color: 0xc8742a, roughness: 0.6, metalness: 0.3 }),
   holo: new THREE.MeshBasicMaterial({ color: CYAN, transparent: true, opacity: 0.07, depthWrite: false, blending: THREE.AdditiveBlending }),
   edge: new THREE.LineBasicMaterial({ color: CYAN, transparent: true, opacity: 0.08 }),
 };
@@ -70,23 +71,100 @@ const cyl = (r, h, s = 48) => new THREE.CylinderGeometry(r, r, h, s);
 function mesh(geo, mat) { const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; return m; }
 
 // ------------------------------------------------------------------ the devices (cm; y up; parts: name, label, what it is, position, explode direction)
+// ---- canvas textures (same technique as the keyboard's key legends)
+function canvasTex(w, h, draw) { const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h); const t = new THREE.CanvasTexture(c); t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; return t; }
+const TEX = {
+  screen: () => canvasTex(512, 1024, (g, w, h) => {
+    const bg = g.createLinearGradient(0, 0, w, h); bg.addColorStop(0, "#0b2a4a"); bg.addColorStop(0.55, "#071424"); bg.addColorStop(1, "#1a0b2e"); g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    const glow = g.createRadialGradient(w * 0.7, h * 0.3, 10, w * 0.7, h * 0.3, 420); glow.addColorStop(0, "#00e5ff44"); glow.addColorStop(1, "#00000000"); g.fillStyle = glow; g.fillRect(0, 0, w, h);
+    g.fillStyle = "#000"; g.beginPath(); g.roundRect(w / 2 - 70, 44, 140, 38, 19); g.fill();                     // Dynamic Island
+    g.fillStyle = "#e6fbff"; g.font = "600 92px system-ui,Segoe UI,Inter,sans-serif"; g.textAlign = "center"; g.fillText("9:41", w / 2, 230);
+    g.font = "500 26px system-ui,Segoe UI,Inter,sans-serif"; g.fillStyle = "#bfeef7"; g.fillText("Saturday 15 November", w / 2, 270);
+    g.fillStyle = "#ffffff22"; g.beginPath(); g.roundRect(w / 2 - 60, h - 24, 120, 8, 4); g.fill();               // home indicator
+  }),
+  battery: () => canvasTex(512, 256, (g, w, h) => {
+    g.fillStyle = "#8d9299"; g.fillRect(0, 0, w, h); g.fillStyle = "#1a1c20"; g.font = "600 30px system-ui,sans-serif"; g.textAlign = "left";
+    g.fillText("Li-ion Polymer Battery", 22, 60); g.font = "400 22px system-ui,sans-serif"; g.fillText("3.87 V  3349 mAh  12.98 Wh", 22, 100);
+    g.fillText("Model A2862  ·  Do not puncture or disassemble", 22, 134); g.strokeStyle = "#1a1c20"; g.lineWidth = 3; g.strokeRect(22, 160, 120, 70);
+    for (let i = 0; i < 14; i++) { g.fillRect(170 + i * 22, 165 + (i % 2) * 30, 8, 30); }
+  }),
+  pcb: () => canvasTex(256, 1024, (g, w, h) => {
+    g.fillStyle = "#0f5f3a"; g.fillRect(0, 0, w, h); g.strokeStyle = "#1a9a5e"; g.lineWidth = 2;
+    for (let i = 0; i < 60; i++) { g.beginPath(); const x = Math.random() * w, y = Math.random() * h; g.moveTo(x, y); g.lineTo(x + (Math.random() - 0.5) * 120, y); g.lineTo(x + (Math.random() - 0.5) * 120, y + (Math.random() - 0.5) * 160); g.stroke(); }
+    g.fillStyle = "#d4a548"; for (let i = 0; i < 90; i++) g.fillRect(Math.random() * w, Math.random() * h, 5, 5);
+  }),
+};
+function roundedRectShape(w, h, r) { const s = new THREE.Shape(); s.moveTo(-w / 2 + r, -h / 2); s.lineTo(w / 2 - r, -h / 2); s.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r); s.lineTo(w / 2, h / 2 - r); s.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2); s.lineTo(-w / 2 + r, h / 2); s.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r); s.lineTo(-w / 2, -h / 2 + r); s.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2); return s; }
+function flatRing(w, h, r, thick, depth, mat) {  // a rounded-rectangle band (frame), lying flat
+  const s = roundedRectShape(w, h, r); const hole = roundedRectShape(w - 2 * thick, h - 2 * thick, Math.max(0.05, r - thick)); s.holes.push(new THREE.Path(hole.getPoints(24)));
+  const geo = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false, curveSegments: 24 }); geo.rotateX(-Math.PI / 2); geo.translate(0, -depth / 2, 0);
+  const m = mesh(geo, mat); return m;
+}
+function edgesOn(obj, threshold = 40) { obj.traverse((o) => { if (o.isMesh && o.geometry) { const e = new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry, threshold), M.edge); e.raycast = () => {}; o.add(e); } }); return obj; }
+function flex(len, wid = 0.5, mat) { return mesh(box(wid, 0.03, len, 0.01, 1), mat || M.flex); }
+function screw(r = 0.07) { const g = new THREE.Group(); const h = mesh(cyl(r, 0.08, 16), M.silver); g.add(h); const c = mesh(cyl(r * 0.35, 0.05, 8), M.black); c.position.y = 0.05; g.add(c); return g; }
+
 function iphone15() {
   const W = 7.16, H = 14.76, T = 0.78, parts = [];
-  const add = (name, label, desc, obj, pos, dir, group = "body") => parts.push({ name, label, desc, obj, pos, dir, group });
-  add("frame", "Aluminium frame", "Aerospace-grade aluminium band with the antenna lines; everything mounts to it.", mesh(box(W, T, H, 0.9, 4), M.alu), [0, 0, 0], [0, 0, 0]);
-  add("display", "Display assembly", "6.1-inch Super Retina XDR OLED bonded to the Ceramic Shield front glass; lifts off the frame first.", (() => { const g = new THREE.Group(); g.add(mesh(box(W - 0.3, 0.12, H - 0.3, 0.7, 4), M.oled)); const gl = mesh(box(W - 0.2, 0.08, H - 0.2, 0.75, 4), M.screen); gl.position.y = 0.1; g.add(gl); return g; })(), [0, T / 2 + 0.06, 0], [0, 1, 0], "front");
-  add("battery", "Battery", "3,349 mAh single-cell lithium-ion pack with pull tabs; the most common replacement on this phone.", (() => { const g = new THREE.Group(); g.add(mesh(box(3.6, 0.42, 8.6, 0.25), M.battery)); const l = mesh(box(3.3, 0.02, 7.6, 0.1), M.batteryLabel); l.position.y = 0.22; g.add(l); return g; })(), [-1.2, 0, 0.8], [-0.4, 1, 0.1], "inside");
-  add("logic_board", "Logic board", "A16 Bionic, memory and radios on a stacked board with EMI shields, up the right side.", (() => { const g = new THREE.Group(); g.add(mesh(box(2.4, 0.2, 9.0, 0.08), M.pcb)); for (const [z, h] of [[-3.2, 2.2], [-0.4, 2.6], [2.6, 1.8]]) { const s = mesh(box(2.0, 0.22, h, 0.06), M.shield); s.position.set(0, 0.2, z); g.add(s); } return g; })(), [2.0, 0, -0.6], [0.6, 1, -0.1], "inside");
-  add("camera_module", "Rear camera module", "48 MP main and 12 MP ultra-wide in one housing with the flash; pops out through the back.", (() => { const g = new THREE.Group(); const h = mesh(box(3.6, 0.5, 3.6, 0.6), M.black); g.add(h); for (const [x, z] of [[-0.8, -0.8], [0.8, 0.8]]) { const l = mesh(cyl(0.72, 0.5), M.lens); l.position.set(x, 0.2, z); g.add(l); const r = mesh(cyl(0.9, 0.3), M.alu); r.position.set(x, 0.05, z); g.add(r); } const f = mesh(cyl(0.3, 0.2), M.silver); f.position.set(0.9, 0.2, -0.9); g.add(f); return g; })(), [-1.7, -T / 2 - 0.1, -5.0], [-0.3, -1, -0.3], "back");
-  add("back_glass", "Back glass", "Colour-infused glass with the matte finish; glued to the frame around the edge.", mesh(box(W - 0.2, 0.1, H - 0.2, 0.75, 4), M.glassBack), [0, -T / 2 - 0.05, 0], [0, -1, 0], "back");
-  add("taptic", "Taptic Engine", "Linear actuator that makes every click and buzz; sits beside the battery at the bottom.", mesh(box(1.9, 0.4, 1.6, 0.15), M.black), [-1.9, 0, 5.6], [-0.5, 1, 0.5], "inside");
-  add("speaker", "Loudspeaker", "Bottom-firing speaker enclosure next to the USB-C port.", mesh(box(2.2, 0.45, 1.3, 0.2), M.rubber), [1.6, 0, 6.0], [0.5, 1, 0.6], "inside");
-  add("usb_c", "USB-C port", "USB 2 speed charge and data port, on its own flex at the bottom edge.", mesh(box(0.9, 0.32, 0.8, 0.12), M.silver), [0, 0, H / 2 - 0.3], [0, 1, 1], "inside");
-  add("front_camera", "Front camera + Face ID", "TrueDepth camera, dot projector and flood illuminator in the Dynamic Island.", mesh(box(2.0, 0.25, 0.7, 0.2), M.black), [0, T / 2 - 0.1, -6.3], [0, 1, -0.6], "front");
-  add("sim_tray", "SIM tray", "Nano-SIM tray on the left edge; ejects with a pin.", mesh(box(0.2, 0.3, 1.4, 0.05), M.alu), [-W / 2 - 0.1, 0, -2.2], [-1, 0, 0], "body");
-  add("buttons", "Volume + Action buttons", "Two volume buttons and the Action button on the left edge.", (() => { const g = new THREE.Group(); for (const z of [-4.6, -3.2, -1.9]) { const b = mesh(box(0.25, 0.3, z === -4.6 ? 0.6 : 1.0, 0.08), M.alu); b.position.z = z; g.add(b); } return g; })(), [-W / 2 - 0.12, 0, 0], [-1, 0, 0], "body");
-  add("power_button", "Side button", "Power and Siri button on the right edge.", mesh(box(0.25, 0.3, 1.4, 0.08), M.alu), [W / 2 + 0.12, 0, -2.6], [1, 0, 0], "body");
-  return { name: "iPhone 15", parts, spread: 6, views: { iso: [12, 16, 20] }, fact: "128 to 512 GB, Dynamic Island, USB-C. Battery and display are the two repairs people actually do." };
+  const add = (name, label, desc, obj, pos, dir, group = "body", callout = false) => parts.push({ name, label, desc, obj: edgesOn(obj), pos, dir, group, callout });
+  // body
+  const frame = new THREE.Group(); frame.add(flatRing(W, H, 1.0, 0.16, T, M.alu));
+  for (const [x, z] of [[-W / 2 + 0.08, -5.2], [W / 2 - 0.08, -5.2], [-W / 2 + 0.08, 5.6], [W / 2 - 0.08, 5.6]]) { const a = mesh(box(0.17, T - 0.04, 0.12, 0.02, 1), M.black); a.position.set(x, 0, z); frame.add(a); }   // antenna lines
+  for (const z of [-1.6, 1.6]) { const a = mesh(box(0.12, T - 0.04, 0.17, 0.02, 1), M.black); a.position.set(0, 0, z > 0 ? H / 2 - 0.08 : -H / 2 + 0.08); a.position.x = z; frame.add(a); }
+  const grille = new THREE.Group(); for (let i = 0; i < 6; i++) { const h = mesh(cyl(0.06, 0.2, 10), M.black); h.rotation.x = Math.PI / 2; h.position.set(1.0 + i * 0.22, 0, H / 2); grille.add(h); } frame.add(grille);
+  const grille2 = grille.clone(); grille2.position.x = -2.5; frame.add(grille2);
+  add("frame", "Aluminium frame", "Aerospace-grade aluminium band with the antenna lines, speaker grilles and the port cutout; everything mounts to it.", frame, [0, 0, 0], [0, 0, 0]);
+  // display assembly
+  const disp = new THREE.Group();
+  const oled = mesh(box(W - 0.32, 0.1, H - 0.32, 0.8, 4), new THREE.MeshPhysicalMaterial({ map: TEX.screen(), roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.05, emissiveMap: TEX.screen(), emissive: 0xffffff, emissiveIntensity: 0.55 })); oled.position.y = 0.06; disp.add(oled);
+  const shield = mesh(box(W - 0.18, 0.06, H - 0.18, 0.86, 4), M.glass); shield.position.y = 0.15; disp.add(shield);
+  const ear = mesh(box(1.0, 0.04, 0.08, 0.02, 1), M.black); ear.position.set(0, 0.19, -H / 2 + 0.5); disp.add(ear);
+  const dflex = flex(1.6, 1.2); dflex.rotation.x = Math.PI / 2; dflex.position.set(1.4, -0.6, -3.2); disp.add(dflex);
+  add("display", "Display assembly", "6.1-inch Super Retina XDR OLED bonded to the Ceramic Shield front glass, with the earpiece mesh and the display flex. It lifts off the frame first, hinged from the left.", disp, [0, T / 2 + 0.05, 0], [0, 7.5, 0], "front", true);
+  add("display_bracket", "Display connector bracket", "Steel bracket over the display and Face ID connectors; four tri-point screws.", (() => { const g = new THREE.Group(); g.add(mesh(box(1.4, 0.08, 0.9, 0.03, 1), M.shield)); for (const [x, z] of [[-0.55, -0.3], [0.55, -0.3], [-0.55, 0.3], [0.55, 0.3]]) { const s = screw(0.06); s.position.set(x, 0.05, z); g.add(s); } return g; })(), [1.4, T / 2 - 0.2, -3.2], [0.3, 5.2, 0], "inside");
+  // battery
+  const bat = new THREE.Group();
+  bat.add(mesh(box(3.7, 0.44, 8.8, 0.22), M.battery));
+  const lab = mesh(box(3.4, 0.01, 7.9, 0.02, 1), new THREE.MeshStandardMaterial({ map: TEX.battery(), roughness: 0.9 })); lab.position.y = 0.23; bat.add(lab);
+  const bflex = flex(1.1, 0.7); bflex.position.set(2.1, 0.1, -3.6); bat.add(bflex);
+  const bconn = mesh(box(0.7, 0.12, 0.5, 0.03, 1), M.black); bconn.position.set(2.6, 0.12, -3.6); bat.add(bconn);
+  for (const x of [-1.2, 1.2]) { const tab = mesh(box(0.5, 0.02, 1.6, 0.01, 1), M.black); tab.position.set(x, -0.2, 5.0); bat.add(tab); }   // pull tabs
+  add("battery", "Battery", "3,349 mAh single-cell lithium-ion pack with four stretch-release pull tabs and its connector; the most common replacement on this phone.", bat, [-1.25, 0, 0.9], [-1.0, 4.2, 0.3], "inside", true);
+  add("battery_bracket", "Battery connector bracket", "Small plate over the battery connector; remove it to disconnect power before any other step.", (() => { const g = new THREE.Group(); g.add(mesh(box(0.9, 0.08, 0.7, 0.03, 1), M.shield)); const s = screw(0.06); s.position.set(0.3, 0.05, 0.2); g.add(s); return g; })(), [1.4, 0.3, -2.7], [0.3, 4.6, 0], "inside");
+  // logic board
+  const lb = new THREE.Group();
+  lb.add(mesh(box(2.5, 0.16, 9.2, 0.06, 1), new THREE.MeshStandardMaterial({ map: TEX.pcb(), roughness: 0.6, metalness: 0.2 })));
+  for (const [z, h, lbl] of [[-3.3, 2.3], [-0.6, 2.8], [2.4, 2.0]]) { const s = mesh(box(2.1, 0.22, h, 0.05, 1), M.shield); s.position.set(0, 0.19, z); lb.add(s); }
+  const die = mesh(box(1.3, 0.1, 1.3, 0.02, 1), M.black); die.position.set(0, 0.33, -0.6); lb.add(die);                        // A16 under the shield line
+  for (const [x, z] of [[-1.0, 4.2], [1.0, 4.2], [-1.0, -4.3]]) { const c = mesh(box(0.45, 0.1, 0.3, 0.02, 1), M.gold); c.position.set(x, 0.14, z); lb.add(c); }  // board-to-board connectors
+  for (const [x, z] of [[-1.1, -4.4], [1.1, -4.4], [-1.1, 4.4], [1.1, 4.4], [1.1, 0]]) { const s = screw(); s.position.set(x, 0.1, z); lb.add(s); }
+  add("logic_board", "Logic board", "A16 Bionic, memory, storage and the radios on a stacked board under EMI shield cans, running up the right side. Five screws, three connectors.", lb, [2.05, 0, -0.7], [1.4, 5.0, -0.2], "inside", true);
+  // cameras
+  const cam = new THREE.Group(); cam.add(mesh(box(3.5, 0.55, 3.5, 0.5), M.black));
+  for (const [x, z] of [[-0.75, -0.75], [0.75, 0.75]]) { const ring = mesh(cyl(0.95, 0.32), M.alu); ring.position.set(x, -0.35, z); cam.add(ring); const l = mesh(cyl(0.78, 0.34), M.lens); l.position.set(x, -0.4, z); cam.add(l); const g = mesh(cyl(0.45, 0.36), new THREE.MeshPhysicalMaterial({ color: 0x3b2a6b, roughness: 0.02, clearcoat: 1, metalness: 0.6 })); g.position.set(x, -0.42, z); cam.add(g); }
+  const fl = mesh(cyl(0.3, 0.2), new THREE.MeshStandardMaterial({ color: 0xfff1b8, emissive: 0xffe08a, emissiveIntensity: 0.4 })); fl.position.set(0.9, -0.3, -0.95); cam.add(fl);
+  const mic = mesh(cyl(0.08, 0.2, 8), M.black); mic.position.set(-0.9, -0.3, 0.95); cam.add(mic);
+  const cflex = flex(2.0, 0.9); cflex.rotation.y = Math.PI / 2; cflex.position.set(2.3, 0.1, 0.8); cam.add(cflex);
+  add("camera_module", "Rear camera module", "48 MP main and 12 MP ultra-wide in one housing, with the flash and the rear mic; connects to the board with one flex.", cam, [-1.7, -0.1, -4.9], [-0.9, -4.2, -0.8], "back", true);
+  const bump = new THREE.Group(); const bp = mesh(box(3.9, 0.14, 3.9, 0.7, 4), M.glassBack); bump.add(bp);
+  for (const [x, z] of [[-0.75, -0.75], [0.75, 0.75]]) { const r = mesh(cyl(1.02, 0.18), M.alu); r.position.set(x, -0.02, z); bump.add(r); }
+  add("camera_bump", "Camera bump", "Raised glass plateau on the back with the two lens rings.", bump, [-1.7, -T / 2 - 0.14, -4.9], [-0.9, -6.4, -0.8], "back");
+  add("back_glass", "Back glass", "Colour-infused glass with the matte finish, glued to the frame around the edge; the camera bump sits on it.", mesh(box(W - 0.16, 0.1, H - 0.16, 0.85, 4), M.glassBack), [0, -T / 2 - 0.05, 0], [0, -5.4, 0], "back", true);
+  const coil = new THREE.Group(); const ring = mesh(new THREE.TorusGeometry(1.9, 0.09, 8, 64), M.copper); ring.rotation.x = Math.PI / 2; coil.add(ring);
+  const ring2 = mesh(new THREE.TorusGeometry(1.55, 0.09, 8, 64), M.copper); ring2.rotation.x = Math.PI / 2; coil.add(ring2); const ring3 = mesh(new THREE.TorusGeometry(1.2, 0.09, 8, 64), M.copper); ring3.rotation.x = Math.PI / 2; coil.add(ring3);
+  for (let i = 0; i < 16; i++) { const m = mesh(box(0.5, 0.06, 0.22, 0.02, 1), M.black); const a = (i / 16) * Math.PI * 2; m.position.set(Math.cos(a) * 2.35, 0, Math.sin(a) * 2.35); m.rotation.y = -a; coil.add(m); }   // MagSafe magnets
+  add("charging_coil", "Wireless charging coil + MagSafe ring", "Copper coil for Qi and MagSafe charging, with the ring of magnets around it, on a thin graphite sheet.", coil, [0, -T / 2 + 0.12, 1.2], [0, -3.0, 0], "back", true);
+  // small parts
+  add("taptic", "Taptic Engine", "Linear actuator that makes every click and buzz; beside the battery at the bottom, two screws.", (() => { const g = new THREE.Group(); g.add(mesh(box(1.9, 0.4, 1.6, 0.12), M.black)); const s = screw(); s.position.set(-0.7, 0.22, 0.6); g.add(s); return g; })(), [-1.95, 0, 5.7], [-1.4, 3.6, 1.2], "inside");
+  add("speaker", "Loudspeaker", "Bottom-firing speaker box next to the USB-C port, with its rubber gasket.", (() => { const g = new THREE.Group(); g.add(mesh(box(2.3, 0.45, 1.4, 0.18), M.rubber)); const p = mesh(box(2.0, 0.05, 1.1, 0.05, 1), M.black); p.position.y = 0.24; g.add(p); return g; })(), [1.65, 0, 6.1], [1.3, 3.6, 1.4], "inside");
+  add("usb_c", "USB-C port + flex", "Charge port, bottom microphones and the Taptic connector on one flex along the bottom edge.", (() => { const g = new THREE.Group(); const p = mesh(box(0.92, 0.34, 0.75, 0.1, 2), M.silver); g.add(p); const hole = mesh(box(0.72, 0.22, 0.4, 0.08, 1), M.black); hole.position.z = 0.2; g.add(hole); const f = flex(3.6, 0.6); f.rotation.y = Math.PI / 2; f.position.set(-1.4, 0, -0.1); g.add(f); const s1 = screw(); s1.position.set(-0.9, -0.17, 0.3); g.add(s1); const s2 = screw(); s2.position.set(0.9, -0.17, 0.3); g.add(s2); return g; })(), [0, 0, H / 2 - 0.45], [0, 2.4, 3.4], "inside");
+  add("front_camera", "Front camera + Face ID", "TrueDepth module: 12 MP camera, dot projector and flood illuminator behind the Dynamic Island.", (() => { const g = new THREE.Group(); g.add(mesh(box(2.2, 0.28, 0.8, 0.3, 3), M.black)); for (const x of [-0.6, 0.1, 0.7]) { const l = mesh(cyl(0.16, 0.1, 16), M.lens); l.position.set(x, 0.16, 0); g.add(l); } return g; })(), [0, T / 2 - 0.16, -6.3], [0, 4.0, -1.4], "front");
+  add("earpiece", "Earpiece speaker", "Top speaker behind the slot above the Dynamic Island; also a mic.", mesh(box(1.4, 0.2, 0.5, 0.08, 1), M.rubber), [0, T / 2 - 0.2, -7.0], [0, 3.2, -1.8], "front");
+  add("sim_tray", "SIM tray", "Nano-SIM tray with its rubber seal; ejects with a pin from the left edge.", (() => { const g = new THREE.Group(); g.add(mesh(box(0.2, 0.32, 1.5, 0.05, 1), M.alu)); const t = mesh(box(0.9, 0.08, 1.3, 0.03, 1), M.black); t.position.x = 0.55; g.add(t); return g; })(), [-W / 2 - 0.05, 0, -2.2], [-2.6, 0, 0], "body");
+  add("buttons", "Volume + Action buttons", "Two volume buttons and the Action button, each on a flex with a bracket.", (() => { const g = new THREE.Group(); for (const [z, len] of [[-4.7, 0.6], [-3.2, 1.0], [-1.9, 1.0]]) { const b = mesh(box(0.25, 0.32, len, 0.09, 2), M.alu); b.position.z = z; g.add(b); } return g; })(), [-W / 2 - 0.1, 0, 0], [-2.2, 0, 0], "body");
+  add("power_button", "Side button", "Power and Siri button on the right edge, on the same flex as the mmWave window on US models.", mesh(box(0.25, 0.32, 1.5, 0.09, 2), M.alu), [W / 2 + 0.1, 0, -2.6], [2.2, 0, 0], "body");
+  add("screws", "Pentalobe + tri-point screws", "Two pentalobe screws by the port hold the display; the rest are tri-point and Phillips inside.", (() => { const g = new THREE.Group(); for (const [x, z] of [[-0.8, 7.0], [0.8, 7.0], [-3.0, -6.2], [3.0, -6.2], [-3.0, 6.0], [3.0, 6.0], [-3.0, 0.4], [3.0, 1.2]]) { const s = screw(0.07); s.position.set(x, 0.28, z); g.add(s); } return g; })(), [0, 0, 0], [0, 6.2, 0], "inside");
+  return { name: "iPhone 15", parts, spread: 1, views: { iso: [12, 16, 20] }, fact: "128 to 512 GB, Dynamic Island, USB-C. Battery and display are the two repairs people actually do; disconnect the battery first, always." };
 }
 function ipad11() {
   const W = 17.95, H = 24.86, T = 0.7, parts = [];
@@ -138,7 +216,13 @@ for (const p of device.parts) {
   p.obj.position.set(...p.pos); group.add(p.obj); parts[p.name] = p;
 }
 function updatePositions() {
-  for (const p of Object.values(parts)) { const dir = V3(...p.dir); p.obj.position.set(p.pos[0] + dir.x * explode * device.spread, p.pos[1] + dir.y * explode * device.spread, p.pos[2] + dir.z * explode * device.spread); }
+  for (const p of Object.values(parts)) {
+    const dir = V3(...p.dir); p.obj.position.set(p.pos[0] + dir.x * explode * device.spread, p.pos[1] + dir.y * explode * device.spread, p.pos[2] + dir.z * explode * device.spread);
+    if (p.callout) {
+      if (!p.calloutObj) { const div = document.createElement("div"); div.className = "callout"; div.textContent = p.label.toUpperCase(); p.calloutObj = new CSS2DObject(div); p.calloutObj.position.set(0, 0.9, 0); p.obj.add(p.calloutObj); }
+      p.calloutObj.element.style.opacity = explode > 0.6 && !selected ? String(Math.min(1, (explode - 0.6) * 2.5)) : "0";
+    }
+  }
 }
 group.position.y = 4; updatePositions();
 const bb = new THREE.Box3().setFromObject(group); const size = bb.getSize(V3()); const c0 = bb.getCenter(V3()); controls.target.copy(c0);
@@ -156,6 +240,7 @@ function tag(p, text, cls = "") { const div = document.createElement("div"); div
 function select(name) {
   selected = name && parts[name] ? name : null; clearTags();
   outline.selectedObjects = selected ? [parts[selected].obj] : [];
+  updatePositions();
   if (!selected) { $("insp").style.display = "none"; return; }
   const p = parts[selected]; $("ih").textContent = p.label.toUpperCase(); $("ip").textContent = p.desc; $("ik").textContent = `${device.name} · ${p.group.toUpperCase()}`; $("insp").style.display = "block"; tag(p, p.label.toUpperCase());
 }
@@ -182,7 +267,7 @@ async function explodeAndFrame(v) { await setExplode(v); await frameAll(); }
 async function command(raw) {
   const t = raw.toLowerCase().trim(); let said = "";
   const say = (s) => { said = s; narrate(s); };
-  if (/\b(keyboard|rk ?61|go back|choose another|another device|pick a device|main menu)\b/.test(t)) { heard(raw, "back to the device choice"); location.href = "./?pick=1"; return; }
+  if (/\b(keyboard|rk ?61|go back|start over|choose another|another device|pick a device|main menu|what do you want to fix)\b/.test(t)) { heard(raw, "back to the device choice"); location.href = "./"; return; }
   if (/iphone/.test(t) && d !== "iphone15") { location.href = "./device.html?d=iphone15"; return; }
   if (/ipad|tablet/.test(t) && d !== "ipad11") { location.href = "./device.html?d=ipad11"; return; }
   if (/headphone|momentum|sennheiser/.test(t) && d !== "momentum4") { location.href = "./device.html?d=momentum4"; return; }

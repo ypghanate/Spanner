@@ -926,7 +926,7 @@ function heard(text, action) {
 async function command(raw) {
   const t = raw.toLowerCase().trim(); let said = "";
   if (pickOpen) return pickByVoice(raw);
-  if (/(choose another|another device|pick a device|main menu|go back to the (menu|start))/.test(t)) { closePanels(); showPicker(); heard(raw, "device choice"); return; }
+  if (/\b(start over|choose another|another device|pick a device|main menu|go back to the (menu|start)|what do you want to fix)\b/.test(t)) { heard(raw, "back to the start"); narrate("Starting over."); setTimeout(() => { location.href = "./"; }, 700); return; }
   const say = (s) => { said = s; narrate(s); };
   if (/\b(close|hide|dismiss|go away|that's enough|never ?mind)\b/.test(t)) { closePanels(); said = "closed"; }
   else if (/calibrat|align the hologram|set (this|that) as zero|zero it/.test(t)) { calibratePose(); said = "calibrated"; }
@@ -940,7 +940,7 @@ async function command(raw) {
   else if (/take .*apart|explode|open it up|blow it up|exploded/.test(t)) { stopTour(); takeApart(); say("Taking it apart."); }
   else if (/put .*(together|back)|assemble|close it/.test(t)) { stopTour(); reassemble(); say("Putting it back together."); }
   else if (/x.?ray|see through|hologram/.test(t)) { setXray(!xray); say(xray ? "X-ray on." : "X-ray off."); }
-  else if (/\b(reset|start over|from the top)\b/.test(t)) { $("reset").onclick(); say("Reset."); }
+  else if (/\b(reset|from the top)\b/.test(t)) { $("reset").onclick(); say("Reset."); }
   else if (/\b(tour|play|walk me through|show me the repair|start the repair)\b/.test(t)) { if (!touring) tour(); say("Walking you through the repair."); }
   else if (/\b(stop|pause|hold on)\b/.test(t)) { stopTour(); said = "stopped"; }
   else if (/rewind|reverse|undo/.test(t)) { rewind(); say("Rewinding."); }
@@ -1350,14 +1350,18 @@ async function pickByVoice(raw) {   // free speech -> which device; Claude decid
 }
 if (QP.get("pick") === "1" && INSTANT) { pickOpen = true; $("pick").style.display = "flex"; }
 // wake: browsers need one gesture before mic + speech; after that it's voice only
-if (!INSTANT && QP.get("wake") !== "0") {
-  const w = $("wake"); w.style.display = "flex";
+// The question page is the first thing on screen (it covers the boot and the keyboard). One tap wakes the mic
+// and the voice (browsers need a gesture); from then on it is voice only. A reload always comes back here.
+if (INSTANT || QP.get("wake") === "0" || QP.get("pick") === "0") {
+  if (QP.get("pick") !== "1") { $("pick").classList.remove("first"); $("pick").style.display = "none"; pickOpen = false; }
+  else { $("pick").classList.remove("first"); $("pick").style.display = "flex"; $("pickhint").textContent = "listening"; pickOpen = true; }
+} else {
+  pickOpen = true;
   const wake = async () => {
-    removeEventListener("keydown", wake, true); w.remove();
+    removeEventListener("keydown", wake, true); $("pick").classList.remove("first"); $("pick").style.display = "flex"; $("pick").style.cursor = "default";
     voiceOn = true; $("voice").classList.add("on");
     if (!micOn) $("mic").onclick();
-    if (QP.get("pick") === "0") { if (QP.get("phone") === "1") startRemote(); else if (!camOn) await toggleCamera(); narrate("Hi, I'm Spanner. I'm watching. Show me the keyboard."); }
-    else showPicker();
+    $("pickhint").textContent = "listening"; narrate("What do you want to fix?");
   };
-  w.addEventListener("pointerdown", wake, { once: true }); addEventListener("keydown", wake, { capture: true, once: true });
+  $("pick").addEventListener("pointerdown", wake, { once: true }); addEventListener("keydown", wake, { capture: true, once: true });
 }
