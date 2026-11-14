@@ -276,6 +276,18 @@ async def qr(url: str):
     return Response(buf.getvalue(), media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
+class Signal(BaseModel):
+    session: str
+    signal: Literal["stop"]
+
+
+@router.post("/signal")
+async def signal(sig: Signal):
+    """The phone saw a gesture (✋ = stop talking); the laptop picks it up from /coach/latest."""
+    _latest.setdefault(sig.session, {})["signal"] = {"signal": sig.signal, "ts": time.time()}
+    return {"ok": True}
+
+
 @router.get("/latest")
 async def latest(session: str):
     """The phone's last results for this session: the coach's view (every ~2 s) and the keyboard pose (~4/s)."""

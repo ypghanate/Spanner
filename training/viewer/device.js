@@ -347,7 +347,8 @@ async function command(raw) {
   if (/iphone/.test(t) && d !== "iphone15") { location.href = "./device.html?d=iphone15"; return; }
   if (/ipad|tablet/.test(t) && d !== "ipad11") { location.href = "./device.html?d=ipad11"; return; }
   if (/headphone|momentum|sennheiser/.test(t) && d !== "momentum4") { location.href = "./device.html?d=momentum4"; return; }
-  if (/\b(close|hide|dismiss|that's enough|never ?mind)\b/.test(t)) { select(null); said = "closed"; }
+  if (/\b(stop|quiet|shut up|stop talking|be quiet|silence|enough)\b/.test(t)) { stopSpeaking(); heard(raw, "ok, quiet"); return; }
+  if (/\b(close|hide|dismiss|never ?mind)\b/.test(t)) { select(null); said = "closed"; }
   else if (/take .*apart|explode|open it up|blow it up|exploded|cut it|disassemble/.test(t)) { explodeAndFrame(1); setXray(false); say("Taking it apart."); }
   else if (/put .*(together|back)|assemble|close it up/.test(t)) { explodeAndFrame(0); say("Putting it back together."); }
   else if (/x.?ray|see through|hologram/.test(t)) { setXray(!xray); say(xray ? "X-ray on." : "X-ray off."); }
@@ -379,7 +380,7 @@ function startMic() {
   micOn = true; $("listen").classList.add("on"); $("listen").textContent = "LISTENING";
   rec = new SR(); rec.continuous = true; rec.interimResults = true; rec.lang = "en-GB";
   let lastActed = { text: "", t: 0 }, recognizing = false, lastEvent = performance.now();
-  const QUICK = /^(?:\s*(?:ok(?:ay)?|hey|spanner|please|and|now|just)[,\s]*)*(close|stop|reset|x-?ray|take it apart|put it back|zoom (?:in|out)|keyboard|go back)\b/i;
+  const QUICK = /^(?:\s*(?:ok(?:ay)?|hey|spanner|please|and|now|just)[,\s]*)*(close|stop|quiet|shut up|stop talking|be quiet|enough|reset|x-?ray|take it apart|put it back|zoom (?:in|out)|keyboard|go back)\b/i;
   const words = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter((w) => w.length > 2));
   const isEcho = (text) => { if (performance.now() > speakingUntil || !currentSpeech) return false; const a = words(text), b = words(currentSpeech); if (!a.size) return true; let n = 0; for (const w of a) if (b.has(w)) n++; return n / a.size >= 0.6; };
   const STOCK = /what do you want to fix|say take it apart|taking it apart|putting it back|x-ray on|x-ray off|starting over|opening the/i;

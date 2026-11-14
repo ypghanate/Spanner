@@ -19,6 +19,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
 import * as BGU from "three/addons/utils/BufferGeometryUtils.js";
+import { watchPalm } from "./gesture.js";
 
 const BASE = "../../data/models/rk61/";
 const QP = new URLSearchParams(location.search);
@@ -942,7 +943,7 @@ async function command(raw) {
   else if (/x.?ray|see through|hologram/.test(t)) { setXray(!xray); say(xray ? "X-ray on." : "X-ray off."); }
   else if (/\b(reset|from the top)\b/.test(t)) { $("reset").onclick(); say("Reset."); }
   else if (/\b(tour|play|walk me through|show me the repair|start the repair)\b/.test(t)) { if (!touring) tour(); say("Walking you through the repair."); }
-  else if (/\b(stop|pause|hold on)\b/.test(t)) { stopTour(); said = "stopped"; }
+  else if (/\b(stop|pause|hold on|quiet|shut up|stop talking|be quiet|silence|enough)\b/.test(t)) { quiet(raw); return; }
   else if (/rewind|reverse|undo/.test(t)) { rewind(); say("Rewinding."); }
   else if (/mistake|go wrong|wrong way|what not to do/.test(t)) { showMistake(); said = "showing the mistake"; }
   else if (/fix it|that's wrong|correct it/.test(t)) { fixMistake(); say("Fixed."); }
@@ -977,7 +978,7 @@ $("mic").onclick = () => {
   if (!micOn) { rec?.stop(); rec = null; return; }
   rec = new SR(); rec.continuous = true; rec.interimResults = true; rec.lang = "en-GB"; rec.maxAlternatives = 1;
   let recognizing = false, lastEvent = performance.now(), lastActed = { text: "", t: 0 };
-  const QUICK = /^(?:\s*(?:ok(?:ay)?|hey|spanner|please|and|now|just)[,\s]*)*(close|stop|pause|next|back|calibrate|reset|rewind|x-?ray|lights (?:on|off)|take it apart|put it back|zoom (?:in|out))\b/i;
+  const QUICK = /^(?:\s*(?:ok(?:ay)?|hey|spanner|please|and|now|just)[,\s]*)*(close|stop|quiet|shut up|stop talking|be quiet|enough|pause|next|back|calibrate|reset|rewind|x-?ray|lights (?:on|off)|take it apart|put it back|zoom (?:in|out))\b/i;
   const words = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter((w) => w.length > 2));
   const STOCK = /what do you want to fix|i'm spanner|i am spanner|show it to me|step by step|replacement parts or other keyboards|heads up|people often|searching live|taking it apart|putting it back|starting over/i;
   const isEcho = (text) => {        // Spanner hearing its own voice: its stock phrases, or most of the words are in what it is saying
@@ -1187,7 +1188,7 @@ function onCoach(c) {
 }
 
 // ---------------------------------------------------------------- phone camera: the laptop follows the phone's frames
-let remoteOn = false, lastViewTs = 0, lastPoseTs = 0, poseTrack = { on: true, zero: 0, yaw: 0, baseAz: null, flip: QP.get("flip") === "1" ? 1 : -1 };   // say "calibrate"; if the hologram turns the wrong way, add ?flip=1
+let remoteOn = false, lastViewTs = 0, lastPoseTs = 0, lastSignalTs = 0, poseTrack = { on: true, zero: 0, yaw: 0, baseAz: null, flip: QP.get("flip") === "1" ? 1 : -1 };   // say "calibrate"; if the hologram turns the wrong way, add ?flip=1
 const PHONE_URL = () => `${location.origin}/training/viewer/phone.html?s=${SESSION}`;
 function startRemote() {
   if (camOn) toggleCamera();
@@ -1204,6 +1205,7 @@ async function remoteTick() {
     const r = await fetch(API + "/coach/latest?session=" + SESSION); const d = r.ok ? await r.json() : {};
     if (d.view && d.view.ts !== lastViewTs) { lastViewTs = d.view.ts; $("pair").style.display = "none"; onCoach(d.view); }
     if (d.pose && d.pose.ts !== lastPoseTs) { lastPoseTs = d.pose.ts; applyPose(d.pose); $("pair").style.display = "none"; }
+    if (d.signal && d.signal.ts !== lastSignalTs) { lastSignalTs = d.signal.ts; if (d.signal.signal === "stop") quiet("✋"); }
   } catch { /* keep polling */ }
   setTimeout(remoteTick, 300);
 }
@@ -1222,6 +1224,8 @@ function applyPose(p) {
   camera.position.copy(controls.target.clone().add(off)); controls.update();
   $("camlat").textContent = `tracking ${Math.round(p.angle - poseTrack.zero)}° · ${p.latency_ms} ms`;
 }
+// ✋ or "stop": Spanner stops talking (and stops the tour), right now
+function quiet(how = "stop") { stopSpeaking(); stopTour(); heard(how, "ok, quiet"); }
 async function toggleCamera() {
   if (camOn) {
     camOn = false; camStream?.getTracks().forEach((t) => t.stop()); camStream = null;
@@ -1235,7 +1239,7 @@ async function toggleCamera() {
   $("camera").classList.add("on"); camOn = true; agree = 0; lastDetect = 0;
   if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); }
   setMode("live · watching"); narrate("I'm watching. Show me the keyboard.");
-  coachTick();
+  coachTick(); watchPalm($("video"), () => quiet("✋"));
 }
 $("camera").onclick = toggleCamera;
 

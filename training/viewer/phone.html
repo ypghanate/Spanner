@@ -17,7 +17,8 @@
 <div id="box"></div>
 <div id="hud"><span class="dot" id="dot"></span><b>SPANNER</b> · phone camera · <span id="st">starting</span></div>
 <div id="start">TAP TO START THE CAMERA<small>point the rear camera at the keyboard and your hands; keep the whole keyboard in view</small></div>
-<script>
+<script type="module">
+import { watchPalm } from "./gesture.js";
 const QP = new URLSearchParams(location.search), S = QP.get("s") || "phone", API = "";
 const v = document.getElementById("v"), st = document.getElementById("st"), dot = document.getElementById("dot"), box = document.getElementById("box");
 const c = document.createElement("canvas");
@@ -62,6 +63,7 @@ document.getElementById("start").onclick = async () => {
   try {
     v.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
     document.getElementById("start").remove(); st.textContent = "streaming"; poseLoop(); frameLoop();
+    watchPalm(v, () => { fetch(API + "/coach/signal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: S, signal: "stop" }) }).catch(() => {}); st.textContent = "✋ stop sent"; });
     if (screen.orientation?.lock) screen.orientation.lock("landscape").catch(() => {});
   } catch (e) { st.textContent = "camera blocked: " + e.message + " (open this page over https and allow the camera)"; }
 };
