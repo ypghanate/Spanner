@@ -26,7 +26,7 @@ scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnviron
 const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 400); camera.position.set(0, 30, 40);
 const controls = new OrbitControls(camera, renderer.domElement);
 Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, minDistance: 3, maxDistance: 90, maxPolarAngle: Math.PI * 0.49, autoRotateSpeed: 0.5 });
-controls.target.set(0, 2, 0);
+controls.target.set(0, 2, 0); controls.minPolarAngle = 0.2; controls.maxPolarAngle = Math.PI * 0.6;
 const key = new THREE.DirectionalLight(0xffffff, 2.3); key.position.set(12, 30, 18); key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
 Object.assign(key.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25 }); key.shadow.bias = -0.0004;
 const fill = new THREE.DirectionalLight(0xdff6ff, 0.9); fill.position.set(-6, 10, 30);
@@ -44,7 +44,7 @@ const outline = new OutlinePass(new THREE.Vector2(innerWidth, innerHeight), scen
 outline.visibleEdgeColor.set(CYAN); outline.hiddenEdgeColor.set(0x0a5566); composer.addPass(outline);
 composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } }, vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
   fragmentShader: "uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (c.r != c.r || c.g != c.g || c.b != c.b || c.a != c.a) c = vec4(0.0,0.0,0.0,1.0); gl_FragColor = vec4(min(c.rgb, vec3(16.0)), c.a); }" }));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.5, 1.0)); composer.addPass(new OutputPass());
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.35, 0.4, 1.6)); composer.addPass(new OutputPass());
 const labelRenderer = new CSS2DRenderer({ element: $("labels") });
 function resize() { renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); labelRenderer.setSize(innerWidth, innerHeight); outline.resolution.set(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
@@ -52,8 +52,10 @@ addEventListener("resize", resize); resize();
 // ------------------------------------------------------------------ materials
 const P = (o) => new THREE.MeshPhysicalMaterial(o), S = (o) => new THREE.MeshStandardMaterial(o);
 const M = {
-  alu: P({ color: 0xb9bcc3, metalness: 1, roughness: 0.32, clearcoat: 0.2 }), titanium: P({ color: 0x7d7f85, metalness: 1, roughness: 0.4 }),
-  glassBack: P({ color: 0x1d2a3a, roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.08, metalness: 0.1 }),
+  alu: P({ color: 0xc9d3dc, metalness: 0.9, roughness: 0.42, clearcoat: 0.1 }), titanium: P({ color: 0x7d7f85, metalness: 1, roughness: 0.4 }),
+  glassBack: P({ color: 0xb9ccdd, roughness: 0.55, clearcoat: 0.6, clearcoatRoughness: 0.5, metalness: 0.0 }),
+  plateau: P({ color: 0xc3d1de, roughness: 0.35, clearcoat: 0.9, clearcoatRoughness: 0.2 }),
+  bezel: P({ color: 0x050607, roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.05 }),
   screen: P({ color: 0x05070c, roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.05, emissive: 0x0a2a3a, emissiveIntensity: 0.35 }),
   oled: S({ color: 0x1a1d24, roughness: 0.5, metalness: 0.3 }), glass: P({ color: 0x8fb7c9, roughness: 0.05, transmission: 0.6, transparent: true, opacity: 0.55, clearcoat: 1, ior: 1.5 }),
   battery: S({ color: 0x2b2f36, roughness: 0.7, metalness: 0.15 }), batteryLabel: S({ color: 0x9aa0a8, roughness: 0.9, metalness: 0 }),
@@ -77,6 +79,7 @@ const TEX = {
   screen: () => canvasTex(512, 1024, (g, w, h) => {
     const bg = g.createLinearGradient(0, 0, w, h); bg.addColorStop(0, "#0b2a4a"); bg.addColorStop(0.55, "#071424"); bg.addColorStop(1, "#1a0b2e"); g.fillStyle = bg; g.fillRect(0, 0, w, h);
     const glow = g.createRadialGradient(w * 0.7, h * 0.3, 10, w * 0.7, h * 0.3, 420); glow.addColorStop(0, "#00e5ff44"); glow.addColorStop(1, "#00000000"); g.fillStyle = glow; g.fillRect(0, 0, w, h);
+    g.lineWidth = 22; g.strokeStyle = "#050607"; g.beginPath(); g.roundRect(11, 11, w - 22, h - 22, 70); g.stroke();   // bezel
     g.fillStyle = "#000"; g.beginPath(); g.roundRect(w / 2 - 70, 44, 140, 38, 19); g.fill();                     // Dynamic Island
     g.fillStyle = "#e6fbff"; g.font = "600 92px system-ui,Segoe UI,Inter,sans-serif"; g.textAlign = "center"; g.fillText("9:41", w / 2, 230);
     g.font = "500 26px system-ui,Segoe UI,Inter,sans-serif"; g.fillStyle = "#bfeef7"; g.fillText("Saturday 15 November", w / 2, 270);
@@ -108,7 +111,7 @@ function iphone15() {
   const W = 7.16, H = 14.76, T = 0.78, parts = [];
   const add = (name, label, desc, obj, pos, dir, group = "body", callout = false) => parts.push({ name, label, desc, obj: edgesOn(obj), pos, dir, group, callout });
   // body
-  const frame = new THREE.Group(); frame.add(flatRing(W, H, 1.0, 0.16, T, M.alu));
+  const frame = new THREE.Group(); frame.add(flatRing(W, H, 1.12, 0.16, T, M.alu));
   for (const [x, z] of [[-W / 2 + 0.08, -5.2], [W / 2 - 0.08, -5.2], [-W / 2 + 0.08, 5.6], [W / 2 - 0.08, 5.6]]) { const a = mesh(box(0.17, T - 0.04, 0.12, 0.02, 1), M.black); a.position.set(x, 0, z); frame.add(a); }   // antenna lines
   for (const z of [-1.6, 1.6]) { const a = mesh(box(0.12, T - 0.04, 0.17, 0.02, 1), M.black); a.position.set(0, 0, z > 0 ? H / 2 - 0.08 : -H / 2 + 0.08); a.position.x = z; frame.add(a); }
   const grille = new THREE.Group(); for (let i = 0; i < 6; i++) { const h = mesh(cyl(0.06, 0.2, 10), M.black); h.rotation.x = Math.PI / 2; h.position.set(1.0 + i * 0.22, 0, H / 2); grille.add(h); } frame.add(grille);
@@ -116,8 +119,9 @@ function iphone15() {
   add("frame", "Aluminium frame", "Aerospace-grade aluminium band with the antenna lines, speaker grilles and the port cutout; everything mounts to it.", frame, [0, 0, 0], [0, 0, 0]);
   // display assembly
   const disp = new THREE.Group();
-  const oled = mesh(box(W - 0.32, 0.1, H - 0.32, 0.8, 4), new THREE.MeshPhysicalMaterial({ map: TEX.screen(), roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.05, emissiveMap: TEX.screen(), emissive: 0xffffff, emissiveIntensity: 0.55 })); oled.position.y = 0.06; disp.add(oled);
-  const shield = mesh(box(W - 0.18, 0.06, H - 0.18, 0.86, 4), M.glass); shield.position.y = 0.15; disp.add(shield);
+  const st = TEX.screen();
+  const oled = mesh(box(W - 0.24, 0.1, H - 0.24, 1.0, 5), new THREE.MeshPhysicalMaterial({ map: st, roughness: 0.06, clearcoat: 1, clearcoatRoughness: 0.04, emissiveMap: st, emissive: 0xffffff, emissiveIntensity: 1.0 })); oled.position.y = 0.08; disp.add(oled);
+  const shield = mesh(box(W - 0.16, 0.03, H - 0.16, 1.05, 6), M.bezel); shield.position.y = 0.0; disp.add(shield);   // black glass under the panel
   const ear = mesh(box(1.0, 0.04, 0.08, 0.02, 1), M.black); ear.position.set(0, 0.19, -H / 2 + 0.5); disp.add(ear);
   const dflex = flex(1.6, 1.2); dflex.rotation.x = Math.PI / 2; dflex.position.set(1.4, -0.6, -3.2); disp.add(dflex);
   add("display", "Display assembly", "6.1-inch Super Retina XDR OLED bonded to the Ceramic Shield front glass, with the earpiece mesh and the display flex. It lifts off the frame first, hinged from the left.", disp, [0, T / 2 + 0.05, 0], [0, 7.5, 0], "front", true);
@@ -146,10 +150,10 @@ function iphone15() {
   const mic = mesh(cyl(0.08, 0.2, 8), M.black); mic.position.set(-0.9, -0.3, 0.95); cam.add(mic);
   const cflex = flex(2.0, 0.9); cflex.rotation.y = Math.PI / 2; cflex.position.set(2.3, 0.1, 0.8); cam.add(cflex);
   add("camera_module", "Rear camera module", "48 MP main and 12 MP ultra-wide in one housing, with the flash and the rear mic; connects to the board with one flex.", cam, [-1.7, -0.1, -4.9], [-0.9, -4.2, -0.8], "back", true);
-  const bump = new THREE.Group(); const bp = mesh(box(3.9, 0.14, 3.9, 0.7, 4), M.glassBack); bump.add(bp);
+  const bump = new THREE.Group(); const bp = mesh(box(3.9, 0.16, 3.9, 0.9, 5), M.plateau); bump.add(bp);
   for (const [x, z] of [[-0.75, -0.75], [0.75, 0.75]]) { const r = mesh(cyl(1.02, 0.18), M.alu); r.position.set(x, -0.02, z); bump.add(r); }
   add("camera_bump", "Camera bump", "Raised glass plateau on the back with the two lens rings.", bump, [-1.7, -T / 2 - 0.14, -4.9], [-0.9, -6.4, -0.8], "back");
-  add("back_glass", "Back glass", "Colour-infused glass with the matte finish, glued to the frame around the edge; the camera bump sits on it.", mesh(box(W - 0.16, 0.1, H - 0.16, 0.85, 4), M.glassBack), [0, -T / 2 - 0.05, 0], [0, -5.4, 0], "back", true);
+  add("back_glass", "Back glass", "Colour-infused glass with the matte finish, glued to the frame around the edge; the camera bump sits on it.", mesh(box(W - 0.14, 0.12, H - 0.14, 1.05, 6), M.glassBack), [0, -T / 2 - 0.05, 0], [0, -5.4, 0], "back", true);
   const coil = new THREE.Group(); const ring = mesh(new THREE.TorusGeometry(1.9, 0.09, 8, 64), M.copper); ring.rotation.x = Math.PI / 2; coil.add(ring);
   const ring2 = mesh(new THREE.TorusGeometry(1.55, 0.09, 8, 64), M.copper); ring2.rotation.x = Math.PI / 2; coil.add(ring2); const ring3 = mesh(new THREE.TorusGeometry(1.2, 0.09, 8, 64), M.copper); ring3.rotation.x = Math.PI / 2; coil.add(ring3);
   for (let i = 0; i < 16; i++) { const m = mesh(box(0.5, 0.06, 0.22, 0.02, 1), M.black); const a = (i / 16) * Math.PI * 2; m.position.set(Math.cos(a) * 2.35, 0, Math.sin(a) * 2.35); m.rotation.y = -a; coil.add(m); }   // MagSafe magnets
@@ -164,7 +168,11 @@ function iphone15() {
   add("buttons", "Volume + Action buttons", "Two volume buttons and the Action button, each on a flex with a bracket.", (() => { const g = new THREE.Group(); for (const [z, len] of [[-4.7, 0.6], [-3.2, 1.0], [-1.9, 1.0]]) { const b = mesh(box(0.25, 0.32, len, 0.09, 2), M.alu); b.position.z = z; g.add(b); } return g; })(), [-W / 2 - 0.1, 0, 0], [-2.2, 0, 0], "body");
   add("power_button", "Side button", "Power and Siri button on the right edge, on the same flex as the mmWave window on US models.", mesh(box(0.25, 0.32, 1.5, 0.09, 2), M.alu), [W / 2 + 0.1, 0, -2.6], [2.2, 0, 0], "body");
   add("screws", "Pentalobe + tri-point screws", "Two pentalobe screws by the port hold the display; the rest are tri-point and Phillips inside.", (() => { const g = new THREE.Group(); for (const [x, z] of [[-0.8, 7.0], [0.8, 7.0], [-3.0, -6.2], [3.0, -6.2], [-3.0, 6.0], [3.0, 6.0], [-3.0, 0.4], [3.0, 1.2]]) { const s = screw(0.07); s.position.set(x, 0.28, z); g.add(s); } return g; })(), [0, 0, 0], [0, 6.2, 0], "inside");
-  return { name: "iPhone 15", parts, spread: 1, views: { iso: [12, 16, 20] }, fact: "128 to 512 GB, Dynamic Island, USB-C. Battery and display are the two repairs people actually do; disconnect the battery first, always." };
+  const hotspots = [
+    ["Action button", [-W / 2 - 0.3, 0.2, -4.7]], ["Volume up / down", [-W / 2 - 0.3, 0.2, -2.5]], ["Side button", [W / 2 + 0.3, 0.2, -2.6]],
+    ["Dynamic Island", [0, T / 2 + 0.3, -6.4]], ["USB-C", [0, 0.1, H / 2 + 0.3]], ["SIM tray", [-W / 2 - 0.3, 0.1, -1.0]],
+    ["Cameras", [-1.7, -T / 2 - 0.4, -4.9]], ["Speaker + mic", [1.8, 0.1, H / 2 + 0.3]]];
+  return { name: "iPhone 15", parts, spread: 1, hotspots, upright: true, views: { iso: [12, 16, 20] }, fact: "128 to 512 GB, Dynamic Island, USB-C. Battery and display are the two repairs people actually do; disconnect the battery first, always." };
 }
 function ipad11() {
   const W = 17.95, H = 24.86, T = 0.7, parts = [];
@@ -180,7 +188,7 @@ function ipad11() {
   add("usb_c", "USB-C port", "Charging and data port on the bottom edge.", mesh(box(0.9, 0.32, 0.8, 0.12), M.silver), [0, 0, H / 2 - 0.3], [0, 1, 1], "inside");
   add("smart_connector", "Smart Connector", "Three pogo pins on the edge for the keyboard case.", mesh(box(2.4, 0.1, 0.3, 0.05), M.gold), [W / 2 - 0.1, 0, 0], [1, 0, 0], "body");
   add("buttons", "Top button + volume", "Power button with Touch ID, and the volume buttons.", (() => { const g = new THREE.Group(); const p = mesh(box(1.4, 0.25, 0.3, 0.08), M.alu); p.position.set(-6.5, 0, -H / 2 - 0.12); g.add(p); for (const z of [-10.0, -8.6]) { const b = mesh(box(0.25, 0.25, 1.0, 0.08), M.alu); b.position.set(-W / 2 - 0.12, 0, z); g.add(b); } return g; })(), [0, 0, 0], [-1, 0, -1], "body");
-  return { name: "iPad (11th gen)", parts, spread: 7, views: { iso: [18, 24, 30] }, fact: "A16 chip, 11-inch Liquid Retina, landscape front camera, USB-C. Batteries and display are glued: a heat mat and patience." };
+  return { name: "iPad (11th gen)", parts, spread: 7, upright: true, views: { iso: [18, 24, 30] }, fact: "A16 chip, 11-inch Liquid Retina, landscape front camera, USB-C. Batteries and display are glued: a heat mat and patience." };
 }
 function momentum4() {
   const parts = [];
@@ -218,20 +226,26 @@ for (const p of device.parts) {
 function updatePositions() {
   for (const p of Object.values(parts)) {
     const dir = V3(...p.dir); p.obj.position.set(p.pos[0] + dir.x * explode * device.spread, p.pos[1] + dir.y * explode * device.spread, p.pos[2] + dir.z * explode * device.spread);
+    updateHotspots();
     if (p.callout) {
       if (!p.calloutObj) { const div = document.createElement("div"); div.className = "callout"; div.textContent = p.label.toUpperCase(); p.calloutObj = new CSS2DObject(div); p.calloutObj.position.set(0, 0.9, 0); p.obj.add(p.calloutObj); }
       p.calloutObj.element.style.opacity = explode > 0.6 && !selected ? String(Math.min(1, (explode - 0.6) * 2.5)) : "0";
     }
   }
 }
-group.position.y = 4; updatePositions();
+if (device.upright) { group.rotation.x = Math.PI / 2; group.rotation.y = 0.0; }
+{ const b0 = new THREE.Box3().setFromObject(group); group.position.y += 1.2 - b0.min.y; }
+// exterior hotspots (shown when the model is assembled and nothing is selected)
+const hotspotObjs = (device.hotspots || []).map(([text, pos]) => { const div = document.createElement("div"); div.className = "callout"; div.textContent = text.toUpperCase(); const o = new CSS2DObject(div); o.position.set(...pos); group.add(o); return o; });
+function updateHotspots() { for (const o of hotspotObjs) o.element.style.opacity = explode < 0.15 && !selected && !xray ? "0.9" : "0"; }
+updatePositions();
 const bb = new THREE.Box3().setFromObject(group); const size = bb.getSize(V3()); const c0 = bb.getCenter(V3()); controls.target.copy(c0);
 const tweens = []; const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 function tween(from, to, ms, set) { return new Promise((done) => { if (INSTANT) { set(to); done(); return; } tweens.push({ from, to, ms, set, done, t0: performance.now() }); }); }
 function setExplode(v) { return tween(explode, v, 1400, (x) => { explode = x; updatePositions(); $("tele").textContent = `${Object.keys(parts).length} PARTS · ${Math.round(explode * 100)}% APART`; }); }
 function setXray(on) { xray = on; for (const p of Object.values(parts)) p.obj.traverse((o) => { if (o.isMesh) { if (!o.userData.mat) o.userData.mat = o.material; o.material = on ? M.holo : o.userData.mat; } }); $("mode").textContent = on ? "X-RAY" : explode > 0.5 ? "EXPLODED" : "ASSEMBLED"; }
 function flyTo(pos, target, ms = 1100) { const p0 = camera.position.clone(), t0 = controls.target.clone(); return tween(0, 1, ms, (t) => { camera.position.lerpVectors(p0, pos, ease(t)); controls.target.lerpVectors(t0, target, ease(t)); }); }
-function frameAll() { const b = new THREE.Box3().setFromObject(group), s = b.getSize(V3()), c = b.getCenter(V3()); const dist = Math.max(s.x, s.z, s.y * 1.6) * 1.35 + 6; return flyTo(c.clone().add(V3(dist * 0.55, dist * 0.55, dist * 0.8)), c, 1600); }
+function frameAll() { const b = new THREE.Box3().setFromObject(group), s = b.getSize(V3()), c = b.getCenter(V3()); const dist = Math.max(s.x, s.y * 1.1, s.z) * 1.25 + 6; return flyTo(c.clone().add(device.upright ? V3(dist * 0.45, dist * 0.22, dist * 0.9) : V3(dist * 0.55, dist * 0.55, dist * 0.8)), c, 1600); }
 
 // labels + inspect
 const tags = [];
