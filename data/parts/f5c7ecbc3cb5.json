@@ -1,0 +1,206 @@
+{
+ "card_id": "f5c7ecbc3cb5",
+ "identity": {
+  "brand": "Royal",
+  "model": "Kludge RK61",
+  "model_number": "",
+  "year_or_revision": "",
+  "category": "",
+  "evidence": "typed: Royal Kludge RK61",
+  "confidence": 1.0
+ },
+ "part_needed": "keycaps",
+ "fault": "one key no longer registers or double-types; replace the failed part",
+ "options": [
+  {
+   "offer": {
+    "part_name": "Replacement keycaps from RK Royal Kludge RK61 keyboards in both Black and White",
+    "part_number": "186156095304",
+    "retailer": "eBay UK",
+    "price": 3.44,
+    "currency": "GBP",
+    "in_stock": "unknown",
+    "url": "https://www.ebay.co.uk/itm/186156095304",
+    "compatible_models_listed": [
+     "RK61"
+    ]
+   },
+   "verdict": {
+    "fits": "yes",
+    "reason": "The eBay listing explicitly describes the item as replacement keycaps taken from Royal Kludge RK61 keyboards and lists RK61 as the compatible model, and other sources note the RK61 uses Cherry MX-compatible switches whose ABS keycaps can be swapped.",
+    "supporting_urls": [
+     "https://www.ebay.co.uk/itm/186156095304",
+     "https://yasugad.hatenablog.com/entry/2022/05/04/190000",
+     "https://pinstack.com/royal-kludge-rk61-budget-60-keyboard-review/"
+    ]
+   },
+   "verified": true,
+   "independent_sources": 3
+  },
+  {
+   "offer": {
+    "part_name": "RK x LTC 117-Key PBT Double Shot Keycaps, Translucent OEM Profile for ISO & ANSI Layout (Pink)",
+    "part_number": "43146940023005",
+    "retailer": "RK Royal Kludge (RKgamingstore)",
+    "price": 24.95,
+    "currency": "EUR",
+    "in_stock": "no",
+    "url": "https://rkgamingstore.com/products/117-key-pbt-double-shot-keycaps",
+    "compatible_models_listed": [
+     "RK61",
+     "RK68",
+     "RK84",
+     "RK87",
+     "RK98",
+     "RK104"
+    ]
+   },
+   "verdict": {
+    "fits": "yes",
+    "reason": "The RK product page says this set fits MX-style switches and ANSI/ISO 61-key (60%) keyboards, and RK's RK61 listings describe a 61-key 60% board with hot-swappable 3-pin/5-pin mechanical switches, though no source names the RK61 by model for this exact part.",
+    "supporting_urls": [
+     "https://rkgamingstore.com/products/117-key-pbt-double-shot-keycaps",
+     "https://www.amazon.com/RK-Translucent-Mechanical-Keyboard-Customers/dp/B0HH6BVZTW",
+     "https://rkgamingstore.com/products/rk61-60-color-block-edition",
+     "https://upgradekeyboards.com/products/royal-kludge-rk61-rgb-60-wireless-wired-mechanical-keyboard"
+    ]
+   },
+   "verified": true,
+   "independent_sources": 3
+  },
+  {
+   "offer": {
+    "part_name": "Sunzit Keycaps, 61 Keycaps Backlight Two-Color Mechanical Keypad PBT Keycap for GH60 / RK61 / ALT61 / Annie / Keyboard Poker Keys",
+    "part_number": "B07TKK7XLH",
+    "retailer": "Amazon UK (sold by Sunzit; dispatched by Amazon)",
+    "price": 0.0,
+    "currency": "GBP",
+    "in_stock": "yes",
+    "url": "https://www.amazon.co.uk/Sunzit-Backlight-Two-Color-Mechanical-Keyboard/dp/B07TKK7XLH",
+    "compatible_models_listed": [
+     "GH60",
+     "RK61",
+     "ALT61",
+     "Annie",
+     "Keyboard Poker"
+    ]
+   },
+   "verdict": {
+    "fits": "yes",
+    "reason": "The Amazon UK listing for B07TKK7XLH explicitly names RK61 in its title ('61 Keycaps Backlight PBT Keycap for Ducky GH60 RK61 ALT61 Keyboard Keys') and says it is suitable for most 60% keyboards, with the caveat that it is ANSI/US layout and will not fit UK/ISO-layout boards.",
+    "supporting_urls": [
+     "https://www.amazon.co.uk/Sunzit-Backlight-Two-Color-Mechanical-Keyboard/dp/B07TKK7XLH",
+     "https://bigamart.com/product/sunzit-keycaps-61-keycaps-backlight-two-color-mechanical-keypad-pbt-keycap-for-gh60-rk61-alt61-annie-keyboard-poker-keys/"
+    ]
+   },
+   "verified": true,
+   "independent_sources": 2
+  }
+ ],
+ "decision": {
+  "verdict": "repair",
+  "repair_cost": 3.44,
+  "new_price": 45.11,
+  "currency": "GBP",
+  "savings": 41.67,
+  "ewaste_kg_avoided": 0.5,
+  "reason": "The part costs 3.44 vs 45.11 for a new one (8% of the price).",
+  "sources": [
+   "https://www.ebay.co.uk/itm/186156095304",
+   "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-Wireless-Mechanical/dp/B0GQH2KNLB"
+  ]
+ },
+ "recall": {
+  "status": "none_found",
+  "summary": "None of the provided sources names a recall or official safety notice for the Royal Kludge RK61; the only safety mention is an unverified Reddit user report of a unit catching fire, which is not a recall.",
+  "urls": [
+   "https://www.reddit.com/r/MechanicalKeyboards/comments/1o14ado/royal_kludge_safety_psa/"
+  ]
+ },
+ "manual_url": "",
+ "manual": null,
+ "tutorials": [
+  {
+   "title": "#rk61 #Royalkludge Royal Kludge RK61 Keycap Change Full Process | From White to Cyan and Pink - YouTube",
+   "url": "https://www.youtube.com/watch?v=SSGTzIXpNnk",
+   "chapter": "",
+   "start_s": 0
+  },
+  {
+   "title": "Royal Kludge RK61 Unboxing O Ring Installation Rubber Keycaps Installation - YouTube",
+   "url": "https://www.youtube.com/watch?v=C5Ngey6EtUk",
+   "chapter": "",
+   "start_s": 0
+  },
+  {
+   "title": "Upgrading a $50 Keyboard - YouTube",
+   "url": "https://www.youtube.com/watch?v=3LwQGPrHvPU",
+   "chapter": "",
+   "start_s": 0
+  }
+ ],
+ "sources": [
+  "http://mechanicalkeyboards.com/search.php?keyword=white+case&page=3&show_acc=on&show_kb=on",
+  "https://bigamart.com/product/sunzit-keycaps-61-keycaps-backlight-two-color-mechanical-keypad-pbt-keycap-for-gh60-rk61-alt61-annie-keyboard-poker-keys/",
+  "https://box.co.uk/gaming-accessories",
+  "https://forums.overclockers.co.uk/threads/back-lit-keyboard-gaming-wifi-or-cabled.18954716/",
+  "https://forums.overclockers.co.uk/threads/well-i-fell-down-the-custom-keyboard-world.18944882/page-5",
+  "https://helpdesk.drop.com/hc/en-us/articles/39588616768273-Replacement-Parts",
+  "https://keybumps.com/keyboard/royal-kludge-rk61-rgb-white.html",
+  "https://lambert-akademie.de/RK-Royal-Kludge-RK61-60-Wireless-Keyboard-Dual-Mode-Hot-478044/",
+  "https://laprosperiteonline.net/Pudding-Keycaps-Shine-Through-Double-Shot-OEM-Profile-For-900555",
+  "https://mechanicalkeyboards.com/search.php?keyword=&brand=&switch=62&size=60%25&led=&capmat=&capprint=&model=&availability=in_stock_pre&show_kb=off&show_kb=on&show_acc=off",
+  "https://mechanicalkeyboards.com/shop/index.php?pg=85&l=product_list&c=40&sortby=price:asc",
+  "https://mechboards.co.uk/collections/newest-products",
+  "https://p-y3-www-amazon-co-uk-kalias.amazon.co.uk/Sunzit-Backlight-Two-Color-Mechanical-Keyboard/dp/B07WCP4YMF",
+  "https://picclick.com/Popular/rk61-keycaps",
+  "https://pinstack.com/royal-kludge-rk61-budget-60-keyboard-review/",
+  "https://prototypist.net/collections/in-stock-keycap-sets",
+  "https://rkgamingstore.com/collections/all",
+  "https://rkgamingstore.com/products/117-key-pbt-double-shot-keycaps",
+  "https://rkgamingstore.com/products/pbt-pudding-keycaps-set-translucent-xda-profile",
+  "https://rkgamingstore.com/products/rk61-60-color-block-edition",
+  "https://rkgamingstore.com/products/rk61-60-percent-keyboard",
+  "https://upgradekeyboards.com/products/royal-kludge-rk61-rgb-60-wireless-wired-mechanical-keyboard",
+  "https://www.alibaba.com/product-detail/Royal-Kludge-RK-RK61-gamers-replacement_1600501532081.html",
+  "https://www.aliexpress.com/item/1005003662782118.html",
+  "https://www.aliexpress.com/w/wholesale-keycaps-for-royal-kludge.html",
+  "https://www.aliexpress.com/w/wholesale-royal-kludge-rk61-keycaps.html",
+  "https://www.amazon.ae/RK-ROYAL-KLUDGE-Non-Backlit-Mechanical/dp/B0896RP67Z",
+  "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-Mechanical-Swappable/dp/B0H25SN2BJ",
+  "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-Wireless-Mechanical/dp/B0GQH2KNLB",
+  "https://www.amazon.co.uk/Sunzit-Backlight-Two-Color-Mechanical-Keyboard/dp/B07TKK7XLH",
+  "https://www.amazon.co.uk/Sunzit-Backlight-Two-Color-Mechanical-Keyboard/dp/B07TLKHM7S",
+  "https://www.amazon.co.uk/Sunzit-Backlight-Two-Color-Mechanical-Keys%EF%BC%88Only/dp/B0CC5XPSNJ",
+  "https://www.amazon.com/RK-ROYAL-KLUDGE-Mechanical-Classical/dp/B0B1L4BSDK",
+  "https://www.amazon.com/RK-ROYAL-KLUDGE-Mechanical-Swappable/dp/B0B1M5PTMD",
+  "https://www.amazon.com/RK-ROYAL-KLUDGE-Non-Backlit-Mechanical/dp/B0896RP67Z",
+  "https://www.amazon.com/RK-ROYAL-KLUDGE-Translucent-Mechanical/dp/B08397JM66",
+  "https://www.amazon.com/RK-Translucent-Mechanical-Keyboard-Customers/dp/B0HH5THCJK",
+  "https://www.amazon.com/RK-Translucent-Mechanical-Keyboard-Customers/dp/B0HH6BVZTW",
+  "https://www.amazon.com/rk-royal-kludge-keycaps/s?k=rk+royal+kludge+keycaps",
+  "https://www.amazon.com/rk61-keycaps/s?k=rk61+keycaps",
+  "https://www.amazon.com/royal-kludge-keycaps/s?k=royal+kludge+keycaps",
+  "https://www.currys.co.uk/black-friday",
+  "https://www.ebay.co.uk/itm/186156095304",
+  "https://www.ebay.co.uk/shop/royal-kludge-rk61?_nkw=royal+kludge+rk61",
+  "https://www.ebay.com/itm/267787762641",
+  "https://www.ebay.com/shop/rk61-keycaps?_nkw=rk61+keycaps",
+  "https://www.enostech.com/royal-kludge-rk61-60-wireless-keyboard-review/",
+  "https://www.etsy.com/market/royal_kludge_rk61_keycaps",
+  "https://www.keyboardco.com/computer-accessories/keycaps/",
+  "https://www.linkedin.com/in/echo-cao-4b57b721b",
+  "https://www.lolvvv.com/review/royal-kludge-rk61",
+  "https://www.newegg.com/p/pl?d=rk61+custom+keycaps",
+  "https://www.reddit.com/r/MechanicalKeyboards/comments/1o14ado/royal_kludge_safety_psa/",
+  "https://www.scan.co.uk/shop/computer-hardware/keyboards/all",
+  "https://www.serpentkeys.co.uk/",
+  "https://www.u-buy.be/en/product/1GDKAOU2-rk-royal-kludge-112-double-shot-pbt-pudding-keycaps-oem-profile-ansi-iso-layout-backlit-keycap-setwi",
+  "https://www.youtube.com/watch?v=3LwQGPrHvPU",
+  "https://www.youtube.com/watch?v=C5Ngey6EtUk",
+  "https://www.youtube.com/watch?v=SSGTzIXpNnk",
+  "https://yasugad.hatenablog.com/entry/2022/05/04/190000"
+ ],
+ "searched_at": "2026-11-14T18:56:09.197673+00:00",
+ "mock": false
+}

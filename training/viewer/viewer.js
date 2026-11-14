@@ -948,43 +948,78 @@ $("mic").onclick = () => {
 // ------------------------------------------------------------------ live shopping on request (Linkup + Tavily via /coach/shop)
 const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const money = (p, c) => (p > 0 ? `${{ GBP: "£", USD: "$", EUR: "€" }[c] || (c ? c + " " : "")}${Number(p).toFixed(2)}` : "see price ↗");
+const moneyGbp = (i) => money(i.price, i.currency) + (i.price_gbp && i.currency !== "GBP" ? ` <small style="opacity:.6">≈ £${i.price_gbp.toFixed(2)}</small>` : "");
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
-function closePanels() { for (const id of ["shop", "side", "insp"]) $(id).style.display = "none"; select(null); }
-let shopReq = 0;
-async function openShop(raw) {
-  const id = ++shopReq, el = $("shop");
+function closePanels() { clearTimeout(verifyTimer); shopReq++; for (const id of ["shop", "side", "insp"]) $(id).style.display = "none"; select(null); }
+let shopReq = 0, verifyTimer = null;
+const cites = (d) => (d.sources?.length ? `<div class="cites">LINKUP READ ${d.sources_count} PAGES · ${d.sources.slice(0, 8).map((x) => `<a href="${esc(x.url)}" target="_blank">${esc(hostOf(x.url))} ↗</a>`).join("")}</div>` : "");
+function verifyBox(v) {
+  if (!v || v.status === "researching") return `<div class="verify pending"><div class="vh">LINKUP AGENT · VERIFYING<span class="dots"></span></div><div class="meta">checking fit on 2+ independent sites · safety recalls (last 2 years) · price of a new RK61 · repair or replace</div></div>`;
+  if (v.status !== "ready" || !v.card) return "";
+  const c = v.card, dec = c.decision;
+  return `<div class="verify"><div class="vh">✓ VERIFIED BY THE LINKUP AGENT${v.fresh ? "" : " · " + esc(c.as_of).toUpperCase()}${v.refreshing ? " · REFRESHING" : ""}</div>
+    ${dec ? `<div class="dec">${esc(dec.headline).replace(/^(Repair it:)/, "<b>$1</b>")}</div>` : ""}
+    <div class="meta">${c.recall_checked ? (c.safety ? "⚠ " + esc(c.safety.text) : "No safety recalls found in the last 2 years") : ""} · ${c.sources_count} sources read · ${esc(c.as_of)}</div>
+    <div class="vrow">${c.options.map((o) => `<div class="vo"><div class="pr">${esc(o.price)}</div><div>${esc(o.part)}</div><div class="rt">${esc(o.retailer)}</div>
+      <span class="badge ${o.verified ? "ok" : "no"}">${esc(o.badge).toUpperCase()}</span>
+      <div class="ev"><a href="${esc(o.url)}" target="_blank">buy ↗</a>${(o.evidence || []).slice(0, 4).map((u, i) => `<a href="${esc(u)}" target="_blank">[${i + 1}]</a>`).join("")}</div></div>`).join("")}</div></div>`;
+}
+async function openShop(raw, auto = false) {
+  const id = ++shopReq, el = $("shop"); clearTimeout(verifyTimer);
   $("side").style.display = "none"; $("insp").style.display = "none";
   el.style.display = "block";
-  el.innerHTML = `<h3>SEARCHING THE WEB LIVE</h3><div class="searching">LINKUP · TAVILY · “${esc(raw)}”</div>`;
-  narrate("Searching live.");
+  const autoTag = auto ? `<span class="auto">● SPANNER STARTED THIS ON ITS OWN</span>` : "";
+  el.innerHTML = `<h3>SEARCHING THE WEB LIVE${autoTag}</h3><div class="searching">LINKUP · TAVILY · “${esc(raw)}”</div>`;
+  if (!auto) narrate("Searching live.");
+  // replacement parts: the deep verification agent runs alongside the quick search
+  let verified = null, spoken = false;
+  const isPart = !/(other|another|alternative|different|new|better) keyboards?|keyboards? (instead|to buy)|instead of|upgrade|should i buy|what else could i buy/i.test(raw);
+  const pollVerify = async () => {
+    if (id !== shopReq || !isPart) return;
+    try {
+      const r = await fetch(API + "/coach/shop/verified?query=" + encodeURIComponent(raw));
+      if (r.ok) verified = await r.json();
+    } catch { /* keep polling */ }
+    if (id !== shopReq) return;
+    const box = el.querySelector("#vbox"); if (box) box.innerHTML = verifyBox(verified);
+    if (verified?.status === "ready" && verified.card?.decision && !spoken && el.querySelector("#vbox")) {
+      spoken = true; narrate(verified.card.decision.headline);
+    }
+    if (!verified || verified.status === "researching" || verified.refreshing) verifyTimer = setTimeout(pollVerify, 4000);
+  };
+  if (isPart) pollVerify();
   try {
     const r = await fetch(API + "/coach/shop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: raw }) });
     if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 120)}`);
     const d = await r.json(); if (id !== shopReq) return;
     const src = `LIVE · LINKUP + TAVILY · ${(d.latency_ms / 1000).toFixed(1)} s${d.cached ? " · CACHED" : ""}`;
+    const autoTag = auto ? `<span class="auto">● SPANNER STARTED THIS ON ITS OWN</span>` : "";
     const img = (u) => (u ? `<img src="${esc(u)}" referrerpolicy="no-referrer" onerror="this.remove()">` : "");
     if (d.kind === "keyboard") {
-      el.innerHTML = `<h3>OTHER KEYBOARDS · VS YOUR RK61</h3><div class="sub">${src}</div><div class="grid">${d.items.map((k, i) => `
+      const ri = d.repair_instead ? `<div class="verify"><div class="vh">BEFORE YOU BUY · FIXING YOUR RK61 (LINKUP AGENT, ${esc(d.repair_instead.as_of).toUpperCase()})</div><div class="dec">${esc(d.repair_instead.headline).replace(/^(Repair it:)/, "<b>$1</b>")}</div></div>` : "";
+      el.innerHTML = `<h3>OTHER KEYBOARDS · VS YOUR RK61${autoTag}</h3><div class="sub">${src}</div>${ri}<div class="grid">${d.items.map((k, i) => `
         <div class="it" style="animation-delay:${i * 70}ms">${img(k.image_url)}
-          <div class="nm">${esc(k.name)}</div><div class="pr">${money(k.price, k.currency)}</div>
+          <div class="nm">${esc(k.name)}</div><div class="pr">${moneyGbp(k)}</div>
           <ul>${(k.pros || []).map((x) => `<li class="p">${esc(x)}</li>`).join("")}${(k.cons || []).map((x) => `<li class="c">${esc(x)}</li>`).join("")}</ul>
-          <a href="${esc(k.url)}" target="_blank">${esc(hostOf(k.url))} ↗</a></div>`).join("")}</div>`;
-      const c = d.items.filter((k) => k.price > 0).sort((a, b) => a.price - b.price)[0];
-      narrate(`I found ${d.items.length} alternatives.${c ? ` The cheapest is the ${c.name} at ${money(c.price, c.currency)}.` : ""} Pros in green, cons in red.`);
+          <a href="${esc(k.url)}" target="_blank">${esc(hostOf(k.url))} ↗</a></div>`).join("")}</div>${cites(d)}`;
+      const c = d.items.filter((k) => k.price_gbp > 0).sort((a, b) => a.price_gbp - b.price_gbp)[0];
+      narrate(`I found ${d.items.length} alternatives.${c ? ` The cheapest is the ${c.name} at about £${Math.round(c.price_gbp)}.` : ""}${d.repair_instead ? " But fixing yours is far cheaper." : ""}`);
     } else {
       const fit = d.items.filter((o) => o.compatible);
-      el.innerHTML = `<h3>REPLACEMENT ${esc(d.item.split(" (")[0]).toUpperCase()} · FOR YOUR RK61</h3><div class="sub">${src}</div><div class="grid">${d.items.map((o, i) => `
+      el.innerHTML = `<h3>REPLACEMENT ${esc(d.item.split(" (")[0]).toUpperCase()} · FOR YOUR RK61${autoTag}</h3><div class="sub">${src}</div><div id="vbox">${verifyBox(verified)}</div><div class="sub">MORE OPTIONS · QUICK SEARCH</div><div class="grid">${d.items.map((o, i) => `
         <div class="it" style="animation-delay:${i * 70}ms">${img(o.image_url)}
-          <div class="nm">${esc(o.name)}</div><div class="pr">${money(o.price, o.currency)}</div><div class="rt">${esc(o.retailer)}</div>
+          <div class="nm">${esc(o.name)}</div><div class="pr">${moneyGbp(o)}</div><div class="rt">${esc(o.retailer)}</div>
           <span class="badge ${o.compatible ? "ok" : "no"}">${o.compatible ? "✓ FITS YOUR RK61" : "✗ WON'T FIT"}</span>
           <div class="why">${esc(o.compatibility)}</div>
-          <a href="${esc(o.url)}" target="_blank">${esc(hostOf(o.url))} ↗</a></div>`).join("")}</div>`;
-      const c = fit.filter((o) => o.price > 0).sort((a, b) => a.price - b.price)[0];
-      narrate(`${fit.length} of ${d.items.length} fit your RK61.${c ? ` Cheapest that fits: ${c.name}, ${money(c.price, c.currency)}, from ${c.retailer}.` : ""}`);
+          <a href="${esc(o.url)}" target="_blank">${esc(hostOf(o.url))} ↗</a></div>`).join("")}</div>${cites(d)}`;
+      if (!spoken) {
+        const c = fit.filter((o) => o.price > 0).sort((a, b) => a.price - b.price)[0];
+        narrate(`${auto ? "Your old switch is out, so you'll need a new one. " : ""}${fit.length} of ${d.items.length} fit your RK61.${c ? ` Cheapest that fits: ${money(c.price, c.currency)}, from ${c.retailer}.` : ""} I'm verifying them now.`);
+      }
     }
   } catch (e) {
     if (id !== shopReq) return;
-    el.innerHTML = `<h3>SEARCH FAILED</h3><div class="searching bad">${esc(e.message)}</div>`; narrate("The live search failed. Ask me again.");
+    el.innerHTML = `<h3>SEARCH FAILED</h3><div class="searching bad">${esc(e.message)}</div><div id="vbox">${verifyBox(verified)}</div>`; narrate("The live search failed. Ask me again.");
   }
 }
 async function askCoach(q) {
@@ -1027,6 +1062,14 @@ async function coachTick() {
   setTimeout(coachTick, 1500);
 }
 
+let autoShopped = false;
+function maybeAutoShop(c) {
+  const kind = plan.steps[c.step_index - 1]?.kind;
+  if (autoShopped || !kind) return;
+  if ((kind === "switch-pull" && c.step_status === "done") || ["socket-inspect", "new-switch-inspect"].includes(kind)) {
+    autoShopped = true; openShop("replacement switch for my RK61", true);
+  }
+}
 function onCoach(c) {
   $("camlat").textContent = `${(c.latency_ms / 1000).toFixed(1)} s`;
   $("camconfbar").style.width = Math.round(c.confidence * 100) + "%";
@@ -1035,6 +1078,7 @@ function onCoach(c) {
   if (!c.object_visible || c.step_index < 1) { agree = 0; return; }
   // follow the user: jump to the step they're doing (two frames agree, or one very confident frame)
   agree = c.step_index === lastDetect ? agree + 1 : 1; lastDetect = c.step_index;
+  if (c.confidence >= 0.6) maybeAutoShop(c);
   const target = c.step_index - 1, sure = agree >= 2 || c.confidence >= 0.85;
   if (sure && target !== stepIdx && c.confidence >= 0.5) {
     stopTour(); goStep(target, " · detected");
@@ -1155,7 +1199,7 @@ if (QP.get("mistake") === "1") await showMistake();
 if (QP.get("select") && parts[QP.get("select")]) { select(QP.get("select")); if (QP.get("pull") === "1") await $("pull").onclick(); if (QP.get("open") === "1") await $("open").onclick(); }
 if (QP.get("panel")) showSide(QP.get("panel"));
 if (QP.get("camera") === "1") toggleCamera();
-if (QP.get("shop")) openShop(QP.get("shop"));
+if (QP.get("shop")) openShop(QP.get("shop"), QP.get("auto") === "1");
 
 // wake: browsers need one gesture before mic + speech; after that it's voice only
 if (!INSTANT && QP.get("wake") !== "0") {
