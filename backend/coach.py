@@ -43,6 +43,12 @@ class CoachView(BaseModel):
                                      "say it in a few words; else empty.")
     confidence: float = Field(description="0 to 1: how sure you are about step_index.")
     say: str = Field(description="At most one short sentence of spoken guidance for the user, or empty.")
+    keyboard_visible: bool = Field(default=False, description="True if a mechanical keyboard is in the frame.")
+    missing_keys: list[str] = Field(default_factory=list, description=(
+        "Printed legends of keycaps that are MISSING from the keyboard (a gap showing the switch top or stem), e.g. "
+        "['F'] or ['Enter']. Identify a gap by its neighbours (the keys left and right of it, and the row). Empty if "
+        "every keycap is in place or you cannot tell. Never guess: only list a key you can place exactly."))
+    switch_removed: bool = Field(default=False, description="True if a switch has been pulled out and the empty socket is visible.")
 
 
 @lru_cache(maxsize=1)
@@ -68,6 +74,9 @@ def _system(demo: dict) -> str:
         "(keycap puller = wire loops, switch puller = two prongs, tweezers). The current step shown on screen "
         "is a hint, not the answer: move forward or back only when the frame shows it.",
         "Report a mistake only if you can actually see it. Keep what_i_see and say short and concrete.",
+        "The keyboard is a 61-key ANSI 60% layout (rows: Esc 1-0 - = Backspace / Tab Q-P [ ] \\ / Caps A-L ; ' Enter / "
+        "Shift Z-M , . / Shift / Ctrl Win Alt Space Alt Fn Menu Ctrl). If a keycap is missing you will see a gap with the "
+        "switch top or its stem; name that key exactly by its neighbours. Be precise: a wrong key is worse than none.",
     ]
     return "\n".join(lines)
 
@@ -77,6 +86,35 @@ def _client():
     import anthropic
 
     return anthropic.Anthropic()
+
+
+def _keyboard_crop(data: bytes) -> tuple[bytes, dict]:
+    """The frame, cropped to the keyboard (YOLO box + padding) and resized to <= 1280 px, so key legends are readable.
+    Falls back to the full frame when no keyboard is found."""
+    import cv2
+    import numpy as np
+
+    from backend.vision.detect import detect
+
+    img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        return data, {"cropped": False}
+    h, w = img.shape[:2]
+    boxes = [d for d in detect(data, "coach-crop") if d.label in ("keyboard", "laptop") and d.score >= 0.25]
+    info = {"cropped": False, "frame": [w, h]}
+    if boxes:
+        b = max(boxes, key=lambda d: d.box.w * d.box.h).box
+        pad = 0.08
+        x1, y1 = int(max(0, (b.x - pad) * w)), int(max(0, (b.y - pad) * h))
+        x2, y2 = int(min(w, (b.x + b.w + pad) * w)), int(min(h, (b.y + b.h + pad) * h))
+        if x2 - x1 > 80 and y2 - y1 > 40:
+            img = img[y1:y2, x1:x2]
+            info = {"cropped": True, "box": [x1, y1, x2, y2], "frame": [w, h]}
+    ch, cw = img.shape[:2]
+    if cw > 1280:
+        img = cv2.resize(img, (1280, int(ch * 1280 / cw)), interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 88])
+    return (buf.tobytes() if ok else data), info
 
 
 def _ask(image_b64: str, current_step: int) -> CoachView:
@@ -106,6 +144,7 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
     if not data:
         raise HTTPException(400, "empty image")
     t0 = time.perf_counter()
+    data, crop = await asyncio.to_thread(_keyboard_crop, data)
     view = await asyncio.to_thread(_ask, base64.standard_b64encode(data).decode(), current_step)
     latency = round((time.perf_counter() - t0) * 1000)
     from training.feedback import record_live_mistake, record_stage_timing
@@ -114,7 +153,7 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
     record_stage_timing(session, "coach", latency, True)          # measured latency -> Databricks dashboard
     if view.mistake and view.step_index > 0:   # the learning loop: real mistakes go to Databricks
         record_live_mistake(session, current_repair_id(), view.step_index, view.mistake, view.what_i_see)
-    out = {**view.model_dump(), "latency_ms": latency, "model": COACH_MODEL, "ts": time.time()}
+    out = {**view.model_dump(), "latency_ms": latency, "model": COACH_MODEL, "ts": time.time(), "crop": crop}
     _latest.setdefault(session, {})["view"] = out
     return out
 

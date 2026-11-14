@@ -53,8 +53,9 @@ async function poseLoop() {
 async function frameLoop() {
   if (!busyFrame && v.videoWidth) {
     busyFrame = true;
-    try { const r = await post("/coach/frame", await grab(768, 0.82), { current_step: "0" }); nFrames++; lastLat = r.latency_ms; }
-    catch (e) { /* shown by the pose loop */ }
+    try { const r = await post("/coach/frame", await grab(1280, 0.85), { current_step: "0" }); nFrames++; lastLat = r.latency_ms;
+      st.textContent = `${r.what_i_see ? r.what_i_see.slice(0, 60) : "…"} · step ${r.step_index} · ${(r.latency_ms / 1000).toFixed(1)} s${r.missing_keys?.length ? " · missing: " + r.missing_keys.join(",") : ""}`; dot.classList.add("on"); }
+    catch (e) { st.textContent = "can't reach Spanner: " + e.message; dot.classList.remove("on"); }
     busyFrame = false;
   }
   setTimeout(frameLoop, 1500);
@@ -62,7 +63,7 @@ async function frameLoop() {
 document.getElementById("start").onclick = async () => {
   try {
     v.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
-    document.getElementById("start").remove(); st.textContent = "streaming"; poseLoop(); frameLoop();
+    document.getElementById("start").remove(); st.textContent = "streaming"; if (QP.get("track") === "1") poseLoop(); frameLoop();
     watchPalm(v, () => { fetch(API + "/coach/signal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: S, signal: "stop" }) }).catch(() => {}); st.textContent = "✋ stop sent"; });
     if (screen.orientation?.lock) screen.orientation.lock("landscape").catch(() => {});
   } catch (e) { st.textContent = "camera blocked: " + e.message + " (open this page over https and allow the camera)"; }

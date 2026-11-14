@@ -1160,8 +1160,31 @@ function maybeAutoShop(c) {
     autoShopped = true; openShop("replacement switch for my RK61", true);
   }
 }
+// the key the camera sees missing becomes the key we repair (two frames must agree; exact legend match only)
+let missingSeen = { key: null, n: 0 };
+function keyIdForLegend(legend) {
+  const L = String(legend || "").trim().toLowerCase(); if (!L) return null;
+  for (const [id, k] of Object.entries(pack.keys)) if (id.toLowerCase() === L || String(k.label || "").toLowerCase() === L) return id;
+  const alias = { return: "ENTER", esc: "ESC", escape: "ESC", space: "SPACE", spacebar: "SPACE", backspace: "BACKSPACE", tab: "TAB", caps: "CAPS", "caps lock": "CAPS", shift: "LSHIFT", ctrl: "LCTRL", control: "LCTRL", alt: "LALT", win: "WIN", fn: "FN", menu: "MENU" };
+  return pack.keys[alias[L]] ? alias[L] : null;
+}
+function setBrokenKey(id, why) {
+  if (!pack.keys[id] || id === brokenKey) return;
+  brokenKey = id; applyState(INITIAL, 0); clearTags(); clearArrow();
+  select(null); setHighlight([`keycap_${id}`]); pulseT0 = performance.now(); focusPart(`keycap_${id}`);
+  $("sk").textContent = `KEY ${pack.keys[id].label}`; showTag(`keycap_${id}`, `${pack.keys[id].label} · THIS IS THE KEY WE FIX`, "ok", 1.2);
+  narrate(`I can see the ${pack.keys[id].label} keycap is off. That's the key we're fixing.`); heard(why || "camera", "broken key → " + pack.keys[id].label);
+  if (stepIdx >= 0) goStep(stepIdx, " · key " + pack.keys[id].label, true);
+}
+function onMissingKeys(c) {
+  const ids = (c.missing_keys || []).map(keyIdForLegend).filter(Boolean);
+  if (ids.length !== 1) { missingSeen = { key: null, n: 0 }; return; }
+  missingSeen = ids[0] === missingSeen.key ? { key: ids[0], n: missingSeen.n + 1 } : { key: ids[0], n: 1 };
+  if (missingSeen.n >= 2 && c.confidence >= 0.5) setBrokenKey(ids[0], "camera: " + c.missing_keys.join(", ") + " missing");
+}
 function onCoach(c) {
-  $("camlat").textContent = `${(c.latency_ms / 1000).toFixed(1)} s`;
+  $("camlat").textContent = `${(c.latency_ms / 1000).toFixed(1)} s${c.crop?.cropped ? " · zoomed" : ""}`;
+  onMissingKeys(c);
   $("camconfbar").style.width = Math.round(c.confidence * 100) + "%";
   const stepTxt = c.step_index > 0 ? ` · <b>STEP ${c.step_index}</b> ${c.step_status.replace("_", " ")}` : "";
   seen(`<b>I SEE</b> ${c.what_i_see}${stepTxt}${c.mistake ? `<br><span class="bad">⚠ ${c.mistake}</span>` : ""}`);
@@ -1188,7 +1211,7 @@ function onCoach(c) {
 }
 
 // ---------------------------------------------------------------- phone camera: the laptop follows the phone's frames
-let remoteOn = false, lastViewTs = 0, lastPoseTs = 0, lastSignalTs = 0, poseTrack = { on: true, zero: 0, yaw: 0, baseAz: null, flip: QP.get("flip") === "1" ? 1 : -1 };   // say "calibrate"; if the hologram turns the wrong way, add ?flip=1
+let remoteOn = false, lastViewTs = 0, lastPoseTs = 0, lastSignalTs = 0, poseTrack = { on: QP.get("track") === "1", zero: 0, yaw: 0, baseAz: null, flip: QP.get("flip") === "1" ? 1 : -1 };   // say "calibrate"; if the hologram turns the wrong way, add ?flip=1
 const PHONE_URL = () => `${location.origin}/training/viewer/phone.html?s=${SESSION}`;
 function startRemote() {
   if (camOn) toggleCamera();
