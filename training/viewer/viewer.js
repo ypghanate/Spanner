@@ -88,8 +88,13 @@ const labelRenderer = new CSS2DRenderer({ element: $("labels") });
 function resize() {
   renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
   labelRenderer.setSize(innerWidth, innerHeight); outline.resolution.set(innerWidth, innerHeight);
-  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  camera.aspect = innerWidth / innerHeight;
+  // stage mode: render as if the viewport were taller by the card strip, so the keyboard centres in the free area
+  const strip = document.body.classList.contains("stage") ? 110 : 0;
+  if (strip) camera.setViewOffset(innerWidth, innerHeight + strip, 0, 0, innerWidth, innerHeight); else camera.clearViewOffset();
+  camera.updateProjectionMatrix();
 }
+function setStage(on) { document.body.classList.toggle("stage", on); resize(); }
 addEventListener("resize", resize); resize();
 
 // ------------------------------------------------------------------ materials
@@ -921,9 +926,11 @@ async function command(raw) {
   const t = raw.toLowerCase().trim(); let said = "";
   const say = (s) => { said = s; narrate(s); };
   if (/\b(close|hide|dismiss|go away|that's enough|never ?mind)\b/.test(t)) { closePanels(); said = "closed"; }
+  else if (/calibrat|align the hologram|set (this|that) as zero|zero it/.test(t)) { calibratePose(); said = "calibrated"; }
+  else if (/use (my|the) phone|phone camera|phone as (the )?camera/.test(t)) { startRemote(); said = "phone camera"; }
   else if (/(other|another|alternative|different|new|better) keyboards?|keyboards? (instead|to buy)|instead of (this|the rk|it)|upgrade|should i buy|what else could i buy/.test(t)) { openShop(raw); said = "searching other keyboards"; }
   else if (/replace(ment)?s?|\bbuy\b|order|price|how much|where (can|do) i get|spare|new (key ?caps?|switch(es)?|stabili[sz]ers?|cable)/.test(t)) { openShop(raw); said = "searching replacements"; }
-  else if (/turn (the )?camera off|stop watching|camera off/.test(t)) { if (camOn) toggleCamera(); said = "camera off"; }
+  else if (/turn (the )?camera off|stop watching|camera off/.test(t)) { if (camOn) toggleCamera(); if (remoteOn) { remoteOn = false; setStage(false); $("cam").style.display = "none"; setMode("assembled"); } said = "camera off"; }
   else if (/camera|watch me|look at me/.test(t)) { if (!camOn) toggleCamera(); said = "camera on"; }
   else if (/\b(next|continue|go on|proceed|forward)\b/.test(t)) { stopTour(); goStep(stepIdx + 1); said = "next step"; }
   else if (/\b(back|previous)\b/.test(t) && !/back together|put .*back/.test(t)) { stopTour(); goStep(stepIdx - 1); said = "previous step"; }
@@ -955,8 +962,7 @@ async function command(raw) {
   else if (/step (\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven)/.test(t)) {
     const words = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven"], m = /step (\d+|\w+)/.exec(t);
     const n = parseInt(m[1]) || words.indexOf(m[1]) + 1; if (n > 0) { stopTour(); goStep(n - 1); said = `step ${n}`; }
-  } else if (t.split(/\s+/).length >= 3) { said = "asking Spanner"; askCoach(raw); }
-  else said = "not understood";
+  } else { said = "…"; heard(raw, "thinking"); return intentFallback(raw); }
   heard(raw, said);
 }
 let rec = null;
@@ -1050,6 +1056,26 @@ async function openShop(raw, auto = false) {
     el.innerHTML = `<h3>SEARCH FAILED</h3><div class="searching bad">${esc(e.message)}</div><div id="vbox">${verifyBox(verified)}</div>`; narrate("The live search failed. Ask me again.");
   }
 }
+// Nothing matched the fast word rules: ask Claude what was meant, then run that command.
+const INTENT_TEXT = { next: "next", back: "back", close: "close", take_apart: "take it apart", reassemble: "put it back together",
+  xray: "x-ray", reset: "reset", tour: "tour", stop: "stop", rewind: "rewind", show_mistake: "show me the mistake", fix_it: "fix it",
+  camera_on: "camera on", camera_off: "camera off", zoom_in: "zoom in", zoom_out: "zoom out", lights_on: "lights on", lights_off: "lights off",
+  specs: "specs", sources: "sources" };
+async function intentFallback(raw) {
+  try {
+    const r = await fetch(API + "/coach/intent", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: raw, current_step: stepIdx + 1 }) });
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    if (d.command === "none") { heard(raw, "not for me"); return; }
+    if (d.command === "ask") { heard(raw, "asking Spanner"); return askCoach(raw); }
+    if (d.command === "calibrate") { calibratePose(); heard(raw, "calibrated"); return; }
+    if (d.command === "shop_parts") { heard(raw, "searching replacements"); return openShop(d.shop_query || raw); }
+    if (d.command === "shop_keyboards") { heard(raw, "searching other keyboards"); return openShop("show me other keyboards " + (d.shop_query || "")); }
+    if (d.command === "show_part") { heard(raw, "showing " + d.part); return command("show me the " + (d.part || "switch")); }
+    const phrase = INTENT_TEXT[d.command]; if (phrase) { heard(raw, "→ " + phrase); return command(phrase); }
+    heard(raw, "not understood");
+  } catch (e) { heard(raw, "not understood"); }
+}
 async function askCoach(q) {
   try {
     const r = await fetch(API + "/coach/ask", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ question: q, current_step: stepIdx + 1 }) });
@@ -1073,7 +1099,7 @@ async function grabFrame() {
 function seen(html) { $("seen").innerHTML = html; }
 
 async function coachTick() {
-  if (!camOn) return;
+  if (!camOn || remoteOn) return;
   const v = $("video");
   if (!camBusy && v.readyState >= 2 && v.videoWidth) {
     camBusy = true;
@@ -1125,15 +1151,52 @@ function onCoach(c) {
   }
 }
 
+// ---------------------------------------------------------------- phone camera: the laptop follows the phone's frames
+let remoteOn = false, lastViewTs = 0, lastPoseTs = 0, poseTrack = { on: true, zero: 0, yaw: 0, baseAz: null, flip: QP.get("flip") === "1" ? 1 : -1 };   // say "calibrate"; if the hologram turns the wrong way, add ?flip=1
+const PHONE_URL = () => `${location.origin}/training/viewer/phone.html?s=${SESSION}`;
+function startRemote() {
+  if (camOn) toggleCamera();
+  remoteOn = true; setStage(true); setMode("live · phone camera");
+  const el = $("pair"); el.style.display = "block";
+  el.innerHTML = `OPEN ON THE PHONE<br><b>${PHONE_URL()}</b><div class="tr">WAITING FOR THE FIRST FRAME</div>`;
+  $("cam").style.display = "block"; $("video").style.display = "none"; seen("Phone camera: waiting for frames.");
+  if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); }
+  remoteTick();
+}
+async function remoteTick() {
+  if (!remoteOn) return;
+  try {
+    const r = await fetch(API + "/coach/latest?session=" + SESSION); const d = r.ok ? await r.json() : {};
+    if (d.view && d.view.ts !== lastViewTs) { lastViewTs = d.view.ts; $("pair").style.display = "none"; onCoach(d.view); }
+    if (d.pose && d.pose.ts !== lastPoseTs) { lastPoseTs = d.pose.ts; applyPose(d.pose); $("pair").style.display = "none"; }
+  } catch { /* keep polling */ }
+  setTimeout(remoteTick, 300);
+}
+// Rotation of the real keyboard on the desk -> same rotation of the hologram (orbit the view around it).
+function calibratePose() { poseTrack.zero = poseTrack.lastAngle ?? 0; poseTrack.baseAz = controls.getAzimuthalAngle(); narrate("Aligned."); }
+function applyPose(p) {
+  if (!p.found) return;
+  poseTrack.lastAngle = p.angle;
+  if (!poseTrack.on || flying || touring) return;
+  if (poseTrack.baseAz === null) { poseTrack.baseAz = controls.getAzimuthalAngle(); poseTrack.zero = p.angle; }
+  const target = poseTrack.baseAz + THREE.MathUtils.degToRad((p.angle - poseTrack.zero) * poseTrack.flip);
+  const cur = controls.getAzimuthalAngle(); let d = target - cur; d = Math.atan2(Math.sin(d), Math.cos(d));
+  const step = d * 0.25;                                    // smooth follow, no jitter
+  if (Math.abs(d) < 0.004) return;
+  const off = camera.position.clone().sub(controls.target); off.applyAxisAngle(V3(0, 1, 0), step);
+  camera.position.copy(controls.target.clone().add(off)); controls.update();
+  $("camlat").textContent = `tracking ${Math.round(p.angle - poseTrack.zero)}° · ${p.latency_ms} ms`;
+}
 async function toggleCamera() {
   if (camOn) {
     camOn = false; camStream?.getTracks().forEach((t) => t.stop()); camStream = null;
-    $("cam").style.display = "none"; $("keys").style.display = ""; $("camera").classList.remove("on"); setMode("assembled"); return;
+    $("cam").style.display = "none"; $("keys").style.display = ""; $("camera").classList.remove("on"); setMode("assembled"); setStage(false); return;
   }
   try {
     camStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
   } catch (e) { heard("", "camera blocked: " + e.message); return; }
-  $("video").srcObject = camStream; $("cam").style.display = "block"; $("keys").style.display = "none";
+  remoteOn = false; $("pair").style.display = "none"; $("video").style.display = "";
+  $("video").srcObject = camStream; $("cam").style.display = "block"; $("keys").style.display = "none"; setStage(true);
   $("camera").classList.add("on"); camOn = true; agree = 0; lastDetect = 0;
   if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); }
   setMode("live · watching"); narrate("I'm watching. Show me the keyboard.");
@@ -1227,6 +1290,7 @@ if (QP.get("mistake") === "1") await showMistake();
 if (QP.get("select") && parts[QP.get("select")]) { select(QP.get("select")); if (QP.get("pull") === "1") await $("pull").onclick(); if (QP.get("open") === "1") await $("open").onclick(); }
 if (QP.get("panel")) showSide(QP.get("panel"));
 if (QP.get("camera") === "1") toggleCamera();
+if (QP.get("phone") === "1" && INSTANT) startRemote();
 if (QP.get("shop")) openShop(QP.get("shop"), QP.get("auto") === "1");
 
 // wake: browsers need one gesture before mic + speech; after that it's voice only
@@ -1236,7 +1300,7 @@ if (!INSTANT && QP.get("wake") !== "0") {
     removeEventListener("keydown", wake, true); w.remove();
     voiceOn = true; $("voice").classList.add("on");
     if (!micOn) $("mic").onclick();
-    if (!camOn) await toggleCamera();
+    if (QP.get("phone") === "1") startRemote(); else if (!camOn) await toggleCamera();
     narrate("Hi, I'm Spanner. I'm watching. Show me the keyboard and I'll guide you step by step. You can also ask me for replacement parts or other keyboards.");
   };
   w.addEventListener("pointerdown", wake, { once: true }); addEventListener("keydown", wake, { capture: true, once: true });

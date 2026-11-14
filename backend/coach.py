@@ -114,7 +114,9 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
     record_stage_timing(session, "coach", latency, True)          # measured latency -> Databricks dashboard
     if view.mistake and view.step_index > 0:   # the learning loop: real mistakes go to Databricks
         record_live_mistake(session, current_repair_id(), view.step_index, view.mistake, view.what_i_see)
-    return {**view.model_dump(), "latency_ms": latency, "model": COACH_MODEL}
+    out = {**view.model_dump(), "latency_ms": latency, "model": COACH_MODEL, "ts": time.time()}
+    _latest.setdefault(session, {})["view"] = out
+    return out
 
 
 class Ask(BaseModel):
@@ -139,6 +141,106 @@ async def ask(q: Ask):
         return "".join(b.text for b in resp.content if b.type == "text").strip()
 
     return {"answer": await asyncio.to_thread(run)}
+
+
+# ---------------------------------------------------------------- phone camera: pose + latest
+_latest: dict[str, dict] = {}
+
+
+class Intent(BaseModel):
+    command: Literal["next", "back", "close", "take_apart", "reassemble", "xray", "reset", "tour", "stop", "rewind",
+                     "show_mistake", "fix_it", "shop_parts", "shop_keyboards", "camera_on", "camera_off",
+                     "calibrate", "show_part", "zoom_in", "zoom_out", "lights_on", "lights_off", "specs",
+                     "sources", "ask", "none"]
+    part: str = Field(default="", description="For show_part: socket, switch, keycap, pcb, plate, case, battery, usb, led, stabilizer, spring")
+    shop_query: str = Field(default="", description="For shop_*: what to search for, in the user's words")
+
+
+class IntentReq(BaseModel):
+    text: str
+    current_step: int = 0
+
+
+@router.post("/intent")
+async def intent(req: IntentReq):
+    """What did the user mean? Spoken words -> one of Spanner's commands (handles synonyms, fillers, phrasing)."""
+    sys_text = ("You map one spoken sentence from someone repairing a keyboard, hands-free, to exactly one Spanner "
+                "command. Commands: next (continue, go on, done, finished), back (previous step), close (hide any panel, "
+                "dismiss, that's enough, ok close), take_apart (explode the model), reassemble, xray, reset (start over), "
+                "tour (walk me through), stop (pause), rewind, show_mistake (what can go wrong), fix_it, "
+                "shop_parts (buy/replace/price of a part: keycaps, switches, stabilizers, cable), shop_keyboards "
+                "(other/alternative/new keyboards to buy instead), camera_on (watch me), camera_off, calibrate (align the "
+                "hologram with the real keyboard, set as zero), show_part (look at a part: fill part), zoom_in, zoom_out, "
+                "lights_on, lights_off, specs, sources, ask (a real question about the repair that needs an answer), "
+                "none (noise, not addressed to Spanner). Fillers like ok, please, hey Spanner are ignored.")
+    def run() -> Intent:
+        resp = _client().beta.messages.parse(
+            model=COACH_MODEL, max_tokens=120, thinking={"type": "disabled"},
+            system=[{"type": "text", "text": sys_text, "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": f"Current step on screen: {req.current_step}. Spoken: {req.text!r}"}],
+            output_format=Intent)
+        return resp.parsed_output or Intent(command="none")
+    out = await asyncio.to_thread(run)
+    return out.model_dump()
+
+
+def _keyboard_pose(data: bytes, session: str) -> dict:
+    """Fast, local: where is the real keyboard and how is it turned? YOLO box (team detector) + OpenCV min-area
+    rectangle on the edges inside it -> centre, size, in-plane angle. ~100 ms, no API call."""
+    import cv2
+    import numpy as np
+
+    from backend.vision.detect import detect
+
+    img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        return {"found": False}
+    h, w = img.shape[:2]
+    boxes = [d for d in detect(data, f"pose-{session}") if d.label in ("keyboard", "laptop") and d.score >= 0.25]
+    if boxes:
+        b = max(boxes, key=lambda d: d.box.w * d.box.h).box
+        x1, y1, x2, y2 = int(b.x * w), int(b.y * h), int((b.x + b.w) * w), int((b.y + b.h) * h)
+    else:
+        x1, y1, x2, y2 = 0, 0, w, h
+    crop = img[max(0, y1):y2, max(0, x1):x2]
+    if crop.size == 0:
+        return {"found": False}
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(cv2.GaussianBlur(gray, (5, 5), 0), 40, 120)
+    # keycaps are a dense field of edges; desk grain, grid lines and text are sparse: close the dense field into one
+    # blob and fit the rectangle to the largest blob only
+    k = max(9, int(min(crop.shape[:2]) * 0.06)) | 1
+    blob = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (k, k)))
+    contours, _ = cv2.findContours(blob, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return {"found": bool(boxes), "cx": (x1 + x2) / 2 / w, "cy": (y1 + y2) / 2 / h,
+                "w": (x2 - x1) / w, "h": (y2 - y1) / h, "angle": 0.0, "detector": bool(boxes)}
+    pts = max(contours, key=cv2.contourArea)
+    (rcx, rcy), (rw, rh), ang = cv2.minAreaRect(pts)
+    if rw < rh:                       # make the long side the keyboard's width: angle in (-90, 90]
+        ang += 90.0
+    ang = ((ang + 90.0) % 180.0) - 90.0
+    return {"found": True, "cx": (x1 + rcx) / w, "cy": (y1 + rcy) / h, "w": max(rw, rh) / w, "h": min(rw, rh) / h,
+            "angle": round(float(ang), 1), "detector": bool(boxes)}
+
+
+@router.post("/pose")
+async def pose(image: UploadFile = File(...), session: str = Form("laptop")):
+    data = await image.read()
+    if not data:
+        raise HTTPException(400, "empty image")
+    t0 = time.perf_counter()
+    p = await asyncio.to_thread(_keyboard_pose, data, session)
+    p["latency_ms"] = round((time.perf_counter() - t0) * 1000)
+    p["ts"] = time.time()
+    _latest.setdefault(session, {})["pose"] = p
+    return p
+
+
+@router.get("/latest")
+async def latest(session: str):
+    """The phone's last results for this session: the coach's view (every ~2 s) and the keyboard pose (~4/s)."""
+    return _latest.get(session, {})
 
 
 @router.get("/plan")
