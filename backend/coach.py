@@ -27,8 +27,13 @@ from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIR = ROOT / "data" / "models" / "rk61"
-COACH_MODEL = os.getenv("COACH_MODEL", "claude-haiku-5-5")  # measured: same step accuracy as Sonnet, steadier confidence
+COACH_MODEL = os.getenv("COACH_MODEL", "claude-sonnet-5-5")  # Sonnet reads key legends far more reliably than Haiku (~3 s, thinking off)
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+
+
+def _thinking(model: str) -> dict:
+    """No reasoning before answering: one frame -> one label. Sonnet/Opus 5.5 spell that 'between_tools'."""
+    return {"type": "between_tools"} if ("sonnet-5-5" in model or "opus-5" in model) else {"type": "disabled"}
 
 router = APIRouter(prefix="/coach", tags=["coach"])
 
@@ -49,6 +54,11 @@ class CoachView(BaseModel):
         "['F'] or ['Enter']. Identify a gap by its neighbours (the keys left and right of it, and the row). Empty if "
         "every keycap is in place or you cannot tell. Never guess: only list a key you can place exactly."))
     switch_removed: bool = Field(default=False, description="True if a switch has been pulled out and the empty socket is visible.")
+    gap_left: str = Field(default="", description="If there is a gap: the printed legend of the key immediately LEFT of the gap in the same row (it is visible: read it exactly). Empty if none or unsure.")
+    gap_right: str = Field(default="", description="If there is a gap: the printed legend of the key immediately RIGHT of the gap in the same row. Empty if none or unsure.")
+    gap_row: Literal["number", "top", "home", "bottom", "space", ""] = Field(default="", description="Row of the gap: number (1-0), top (Q-P), home (A-L), bottom (Z-M), space (modifiers), or empty.")
+    gap_x: float | None = Field(default=None, description="If there is a gap: its centre, as a fraction of the image width (0 = left, 1 = right). null if none.")
+    gap_y: float | None = Field(default=None, description="If there is a gap: its centre, as a fraction of the image height (0 = top, 1 = bottom). null if none.")
 
 
 @lru_cache(maxsize=1)
@@ -63,7 +73,8 @@ def _system(demo: dict) -> str:
     plan = demo["plan"]
     key = demo.get("broken_key", "F")
     lines = [f"You are Spanner, a repair coach watching a live webcam. The repair: {plan['object']}; "
-             f"fault: {plan['fault']}. The broken key is '{key}'.",
+             f"fault: {plan['fault']}. WHICH key is broken is not known in advance: the user decides by pulling "
+             "that keycap. Find the gap in the frame and report its printed legend in missing_keys; it can be any key.",
              "The procedure (use these step numbers):"]
     for s in plan["steps"]:
         mistakes = "; ".join(s.get("common_mistakes", [])) or "none listed"
@@ -76,7 +87,9 @@ def _system(demo: dict) -> str:
         "Report a mistake only if you can actually see it. Keep what_i_see and say short and concrete.",
         "The keyboard is a 61-key ANSI 60% layout (rows: Esc 1-0 - = Backspace / Tab Q-P [ ] \\ / Caps A-L ; ' Enter / "
         "Shift Z-M , . / Shift / Ctrl Win Alt Space Alt Fn Menu Ctrl). If a keycap is missing you will see a gap with the "
-        "switch top or its stem; name that key exactly by its neighbours. Be precise: a wrong key is worse than none.",
+        "switch top or its stem. Then READ the legends of the keys immediately left and right of the gap in the same "
+        "row (they are visible) into gap_left / gap_right, and the row into gap_row; the missing key is the one between "
+        "them. Be precise: a wrong key is worse than none.",
     ]
     return "\n".join(lines)
 
@@ -117,6 +130,103 @@ def _keyboard_crop(data: bytes) -> tuple[bytes, dict]:
     return (buf.tobytes() if ok else data), info
 
 
+# the RK61's 61-key ANSI layout, row by row, as printed legends (the ground truth for "which key is the gap")
+LAYOUT = {
+    "number": ["Esc", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "Backspace"],
+    "top": ["Tab", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "[", "]", "\\"],
+    "home": ["Caps", "A", "S", "D", "F", "G", "H", "J", "K", "L", ";", "'", "Enter"],
+    "bottom": ["Shift", "Z", "X", "C", "V", "B", "N", "M", ",", ".", "/", "Shift"],
+    "space": ["Ctrl", "Win", "Alt", "Space", "Alt", "Fn", "Menu", "Ctrl"],
+}
+_ALIAS = {"escape": "Esc", "return": "Enter", "capslock": "Caps", "caps lock": "Caps", "backslash": "\\", "control": "Ctrl",
+          "windows": "Win", "command": "Win", "spacebar": "Space", "minus": "-", "equals": "=", "semicolon": ";", "quote": "'",
+          "comma": ",", "period": ".", "slash": "/", "lbracket": "[", "rbracket": "]"}
+
+
+def _legend(x: str) -> str:
+    x = (x or "").strip()
+    return _ALIAS.get(x.lower(), x.upper() if len(x) == 1 else x.capitalize())
+
+
+def resolve_gap(view: "CoachView") -> str | None:
+    """The missing key from its visible neighbours: left and right legends two apart in one layout row."""
+    left, right = _legend(view.gap_left), _legend(view.gap_right)
+    rows = [view.gap_row] if view.gap_row in LAYOUT else list(LAYOUT)
+    for row in rows:
+        keys = LAYOUT[row]
+        if left in keys and right in keys:
+            i, j = keys.index(left), keys.index(right)
+            if j - i == 2:
+                return keys[i + 1]
+    return None
+
+
+class GapRead(BaseModel):
+    gap_present: bool = Field(description="True only if a keycap is clearly missing in this close-up (switch top or stem visible in a gap).")
+    left: str = Field(default="", description="Printed legend of the key immediately LEFT of the gap, same row. Empty if the gap is at the row's left end or unreadable.")
+    right: str = Field(default="", description="Printed legend of the key immediately RIGHT of the gap, same row.")
+    above: str = Field(default="", description="Legend of the key directly above the gap (next row up), if readable.")
+    below: str = Field(default="", description="Legend of the key directly below the gap, if readable.")
+    row: Literal["number", "top", "home", "bottom", "space", ""] = ""
+
+
+VERIFY_MODEL = os.getenv("COACH_VERIFY_MODEL", "claude-sonnet-5-5")
+
+
+def _zoom(data: bytes, gx: float, gy: float, frac: float = 0.34) -> bytes | None:
+    """A tight crop around the suspected gap, upscaled so the surrounding legends are large and legible."""
+    import cv2
+    import numpy as np
+
+    img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        return None
+    h, w = img.shape[:2]
+    cw, ch = int(w * frac), int(w * frac * 0.6)
+    x1, y1 = int(max(0, gx * w - cw / 2)), int(max(0, gy * h - ch / 2))
+    crop = img[y1:y1 + ch, x1:x1 + cw]
+    if crop.size == 0:
+        return None
+    crop = cv2.resize(crop, (1024, int(crop.shape[0] * 1024 / crop.shape[1])), interpolation=cv2.INTER_CUBIC)
+    ok, buf = cv2.imencode(".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, 92])
+    return buf.tobytes() if ok else None
+
+
+def verify_gap(data: bytes, view: "CoachView") -> str | None:
+    """Second look with a stronger model on a zoomed crop: which key is missing, from the legends around the gap."""
+    located = view.gap_x is not None and view.gap_y is not None and 0 <= view.gap_x <= 1 and 0 <= view.gap_y <= 1
+    zoom = _zoom(data, view.gap_x, view.gap_y) if located else data      # no location: the stronger model reads the whole crop
+    if not zoom:
+        return None
+    resp = _client().beta.messages.parse(
+        model=VERIFY_MODEL, max_tokens=300, thinking=_thinking(VERIFY_MODEL),
+        system=("Close-up of part of a 61-key ANSI 60% mechanical keyboard. Rows: number (Esc 1-0 - = Backspace), top (Tab Q-P [ ] \\), "
+                "home (Caps A-L ; ' Enter), bottom (Shift Z-M , . / Shift), space (Ctrl Win Alt Space Alt Fn Menu Ctrl). "
+                "If a keycap is missing you see a gap with the switch top or stem. Read the printed legends of the keys around "
+                "the gap EXACTLY as printed. Do not infer the missing key; only report what you can read."),
+        messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.standard_b64encode(zoom).decode()}},
+            {"type": "text", "text": "Is a keycap missing here? Read the legends left, right, above and below the gap."}]}],
+        output_format=GapRead)
+    g = resp.parsed_output
+    if not g or not g.gap_present:
+        return None
+    fake = CoachView(object_visible=True, what_i_see="", step_index=0, step_status="in_progress", mistake="", confidence=0,
+                     say="", gap_left=g.left, gap_right=g.right, gap_row=g.row)
+    key = resolve_gap(fake)
+    if key:
+        return key
+    # one neighbour plus the key above or below pins the column too (ANSI stagger: above-row index == same index)
+    for row_name, keys in LAYOUT.items():
+        if g.row and row_name != g.row:
+            continue
+        left, right = _legend(g.left), _legend(g.right)
+        cands = [keys[keys.index(left) + 1] for _ in [0] if left in keys and keys.index(left) + 1 < len(keys)] +                 [keys[keys.index(right) - 1] for _ in [0] if right in keys and keys.index(right) - 1 >= 0]
+        if len(cands) == 1 and (g.above or g.below):
+            return cands[0]
+    return None
+
+
 def _ask(image_b64: str, current_step: int) -> CoachView:
     demo = _demo()
     hint = (f"The screen currently shows step {current_step}." if current_step > 0
@@ -128,12 +238,17 @@ def _ask(image_b64: str, current_step: int) -> CoachView:
             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": image_b64}},
             {"type": "text", "text": hint + " Which step is the user on?"}]}],
         output_format=CoachView, output_config={"effort": "low"},
-        thinking={"type": "disabled"},   # one frame -> one label: thinking only adds latency
+        thinking=_thinking(COACH_MODEL),   # one frame -> one label: thinking only adds latency
         **({"betas": [FALLBACK_BETA], "fallbacks": "default"} if "haiku" not in COACH_MODEL else {}))
     if resp.parsed_output is None:
         raise HTTPException(502, f"vision model gave no answer (stop_reason={resp.stop_reason})")
     out = resp.parsed_output
     out.step_index = max(0, min(out.step_index, len(demo["plan"]["steps"])))
+    resolved = resolve_gap(out)
+    if resolved:                                   # neighbours beat a read of the absent legend
+        out.missing_keys = [resolved]
+    elif out.missing_keys and (out.gap_left or out.gap_right):
+        out.missing_keys = []                      # neighbours given but inconsistent with the layout: don't trust the guess
     out.confidence = max(0.0, min(out.confidence, 1.0))
     return out
 
@@ -146,6 +261,13 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
     t0 = time.perf_counter()
     data, crop = await asyncio.to_thread(_keyboard_crop, data)
     view = await asyncio.to_thread(_ask, base64.standard_b64encode(data).decode(), current_step)
+    gap_suspected = bool(view.missing_keys or view.gap_left or view.gap_right or view.gap_x is not None)
+    verified = await asyncio.to_thread(verify_gap, data, view) if gap_suspected else None
+    if verified:
+        view.missing_keys = [verified]
+        crop["verified"] = True
+    elif gap_suspected and not view.missing_keys:
+        crop["verified"] = False
     latency = round((time.perf_counter() - t0) * 1000)
     from training.feedback import record_live_mistake, record_stage_timing
     from training.kb import current_repair_id
@@ -173,7 +295,7 @@ async def ask(q: Ask):
 
     def run() -> str:
         resp = _client().messages.create(
-            model=COACH_MODEL, max_tokens=250, thinking={"type": "disabled"},
+            model=COACH_MODEL, max_tokens=250, thinking=_thinking(COACH_MODEL),
             system=[{"type": "text", "text": ctx + "\n\nNow answer the user's spoken question in at most 2 short, "
                      "concrete spoken sentences. No lists, no markdown.", "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": q.question}])
@@ -214,7 +336,7 @@ async def intent(req: IntentReq):
                 "none (noise, not addressed to Spanner). Fillers like ok, please, hey Spanner are ignored.")
     def run() -> Intent:
         resp = _client().beta.messages.parse(
-            model=COACH_MODEL, max_tokens=120, thinking={"type": "disabled"},
+            model=COACH_MODEL, max_tokens=120, thinking=_thinking(COACH_MODEL),
             system=[{"type": "text", "text": sys_text, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": f"Current step on screen: {req.current_step}. Spoken: {req.text!r}"}],
             output_format=Intent)
@@ -290,7 +412,7 @@ async def device(req: DeviceReq):
     """Free speech -> which device Spanner should open (keyboard repair, or a hologram of the others)."""
     def run() -> DevicePick:
         resp = _client().beta.messages.parse(
-            model=COACH_MODEL, max_tokens=120, thinking={"type": "disabled"},
+            model=COACH_MODEL, max_tokens=120, thinking=_thinking(COACH_MODEL),
             system="The user was asked 'What do you want to fix?'. Map their words to one device: keyboard (a mechanical "
                    "keyboard, RK61, a dead key, typing), iphone15 (phone, mobile, iPhone), momentum4 (headphones, "
                    "Sennheiser, earcups, headset), ipad11 (iPad, tablet). If it is none of these or unclear, 'none' with "

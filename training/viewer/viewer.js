@@ -466,7 +466,11 @@ function showTag(name, text, cls = "", dy = 1.3) {
 function clearTags() { for (const t of tags) scene.remove(t); tags.length = 0; if (scene.userData.guide) { scene.remove(scene.userData.guide); scene.userData.guide = null; } }
 
 // ------------------------------------------------------------------ contract commands
+// The plan's 3D commands were generated for one key (demo_plan.broken_key); play them on whichever key is actually broken.
+const DEMO_KEY = () => planJson?.broken_key || "F";
+function retarget(name) { if (!name) return name; const d = DEMO_KEY(); return d !== brokenKey && name.endsWith("_" + d) ? name.slice(0, -d.length) + brokenKey : name; }
 async function applyCommand(c) {
+  c = { ...c, part: retarget(c.part) };
   switch (c.op) {
     case "highlight": setHighlight(partNames(c.part || c.group)); break;
     case "pulse": setHighlight(partNames(c.part || c.group)); pulseT0 = performance.now(); break;
