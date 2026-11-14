@@ -925,10 +925,7 @@ function heard(text, action) {
 }
 async function command(raw) {
   const t = raw.toLowerCase().trim(); let said = "";
-  if (pickOpen) {
-    const dev = /key ?board|rk ?61/.test(t) ? "keyboard" : /i ?phone/.test(t) ? "iphone15" : /head ?phone|momentum|sennheiser/.test(t) ? "momentum4" : /i ?pad|tablet/.test(t) ? "ipad11" : null;
-    heard(raw, dev ? "→ " + dev : "say keyboard, iphone, headphones or ipad"); if (dev) chooseDevice(dev); return;
-  }
+  if (pickOpen) return pickByVoice(raw);
   if (/(choose another|another device|pick a device|main menu|go back to the (menu|start))/.test(t)) { closePanels(); showPicker(); heard(raw, "device choice"); return; }
   const say = (s) => { said = s; narrate(s); };
   if (/\b(close|hide|dismiss|go away|that's enough|never ?mind)\b/.test(t)) { closePanels(); said = "closed"; }
@@ -1328,17 +1325,29 @@ if (QP.get("shop")) openShop(QP.get("shop"), QP.get("auto") === "1");
 // what do you want to fix? keyboard = the guided repair; the others open their hologram (device.html)
 let pickOpen = false;
 function showPicker() {
-  pickOpen = true; $("pick").style.display = "flex";
-  narrate("What do you want to fix? The keyboard, an iPhone 15, Sennheiser Momentum 4 headphones, or an iPad?");
+  pickOpen = true; $("pick").style.display = "flex"; $("pick").style.opacity = 1; $("pickecho").textContent = ""; $("pickq").textContent = "What do you want to fix?";
+  narrate("What do you want to fix?");
 }
 async function chooseDevice(dev) {
   if (!pickOpen) return;
-  pickOpen = false; $("pick").style.display = "none";
+  pickOpen = false; $("pick").style.opacity = 0; setTimeout(() => { $("pick").style.display = "none"; }, 600);
   if (dev !== "keyboard") { narrate("Opening the " + { iphone15: "iPhone 15", momentum4: "Momentum 4", ipad11: "iPad" }[dev] + "."); setTimeout(() => { location.href = `./device.html?d=${dev}`; }, 900); return; }
   if (QP.get("phone") === "1") startRemote(); else if (!camOn) await toggleCamera();
   narrate("The keyboard. I'm watching. Show it to me and I'll guide you step by step. You can also ask me for replacement parts or other keyboards.");
 }
-for (const tile of document.querySelectorAll("#pick .tile")) tile.onclick = () => chooseDevice(tile.dataset.d);
+async function pickByVoice(raw) {   // free speech -> which device; Claude decides when the words aren't obvious
+  const t = raw.toLowerCase();
+  let dev = /key ?board|rk ?61/.test(t) ? "keyboard" : /i ?phone/.test(t) ? "iphone15" : /head ?phone|momentum|sennheiser|ear ?phone/.test(t) ? "momentum4" : /i ?pad|tablet/.test(t) ? "ipad11" : null;
+  $("pickecho").textContent = "“" + raw.trim() + "”";
+  if (!dev) {
+    try {
+      const r = await fetch(API + "/coach/device", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: raw }) });
+      const j = r.ok ? await r.json() : {}; dev = j.device && j.device !== "none" ? j.device : null;
+      if (!dev) { $("pickq").textContent = j.say || "I can fix a keyboard, an iPhone 15, Momentum 4 headphones or an iPad. Which one?"; narrate($("pickq").textContent); return; }
+    } catch { $("pickq").textContent = "Say: keyboard, iPhone, headphones, or iPad."; return; }
+  }
+  chooseDevice(dev);
+}
 if (QP.get("pick") === "1" && INSTANT) { pickOpen = true; $("pick").style.display = "flex"; }
 // wake: browsers need one gesture before mic + speech; after that it's voice only
 if (!INSTANT && QP.get("wake") !== "0") {

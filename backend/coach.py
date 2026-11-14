@@ -237,6 +237,30 @@ async def pose(image: UploadFile = File(...), session: str = Form("laptop")):
     return p
 
 
+class DeviceReq(BaseModel):
+    text: str
+
+
+class DevicePick(BaseModel):
+    device: Literal["keyboard", "iphone15", "momentum4", "ipad11", "none"]
+    say: str = Field(default="", description="If none: one short spoken sentence asking again, naming the four options.")
+
+
+@router.post("/device")
+async def device(req: DeviceReq):
+    """Free speech -> which device Spanner should open (keyboard repair, or a hologram of the others)."""
+    def run() -> DevicePick:
+        resp = _client().beta.messages.parse(
+            model=COACH_MODEL, max_tokens=120, thinking={"type": "disabled"},
+            system="The user was asked 'What do you want to fix?'. Map their words to one device: keyboard (a mechanical "
+                   "keyboard, RK61, a dead key, typing), iphone15 (phone, mobile, iPhone), momentum4 (headphones, "
+                   "Sennheiser, earcups, headset), ipad11 (iPad, tablet). If it is none of these or unclear, 'none' with "
+                   "a short friendly question naming the four options.",
+            messages=[{"role": "user", "content": req.text}], output_format=DevicePick)
+        return resp.parsed_output or DevicePick(device="none")
+    return (await asyncio.to_thread(run)).model_dump()
+
+
 @router.get("/qr")
 async def qr(url: str):
     """QR code (PNG) for pairing the phone: the laptop shows it, the phone scans it."""
