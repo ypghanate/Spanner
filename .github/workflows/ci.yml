@@ -20,11 +20,12 @@ jobs:
       - name: Lockfile is up to date
         run: uv lock --check
 
-      # Light install on purpose: the tests don't need YOLO/torch (~2 GB)
+      # Light install on purpose: the tests don't need YOLO/torch (~2 GB).
+      # fastapi + python-multipart: tests/test_api.py drives the real FastAPI app (routes and websocket).
       - name: Install test dependencies
         run: |
           uv venv
-          uv pip install pytest pydantic anthropic python-dotenv httpx numpy opencv-python-headless
+          uv pip install pytest pydantic anthropic python-dotenv httpx numpy opencv-python-headless fastapi python-multipart
 
       - name: Every Python file compiles
         run: uv run --no-sync python -m compileall -q backend training databricks

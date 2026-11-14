@@ -51,6 +51,7 @@ class Session:
 
     brain_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     voice_waiting: bool = False
+    live_conn: Any = None            # the one live-voice connection for this session, if any
 
     # slow-loop scheduling: one running, newest pending wins
     slow_handler: SlowHandler | None = None
