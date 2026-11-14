@@ -61,7 +61,7 @@
         {
           "widget": {
             "name": "stuck_chart",
-            "queries": [{"name": "main", "query": {"datasetName": "stuck", "fields": [
+            "queries": [{"name": "main_query", "query": {"datasetName": "stuck", "fields": [
               {"name": "step", "expression": "`step`"},
               {"name": "sessions", "expression": "`sessions`"},
               {"name": "status", "expression": "`status`"}
@@ -79,7 +79,7 @@
         {
           "widget": {
             "name": "sessions_counter",
-            "queries": [{"name": "main", "query": {"datasetName": "headline", "fields": [{"name": "live_sessions", "expression": "`live_sessions`"}], "disaggregated": true}}],
+            "queries": [{"name": "main_query", "query": {"datasetName": "headline", "fields": [{"name": "live_sessions", "expression": "`live_sessions`"}], "disaggregated": true}}],
             "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "live_sessions", "displayName": "Live sessions"}},
               "frame": {"showTitle": true, "title": "Live repair sessions"}}
           },
@@ -88,7 +88,7 @@
         {
           "widget": {
             "name": "mistakes_counter",
-            "queries": [{"name": "main", "query": {"datasetName": "headline", "fields": [{"name": "mistakes_caught", "expression": "`mistakes_caught`"}], "disaggregated": true}}],
+            "queries": [{"name": "main_query", "query": {"datasetName": "headline", "fields": [{"name": "mistakes_caught", "expression": "`mistakes_caught`"}], "disaggregated": true}}],
             "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "mistakes_caught", "displayName": "Mistakes caught"}},
               "frame": {"showTitle": true, "title": "Mistakes the camera caught"}}
           },
@@ -97,7 +97,7 @@
         {
           "widget": {
             "name": "learned_counter",
-            "queries": [{"name": "main", "query": {"datasetName": "headline", "fields": [{"name": "warnings_learned", "expression": "`warnings_learned`"}], "disaggregated": true}}],
+            "queries": [{"name": "main_query", "query": {"datasetName": "headline", "fields": [{"name": "warnings_learned", "expression": "`warnings_learned`"}], "disaggregated": true}}],
             "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "warnings_learned", "displayName": "Warnings learned"}},
               "frame": {"showTitle": true, "title": "Warnings now given to the next person"}}
           },
@@ -106,7 +106,7 @@
         {
           "widget": {
             "name": "stuck_table",
-            "queries": [{"name": "main", "query": {"datasetName": "stuck", "fields": [
+            "queries": [{"name": "main_query", "query": {"datasetName": "stuck", "fields": [
               {"name": "step", "expression": "`step`"},
               {"name": "mistake", "expression": "`mistake`"},
               {"name": "sessions", "expression": "`sessions`"},
@@ -129,7 +129,7 @@
         {
           "widget": {
             "name": "repairs_counter",
-            "queries": [{"name": "main", "query": {"datasetName": "impact", "fields": [{"name": "repairs_recommended", "expression": "`repairs_recommended`"}], "disaggregated": true}}],
+            "queries": [{"name": "main_query", "query": {"datasetName": "impact", "fields": [{"name": "repairs_recommended", "expression": "`repairs_recommended`"}], "disaggregated": true}}],
             "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "repairs_recommended", "displayName": "Repairs"}},
               "frame": {"showTitle": true, "title": "Devices kept out of the bin"}}
           },
@@ -138,7 +138,7 @@
         {
           "widget": {
             "name": "money_counter",
-            "queries": [{"name": "main", "query": {"datasetName": "impact", "fields": [{"name": "money_saved", "expression": "`money_saved`"}], "disaggregated": true}}],
+            "queries": [{"name": "main_query", "query": {"datasetName": "impact", "fields": [{"name": "money_saved", "expression": "`money_saved`"}], "disaggregated": true}}],
             "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "money_saved", "displayName": "GBP saved"}},
               "frame": {"showTitle": true, "title": "Money saved by repairing (GBP)"}}
           },
@@ -147,7 +147,7 @@
         {
           "widget": {
             "name": "ewaste_counter",
-            "queries": [{"name": "main", "query": {"datasetName": "impact", "fields": [{"name": "ewaste_kg_avoided", "expression": "`ewaste_kg_avoided`"}], "disaggregated": true}}],
+            "queries": [{"name": "main_query", "query": {"datasetName": "impact", "fields": [{"name": "ewaste_kg_avoided", "expression": "`ewaste_kg_avoided`"}], "disaggregated": true}}],
             "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "ewaste_kg_avoided", "displayName": "kg"}},
               "frame": {"showTitle": true, "title": "E-waste avoided (kg)"}}
           },
@@ -156,7 +156,7 @@
         {
           "widget": {
             "name": "decisions_table",
-            "queries": [{"name": "main", "query": {"datasetName": "decisions", "fields": [
+            "queries": [{"name": "main_query", "query": {"datasetName": "decisions", "fields": [
               {"name": "device", "expression": "`device`"},
               {"name": "part", "expression": "`part`"},
               {"name": "repair_cost", "expression": "`repair_cost`"},
@@ -179,7 +179,7 @@
         {
           "widget": {
             "name": "parts_table",
-            "queries": [{"name": "main", "query": {"datasetName": "parts", "fields": [
+            "queries": [{"name": "main_query", "query": {"datasetName": "parts", "fields": [
               {"name": "part", "expression": "`part`"},
               {"name": "retailer", "expression": "`retailer`"},
               {"name": "price", "expression": "`price`"},
@@ -202,7 +202,7 @@
         {
           "widget": {
             "name": "latency_chart",
-            "queries": [{"name": "main", "query": {"datasetName": "latency", "fields": [
+            "queries": [{"name": "main_query", "query": {"datasetName": "latency", "fields": [
               {"name": "stage", "expression": "`stage`"},
               {"name": "ms", "expression": "`ms`"},
               {"name": "percentile", "expression": "`percentile`"}
@@ -220,7 +220,7 @@
         {
           "widget": {
             "name": "kb_chart",
-            "queries": [{"name": "main", "query": {"datasetName": "kb", "fields": [
+            "queries": [{"name": "main_query", "query": {"datasetName": "kb", "fields": [
               {"name": "source", "expression": "`source`"},
               {"name": "steps", "expression": "`steps`"}
             ], "disaggregated": true}}],
@@ -236,7 +236,7 @@
         {
           "widget": {
             "name": "eval_quality_chart",
-            "queries": [{"name": "main", "query": {"datasetName": "eval_quality", "fields": [
+            "queries": [{"name": "main_query", "query": {"datasetName": "eval_quality", "fields": [
               {"name": "metric", "expression": "`metric`"},
               {"name": "value", "expression": "`value`"},
               {"name": "model", "expression": "`model`"}
@@ -254,7 +254,7 @@
         {
           "widget": {
             "name": "eval_latency_chart",
-            "queries": [{"name": "main", "query": {"datasetName": "eval_latency", "fields": [
+            "queries": [{"name": "main_query", "query": {"datasetName": "eval_latency", "fields": [
               {"name": "model", "expression": "`model`"},
               {"name": "latency_ms", "expression": "`latency_ms`"}
             ], "disaggregated": true}}],
