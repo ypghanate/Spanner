@@ -19,9 +19,11 @@ import anthropic
 from pydantic import BaseModel, Field
 
 from ..config import get_settings
-from ..contracts import Phase, SceneObservation, SituationReport, Transcript
+from ..contracts import Detection, Phase, SceneObservation, SituationReport, Transcript
+from ..perception import MAX_DETECTIONS_SHOWN, detector_line, image_blocks  # noqa: F401  (re-exported)
 
 if TYPE_CHECKING:
+    from ..perception import Perception
     from ..session import Session
 
 log = logging.getLogger(__name__)
@@ -48,9 +50,17 @@ class Pass1Input(BaseModel):
     transcript: Transcript | None = None                                 # None on keyframe-only calls
     current_step: StepBrief | None = None
     previous_summary: str | None = None
+    # What the camera and detector show right now (see backend/perception.py). All optional: an input
+    # without them renders exactly as it always did. The pictures themselves are not stored here (bytes
+    # don't belong in the logged JSON); they are passed to call_claude() separately, in the order
+    # image_notes describes.
+    detections: list[Detection] = Field(default_factory=list)     # YOLO tracks on the latest frame
+    observation_age_s: float | None = None                        # how old the newest observation is
+    image_notes: list[str] = Field(default_factory=list)          # one line per attached image, in order
 
 
-def build_input(session: "Session", transcript: Transcript | None) -> Pass1Input:
+def build_input(session: "Session", transcript: Transcript | None,
+                perception: "Perception | None" = None) -> Pass1Input:
     step = session.current_step()
     return Pass1Input(
         phase=session.phase,
@@ -61,6 +71,9 @@ def build_input(session: "Session", transcript: Transcript | None) -> Pass1Input
             expected_visual_state=step.expected_visual_state,
             common_mistakes=list(step.common_mistakes)),
         previous_summary=session.last_report.summary if session.last_report else None,
+        detections=list(perception.detections) if perception else [],
+        observation_age_s=perception.observation_age_s if perception else None,
+        image_notes=list(perception.image_notes) if perception else [],
     )
 
 
@@ -76,7 +89,10 @@ def _list(items: list[str]) -> str:
 
 
 def render_user(inp: Pass1Input) -> str:
-    """Deterministic text rendering of the input. Never reorder or reword without retraining."""
+    """Deterministic text rendering of the input. Never reorder or reword without retraining.
+
+    The IMAGES / DETECTOR lines and the "seen N s ago" tag appear only when the new optional fields are
+    set, so inputs built without a perception render byte for byte as before."""
     lines = [f"PHASE: {inp.phase}"]
     if inp.current_step is not None:
         s = inp.current_step
@@ -94,7 +110,14 @@ def render_user(inp: Pass1Input) -> str:
             f"  [{i}] frame {o.frame_id} | object: {o.object} | state: {o.state} | "
             f"parts: {_list(o.visible_parts)} | anomalies: {_list(o.anomalies)} | "
             f"hands visible: {'yes' if o.hands_visible else 'no'} | tools: {_list(o.tools_visible)} | "
-            f"confidence: {o.confidence:.2f}")
+            f"confidence: {o.confidence:.2f}"
+            + (f" | seen {inp.observation_age_s:.1f} s ago"
+               if inp.observation_age_s is not None and i == len(inp.observations) else ""))
+    if inp.image_notes:
+        lines.append("IMAGES ATTACHED (in order): "
+                     + "; ".join(f"{n}. {note}" for n, note in enumerate(inp.image_notes, start=1)))
+    if inp.image_notes or inp.detections:
+        lines.append(f"DETECTOR (YOLO, latest frame): {detector_line(inp.detections)}")
     if inp.transcript is not None and inp.transcript.text.strip():
         t = inp.transcript
         lines.append(f'USER SAID: "{t.text.strip()}" (language {t.language}, {t.duration_s:.1f}s)')
@@ -165,15 +188,24 @@ async def close_client() -> None:
         _client = None
 
 
-async def call_claude(inp: Pass1Input) -> SituationReport:
-    """One Haiku call. Raises Pass1Error on any failure (the dataset teacher uses this)."""
+def _user_content(inp: Pass1Input, images: list[bytes] | None) -> str | list[dict]:
+    """The user turn: plain text, or (images first, then the text) when pictures are attached."""
+    text = render_user(inp)
+    if not images:
+        return text
+    return [*image_blocks(images), {"type": "text", "text": text}]
+
+
+async def call_claude(inp: Pass1Input, images: list[bytes] | None = None) -> SituationReport:
+    """One Haiku call. Raises Pass1Error on any failure (the dataset teacher uses this).
+    `images` are JPEGs shown before the text, in the order inp.image_notes lists them."""
     s = get_settings()
     try:
         msg = await _get_client().messages.parse(
             model=s.pass1_model,
             max_tokens=1024,
             system=load_system_prompt(),
-            messages=[{"role": "user", "content": render_user(inp)}],
+            messages=[{"role": "user", "content": _user_content(inp, images)}],
             output_format=SituationReport,
             thinking={"type": "disabled"},
             output_config={"effort": "low"},
@@ -199,10 +231,10 @@ async def call_claude(inp: Pass1Input) -> SituationReport:
     return msg.parsed_output
 
 
-async def run_claude(inp: Pass1Input) -> SituationReport:
+async def run_claude(inp: Pass1Input, images: list[bytes] | None = None) -> SituationReport:
     """Haiku, or the heuristic fallback if the call fails."""
     try:
-        return await call_claude(inp)
+        return await (call_claude(inp, images) if images else call_claude(inp))
     except Pass1Error as e:
         log.warning("Pass 1 Claude failed (%s); using heuristic report", e)
         return fallback_report(inp)
@@ -239,8 +271,12 @@ def _log_call(store: Any, session_id: str, backend: str, inp: Pass1Input,
     _write_local(row)
 
 
-async def run(inp: Pass1Input, session_id: str, store: Any = None) -> SituationReport:
-    """Pick the backend, time it, log the call as a pass1_calls row, never raise."""
+async def run(inp: Pass1Input, session_id: str, store: Any = None,
+              images: list[bytes] | None = None) -> SituationReport:
+    """Pick the backend, time it, log the call as a pass1_calls row, never raise.
+
+    `images` (the camera frames and close-up for this turn) go to Claude only. The fine-tuned model is
+    text-only: it still gets the detection list through the rendered input."""
     s = get_settings()
     if store is None:
         from .. import mocks  # lazy: mocks imports this module
@@ -264,7 +300,7 @@ async def run(inp: Pass1Input, session_id: str, store: Any = None) -> SituationR
 
     if report is None:
         try:
-            report = await call_claude(inp)
+            report = await (call_claude(inp, images) if images else call_claude(inp))
         except Pass1Error as e:
             log.warning("Pass 1 Claude failed (%s); using heuristic report", e)
             report = fallback_report(inp)

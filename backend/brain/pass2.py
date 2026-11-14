@@ -91,15 +91,26 @@ def _client():
     return anthropic.Anthropic()
 
 
-def _answer(plan: RepairPlan, pos: int, report: SituationReport) -> str:
+def _answer(plan: RepairPlan, pos: int, report: SituationReport, perception: Any = None) -> str:
+    """`perception` (backend.perception.Perception, or None) is what the camera and YOLO show right now."""
+    from backend.perception import detector_line, image_blocks
+
     step = plan.steps[pos]
     ctx = (f"Repair: {plan.object}. Fault: {plan.fault}.\nCurrent step {step.index}/{len(plan.steps)}: "
            f"{step.instruction}\nDone when: {step.expected_visual_state}\n"
            f"Known mistakes: {'; '.join(step.common_mistakes) or 'none'}\nCamera sees: {report.camera_sees}")
+    images = perception.images if perception is not None else []
+    if images:
+        ctx += "\nPictures attached, in order: " + "; ".join(perception.image_notes)
+    if perception is not None and (images or perception.detections):
+        ctx += f"\nDetector (YOLO, latest frame): {detector_line(perception.detections)}"
+    text = f"{ctx}\n\nThe user says: {report.user_utterance or report.summary}"
     resp = _client().messages.create(
         model=ANSWER_MODEL, max_tokens=200, thinking={"type": "disabled"},
-        system="You are Spanner, a calm repair coach. Answer in at most 2 short spoken sentences, concrete, no lists.",
-        messages=[{"role": "user", "content": f"{ctx}\n\nThe user says: {report.user_utterance or report.summary}"}])
+        system="You are Spanner, a calm repair coach. Answer in at most 2 short spoken sentences, concrete, no lists. "
+               "If pictures are attached they show what the camera sees right now: answer about what is visible, "
+               "and treat the detector labels as rough hints.",
+        messages=[{"role": "user", "content": [*image_blocks(images), {"type": "text", "text": text}] if images else text}])
     return "".join(b.text for b in resp.content if b.type == "text").strip()
 
 
@@ -134,5 +145,6 @@ async def respond(report: SituationReport, session: Any) -> BrainResponse:
     if intent == "step_done" or (check.get("step_status") == "done" and intent == "none"):
         return _done() if pos + 1 >= len(plan.steps) else _guide(plan, pos + 1)
     if intent in ("question", "need_help"):
-        return _guide(plan, pos, say=await asyncio.to_thread(_answer, plan, pos, report))
+        return _guide(plan, pos, say=await asyncio.to_thread(_answer, plan, pos, report,
+                                                              getattr(session, "perception", None)))
     return _guide(plan, pos, say="")

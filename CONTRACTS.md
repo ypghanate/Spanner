@@ -159,11 +159,34 @@ session.brain_state: dict     # P4's scratch space. Two keys the orchestrator re
                               #   "parts_job"  - job id from handle_parts_tool(...)["job"]; the card is pushed when ready
                               #   "repair_id"  - the repair's id, passed to the step tracker's learning loop
 session.last_step_check       # dict | None. The step tracker's latest verdict (set before Pass 2 runs, None otherwise)
+session.perception            # backend.perception.Perception | None: what Claude is shown THIS turn (see below). Set before
+                              #   Pass 1 runs, cleared at the start of every brain run. Pass 2 reads it to answer questions.
+session.recent_frames         # deque of the last 12 usable frames: FrameSnap(frame_id, ts, jpeg, detections)
+session.last_observation_at   # when the newest SceneObservation was made (server clock)
 session.apply(response)       # P3 calls this after Pass 2; updates phase, plan, step
 session.queue_event(r)        # delivered on the next frame reply
 session.queue_media(m)        # merged into the next event, or sent as a media-only event
 session.spawn(name, coro, timeout=None)   # tracked background task; errors are logged, never raised
 ```
+
+## What Claude sees on a spoken turn
+
+The camera, the YOLO detector and the person's speech reach Claude together (`backend/perception.py`). When the user speaks, the orchestrator builds a `Perception` from the session's ring of recent frames and gives it to Pass 1 and, for questions, to Pass 2:
+
+| Piece | Rule |
+|---|---|
+| Latest frame | the newest sharp frame, at most 10 s old (blurry and dark frames never enter the ring) |
+| Earlier frame | the frame nearest to when the user started speaking, only if it is at least 1 s older than the latest |
+| Close-up | a crop of the main detected object (largest non-person, score at least 0.4) when it fills under 40% of the frame and the crop is at least 160 px a side |
+| YOLO tracks | the detections on the latest frame: label, track id, confidence, position |
+| Text observation age | `seen N s ago` on the newest observation when it is at least 1.5 s old |
+
+- **Pass 1** gets these as images (before the text) plus prompt lines `IMAGES ATTACHED` and `DETECTOR (YOLO, latest frame)`. Stage signature: `backend.brain.pass1.run(inp, session_id, store=None, images=None)`. The fine-tuned Pass 1 backend is text-only (it still sees the detector line).
+- **Pass 2** reads `session.perception` (`.images`, `.image_notes`, `.detections`, `.observation_age_s`, `.crop_label`). `backend/brain/pass2.py` `_answer` already uses it to answer questions.
+- A keyframe-only turn (nobody spoke) has the detector list and the age but no images: that keyframe was just described by `understand`.
+- The step tracker and `understand` still work from the newest keyframe's text; they are not given the live frame.
+- **Phone:** keep sending frames while the user is recording. The frames from while they spoke are what Claude is shown.
+- To see it: `/debug` shows the pictures, the YOLO count and the observation age of the last spoken turn (`GET /debug/perception/{i}.jpg`).
 
 ## Store rows (written by P3's orchestrator)
 

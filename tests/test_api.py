@@ -1128,3 +1128,251 @@ def test_a_broken_detector_does_not_stop_frames(monkeypatch):
             assert r.status_code == 200 and FrameResponse.model_validate(r.json()).detections == []
     finally:
         vision_detect.reset()
+
+
+# --- Claude sees the camera, the detector and the speech together ---------------------------
+
+def capture_pass1(client):
+    """Record what the orchestrator hands the pass1 stage; still answer with the mock."""
+    calls = []
+    orig = client.app.state.orch.stages.pass1
+
+    async def cap(inp, session_id, store=None, images=None):
+        calls.append({"inp": inp, "images": images})
+        return await orig(inp, session_id, store, images)
+    client.app.state.orch.stages.pass1 = cap
+    return calls
+
+
+def voice_turns(calls):
+    return [c for c in calls if c["inp"].transcript is not None]
+
+
+def prime_camera(client, sid, shifts=(6.0, 3.5, 0.3)):
+    """Post one frame per shift, wait for the slow loop, then backdate the frames in the session's ring
+    so they look like a camera that has been running for several seconds (the test can't wait that long)."""
+    for _ in shifts:
+        assert post_frame(client, sid).status_code == 200
+    assert wait_until(lambda: not client.get(f"/session/{sid}/state").json()["slow_busy"])
+    session = client.app.state.orch.sessions.get(sid)
+    now = time.time()
+    for snap, ago in zip(session.recent_frames, shifts):
+        snap.ts = now - ago
+    return session
+
+
+def test_a_spoken_turn_shows_claude_two_frames_a_close_up_the_yolo_tracks_and_the_words(client):
+    sid = new_session(client)
+    calls = capture_pass1(client)
+    session = prime_camera(client, sid)
+    calls.clear()                                             # drop the keyframe turns from priming
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, type="utterance", audio_b64=B64_CLIP, format="m4a", duration_s=2.0)
+            assert next_json(ws)["type"] == "final"
+            assert next_json(ws)["type"] == "response"
+
+    guarded(scenario)
+    (turn,) = voice_turns(calls)
+    inp, images = turn["inp"], turn["images"]
+    assert inp.transcript.text and len(images) == 3 and all(i[:2] == b"\xff\xd8" for i in images)
+    assert [n.split(",")[0] for n in inp.image_notes] == ["earlier frame", "latest frame",
+                                                          "close-up of rim#2 from the latest frame"]
+    assert inp.image_notes[0].endswith("before the latest") and inp.image_notes[1].startswith("latest frame, 0.")
+    assert {d.label for d in inp.detections} == {"brake_pad", "rim"}
+    assert images[0] == session.recent_frames[1].jpeg and images[1] == session.recent_frames[2].jpeg
+    summary = client.get(f"/session/{sid}/state").json()["last_perception"]
+    assert summary["crop"] == "rim#2" and len(summary["frames"]) == 2 and summary["detections"] == 2
+
+
+def test_with_no_camera_frames_the_turn_is_text_only(client):
+    sid = new_session(client)
+    calls = capture_pass1(client)
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, type="utterance", audio_b64=B64_CLIP)
+            collect_until(ws, "response")
+
+    guarded(scenario)
+    (turn,) = voice_turns(calls)
+    assert turn["images"] is None and turn["inp"].image_notes == [] and turn["inp"].detections == []
+    assert client.get(f"/session/{sid}/state").json()["last_perception"] is None
+
+
+def test_frames_older_than_ten_seconds_are_not_shown(client):
+    sid = new_session(client)
+    calls = capture_pass1(client)
+    prime_camera(client, sid, shifts=(40.0, 30.0, 15.0))
+    calls.clear()
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, type="utterance", audio_b64=B64_CLIP)
+            collect_until(ws, "response")
+
+    guarded(scenario)
+    turn = voice_turns(calls)[0]
+    assert turn["images"] is None and turn["inp"].detections == []
+
+
+def test_a_keyframe_turn_gets_the_detector_list_but_no_pictures(client):
+    sid = new_session(client)
+    calls = capture_pass1(client)
+    post_frame(client, sid)                                   # keyframe -> slow loop -> brain with no speech
+    assert wait_until(lambda: len(calls) == 1)
+    inp = calls[0]["inp"]
+    assert inp.transcript is None and calls[0]["images"] is None
+    assert {d.label for d in inp.detections} == {"brake_pad", "rim"} and inp.image_notes == []
+
+
+def test_the_http_audio_route_shows_the_camera_too(client):
+    sid = new_session(client)
+    calls = capture_pass1(client)
+    prime_camera(client, sid)
+    calls.clear()
+    post_audio(client, sid, "question.m4a")
+    (turn,) = voice_turns(calls)
+    assert len(turn["images"]) == 3 and turn["inp"].image_notes[0].startswith("earlier frame")
+
+
+def test_streamed_pcm_speech_shows_the_camera_too(client):
+    sid = new_session(client)
+    calls = capture_pass1(client)
+    prime_camera(client, sid)
+    calls.clear()
+
+    def scenario():
+        with connect(client, sid) as ws:
+            ws.send_bytes(ONE_SECOND)
+            collect_until(ws, "response")
+
+    guarded(scenario)
+    (turn,) = voice_turns(calls)
+    assert len(turn["images"]) >= 2 and turn["inp"].detections
+
+
+def test_the_view_is_rebuilt_every_turn_and_nothing_leaks_between_turns(client):
+    sid = new_session(client)
+    calls = capture_pass1(client)
+    session = prime_camera(client, sid)
+    post_audio(client, sid)
+    assert len(session.perception.images) == 3 and session.last_perception_summary["crop"] == "rim#2"
+    session.recent_frames.clear()                             # the camera stops sending frames
+    post_audio(client, sid)
+    assert session.perception is None and session.last_perception_summary is None
+    assert voice_turns(calls)[-1]["images"] is None
+
+
+def test_an_old_text_observation_is_tagged_with_its_age_on_a_spoken_turn(client):
+    sid = new_session(client)
+    calls = capture_pass1(client)
+    session = prime_camera(client, sid)
+    session.last_observation_at = time.time() - 6.0
+    calls.clear()
+    post_audio(client, sid)
+    inp = voice_turns(calls)[0]["inp"]
+    assert inp.observation_age_s == pytest.approx(6.0, abs=0.5)
+    assert "seen 6." in pass1_mod_render(inp) or "seen 5." in pass1_mod_render(inp)
+
+
+def pass1_mod_render(inp):
+    from backend.brain import pass1
+    return pass1.render_user(inp)
+
+
+def test_a_failure_gathering_the_camera_view_falls_back_to_text_only(client, monkeypatch):
+    sid = new_session(client)
+    calls = capture_pass1(client)
+    prime_camera(client, sid)
+    calls.clear()
+
+    async def boom(*a, **k):
+        raise RuntimeError("decode error")
+    monkeypatch.setattr(main_mod.perception_mod, "gather", boom)
+    a = post_audio(client, sid)
+    assert a.response.say and voice_turns(calls)[0]["images"] is None
+
+
+def test_the_whole_chain_from_the_socket_to_the_anthropic_request(client, monkeypatch):
+    """Frames in, a voice clip in: the request that would go to Claude has the pictures, the YOLO
+    list and the words. Uses the real Pass 1 with a stubbed Anthropic client."""
+    import base64
+    from backend.brain import pass1
+    from tests.test_pass1 import ok_message, parse_client, report as pass1_report
+    sid = new_session(client)
+    anthropic_client, parse = parse_client(ok_message(pass1_report(summary="the user asks about a switch")))
+    monkeypatch.setattr(pass1, "_get_client", lambda: anthropic_client)
+    client.app.state.orch.stages.pass1 = pass1.run
+    session = prime_camera(client, sid)
+    parse.kwargs = {}
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, type="utterance", audio_b64=B64_CLIP, format="m4a", duration_s=2.0)
+            collect_until(ws, "response")
+
+    guarded(scenario)
+    content = parse.kwargs["messages"][0]["content"]
+    kinds = [b["type"] for b in content]
+    assert kinds == ["image", "image", "image", "text"], kinds
+    assert base64.b64decode(content[1]["source"]["data"]) == session.recent_frames[2].jpeg
+    text = content[-1]["text"]
+    assert "IMAGES ATTACHED (in order): 1. earlier frame" in text and "3. close-up of rim#2" in text
+    assert "DETECTOR (YOLO, latest frame): rim#2 0.90" in text and "brake_pad#1 0.81" in text
+    assert 'USER SAID: "Which size hex key do I need for the pad bolt?"' in text
+
+
+# --- /debug shows what Claude saw ------------------------------------------------------------
+
+def test_debug_shows_what_claude_saw_on_the_last_spoken_turn(client):
+    sid = new_session(client)
+    session = prime_camera(client, sid)
+    before = client.get("/debug/data").json()["perception"]
+    assert before["image_notes"] == [] and before["detections"] == 2, "only a keyframe turn so far: detector list, no pictures"
+    assert client.get("/debug/perception/0.jpg").status_code == 404
+    post_audio(client, sid)
+    d = client.get("/debug/data").json()["perception"]
+    assert len(d["image_notes"]) == 3 and d["crop"] == "rim#2" and d["detections"] == 2 and d["frames"]
+    for i in range(3):
+        r = client.get(f"/debug/perception/{i}.jpg")
+        assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"
+        assert r.content == session.perception.images[i]
+    assert client.get("/debug/perception/3.jpg").status_code == 404
+    assert client.get("/debug/perception/-1.jpg").status_code == 404
+    assert client.get("/debug/perception/0.jpg?session=bogus").status_code == 404
+    assert "What Claude saw" in client.get("/debug").text
+
+
+def test_the_debug_page_script_is_still_valid_javascript(client, tmp_path):
+    import re
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    script = re.search(r"<script>(.*)</script>", main_mod.DEBUG_HTML, re.S).group(1)
+    path = tmp_path / "debug.js"
+    path.write_text(script, encoding="utf-8")
+    assert subprocess.run([node, "--check", str(path)], capture_output=True).returncode == 0
+
+
+@pytest.mark.parametrize("blurry,dark", [(True, False), (False, True), (True, True)])
+def test_blurry_and_dark_frames_never_become_what_claude_sees(client, blurry, dark):
+    from backend.contracts import FrameQuality
+    sid = new_session(client)
+    session = client.app.state.orch.sessions.get(sid)
+
+    async def bad(jpeg, session_id):
+        return jpeg, FrameQuality(blurry=blurry, too_dark=dark, is_keyframe=False, sharpness=5, brightness=20)
+    orig = client.app.state.orch.stages.preprocess
+    client.app.state.orch.stages.preprocess = bad
+    assert post_frame(client, sid).status_code == 200
+    assert len(session.recent_frames) == 0, "a blurry or dark frame must not enter the ring"
+    assert session.last_frame_id is not None, "it is still shown on the HUD debug view"
+
+    client.app.state.orch.stages.preprocess = orig             # a sharp frame is kept, with its detections
+    assert post_frame(client, sid).status_code == 200
+    assert [f.frame_id for f in session.recent_frames] == [session.last_frame_id]
+    assert {d.label for d in session.recent_frames[0].detections} == {"brake_pad", "rim"}
