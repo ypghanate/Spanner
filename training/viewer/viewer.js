@@ -893,13 +893,14 @@ function pickVoice() {
 }
 if ("speechSynthesis" in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
 // Spanner's voice: ElevenLabs through the backend (/coach/say), the browser's voice as fallback.
-let elevenOK = false, speakingUntil = 0, sayAudio = null;
+let elevenOK = false, speakingUntil = 0, sayAudio = null, currentSpeech = "";
+function stopSpeaking() { if ("speechSynthesis" in window) speechSynthesis.cancel(); if (sayAudio) { sayAudio.pause(); sayAudio = null; } speakingUntil = 0; }
 fetch((QP.get("api") || "") + "/coach/health").then((r) => r.json()).then((d) => { elevenOK = !!d.tts; }).catch(() => {});
 function browserSay(text) {
   if (!("speechSynthesis" in window)) return;
   const u = new SpeechSynthesisUtterance(text); if (voice) u.voice = voice; u.rate = 1.03; u.pitch = 0.92;
   u.onend = () => { speakingUntil = performance.now() + 400; };
-  speakingUntil = performance.now() + 60000; speechSynthesis.speak(u);
+  speakingUntil = performance.now() + 60000; currentSpeech = text; speechSynthesis.speak(u);
 }
 function narrate(text) {
   if (!voiceOn || INSTANT || !text) return;
@@ -907,7 +908,7 @@ function narrate(text) {
   if (sayAudio) { sayAudio.pause(); sayAudio = null; }
   if (!elevenOK) return browserSay(text);
   const a = new Audio((QP.get("api") || "") + "/coach/say?text=" + encodeURIComponent(text));
-  sayAudio = a; speakingUntil = performance.now() + 60000;
+  sayAudio = a; speakingUntil = performance.now() + 60000; currentSpeech = text;
   a.onended = () => { if (sayAudio === a) { sayAudio = null; speakingUntil = performance.now() + 400; } };
   a.onerror = () => { if (sayAudio === a) { sayAudio = null; browserSay(text); } };
   a.play().catch(() => { if (sayAudio === a) { sayAudio = null; browserSay(text); } });
@@ -972,11 +973,37 @@ $("mic").onclick = () => {
   if (!SR) { heard("", "speech recognition needs Chrome or Edge"); setListen(false, "VOICE NEEDS CHROME / EDGE"); return; }
   micOn = !micOn; $("mic").classList.toggle("on", micOn); setListen(micOn);
   if (!micOn) { rec?.stop(); rec = null; return; }
-  rec = new SR(); rec.continuous = true; rec.interimResults = false; rec.lang = "en-GB";
-  rec.onresult = (e) => { const r = e.results[e.results.length - 1]; if (r.isFinal && performance.now() > speakingUntil) command(r[0].transcript); };
-  rec.onend = () => { if (micOn) try { rec.start(); } catch { /* already running */ } };
+  rec = new SR(); rec.continuous = true; rec.interimResults = true; rec.lang = "en-GB"; rec.maxAlternatives = 1;
+  let recognizing = false, lastEvent = performance.now(), lastActed = { text: "", t: 0 };
+  const QUICK = /^(?:\s*(?:ok(?:ay)?|hey|spanner|please|and|now|just)[,\s]*)*(close|stop|pause|next|back|calibrate|reset|rewind|x-?ray|lights (?:on|off)|take it apart|put it back|zoom (?:in|out))\b/i;
+  const words = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter((w) => w.length > 2));
+  const isEcho = (text) => {        // Spanner hearing its own voice: most of the words are in what it is saying
+    if (performance.now() > speakingUntil || !currentSpeech) return false;
+    const a = words(text), b = words(currentSpeech); if (!a.size) return true;
+    let n = 0; for (const w of a) if (b.has(w)) n++; return n / a.size >= 0.6;
+  };
+  const act = (text, how) => {
+    const now = performance.now();
+    if (text.trim().toLowerCase() === lastActed.text && now - lastActed.t < 4000) return;   // the final of a command already run
+    lastActed = { text: text.trim().toLowerCase(), t: now };
+    if (isEcho(text)) { heard(text, "ignored: that was me talking"); return; }
+    if (now < speakingUntil) stopSpeaking();                      // barge-in: you talk, Spanner stops
+    setListen(true, "LISTENING · " + text.trim().slice(0, 40)); command(text);
+  };
+  rec.onstart = () => { recognizing = true; lastEvent = performance.now(); };
+  rec.onresult = (e) => {
+    lastEvent = performance.now();
+    const r = e.results[e.results.length - 1], text = r[0].transcript;
+    if (r.isFinal) act(text, "final");
+    else if (QUICK.test(text)) act(text.match(QUICK)[0], "quick");      // "close" acts the moment it is heard
+  };
+  rec.onspeechend = () => { lastEvent = performance.now(); };
+  rec.onend = () => { recognizing = false; if (micOn) setTimeout(() => { try { rec.start(); } catch { /* already running */ } }, 250); };
   rec.onerror = (e) => { if (e.error !== "no-speech" && e.error !== "aborted") heard("", "mic error: " + e.error); if (e.error === "not-allowed") { micOn = false; setListen(false, "MIC BLOCKED"); } };
-  rec.start(); if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); } 
+  clearInterval(window._micDog); window._micDog = setInterval(() => {   // watchdog: Chrome sometimes stops listening silently
+    if (!micOn) return; if (!recognizing || performance.now() - lastEvent > 20000) { try { rec.abort(); } catch {} try { rec.start(); } catch {} lastEvent = performance.now(); }
+  }, 5000);
+  rec.start(); if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); }
 };
 
 // ------------------------------------------------------------------ live shopping on request (Linkup + Tavily via /coach/shop)
