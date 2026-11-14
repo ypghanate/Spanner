@@ -8,3 +8,15 @@ training/data/cache/
 node_modules/
 .pytest_cache/
 *.pt
+
+# training / knowledge pipeline (training/, databricks/)
+data/videos/
+data/work/
+data/web/
+data/lake/
+data/live/
+data/eval/
+data/procedures/videos/
+mlruns/
+training/adaption/data/
+*.egg-info/

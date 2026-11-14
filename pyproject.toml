@@ -25,6 +25,14 @@ dependencies = [
 
 [dependency-groups]
 dev = ["pytest"]
+# Training / knowledge pipeline + Linkup parts agent (training/, databricks/, backend/parts_agent.py).
+# Not needed to run the live backend: `uv sync --group training` only on the machine that builds data.
+training = [
+    "faster-whisper",
+    "tavily-python>=0.8",
+    "linkup-sdk>=0.24",
+    "mlflow-skinny>=3.18",
+]
 
 [tool.uv]
 package = false

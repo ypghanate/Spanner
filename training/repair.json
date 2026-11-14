@@ -1,0 +1,14 @@
+{
+  "repair_id": "tbd_repair",
+  "object": "TBD: set when the team picks the demo object (e.g. 'laptop', 'stapler')",
+  "fault": "TBD: the fault being fixed (e.g. 'RAM module unseated')",
+  "parts": [],
+  "tools": [],
+  "test_videos": [],
+  "segment_seconds": 10,
+  "frames_per_segment": 6,
+  "label_model": "claude-opus-5-5",
+  "effort": "medium",
+  "whisper_model": "small",
+  "language": "en"
+}
