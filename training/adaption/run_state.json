@@ -2,5 +2,7 @@
   "source_dataset": "33778e44-89aa-4c2e-a6f6-5153bfbcf1aa",
   "adapt_run": "dataset-33778e44-89aa-4c2e-a6f6-5153bfbcf1aa-1794687272962",
   "adapted_dataset": "33778e44-89aa-4c2e-a6f6-5153bfbcf1aa",
-  "updated": "20:14:32"
+  "updated": "20:48:04",
+  "quality": "Quality(grade_before='C', grade_after='A', score_before=6.0, score_after=9.6, percentile_after=57.7, improvement_percent=60.0)",
+  "augmented_dataset": "0b802ffd-120f-4064-85bf-acba7922b7ec"
 }

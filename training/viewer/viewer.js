@@ -746,7 +746,7 @@ async function goStep(i, note = "", silent = false) {
   const id = ++runId;
   stepIdx = Math.max(0, Math.min(i, plan.steps.length - 1));
   const s = plan.steps[stepIdx];
-  $("card").style.display = "block";
+  $("card").style.display = "block"; $("card").classList.add("on");
   clearTags(); clearArrow(); pulseT0 = 0;
   setMode(`repair · step ${s.index}/${plan.steps.length}${note}`); blip(990);
   $("sn").textContent = `STEP ${s.index} / ${plan.steps.length}`; $("sk").textContent = `KEY ${pack.keys[brokenKey].label} · ${s.kind.toUpperCase().replace(/-/g, " ")}`;
@@ -783,7 +783,7 @@ async function rewind() {   // undo the repair step by step: the world goes back
     for (const c of s.scene3d || []) if (c.op === "rotate_to") await applyCommand(c);
     await applyState(stateBefore(i), 900); await sleep(500);
   }
-  stepIdx = -1; dots(); setMode("assembled"); $("card").style.display = "none";
+  stepIdx = -1; dots(); setMode("assembled"); $("card").style.display = "none"; $("card").classList.remove("on");
 }
 async function tour() {
   touring = !touring; $("tour").classList.toggle("on", touring); $("tour").textContent = touring ? "■ STOP" : "▶ TOUR";
@@ -1158,7 +1158,7 @@ function startRemote() {
   if (camOn) toggleCamera();
   remoteOn = true; setStage(true); setMode("live · phone camera");
   const el = $("pair"); el.style.display = "block";
-  el.innerHTML = `OPEN ON THE PHONE<br><b>${PHONE_URL()}</b><div class="tr">WAITING FOR THE FIRST FRAME</div>`;
+  el.innerHTML = `<img src="${API}/coach/qr?url=${encodeURIComponent(PHONE_URL())}" alt="QR" style="width:260px;height:260px;display:block;margin:0 auto 10px;border-radius:4px"><div style="font:600 12px var(--mono);letter-spacing:.2em;color:var(--cyan)">SCAN WITH THE PHONE</div><div style="margin-top:6px;opacity:.75;font-size:11.5px">or type: <b style="font-size:12px">${PHONE_URL()}</b></div><div class="tr">WAITING FOR THE FIRST FRAME</div>`;
   $("cam").style.display = "block"; $("video").style.display = "none"; seen("Phone camera: waiting for frames.");
   if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); }
   remoteTick();
@@ -1218,7 +1218,7 @@ $("mistake").onclick = showMistake; $("fixit").onclick = fixMistake;
 $("reset").onclick = async () => { stopTour(); stepIdx = -1; select(null); clearTags(); clearArrow(); setHighlight([]); mistakeOn = false; $("mistake").classList.remove("on"); $("fixit").style.display = "none";
   if (openSwitch) { await openSwitchAnim(openSwitch, false); openSwitch = null; }
   applyState({ ...INITIAL }, 600); explodeAll(0); rotateTo("iso"); setMode("assembled"); dots();
-  $("card").style.display = "none"; };
+  $("card").style.display = "none"; $("card").classList.remove("on"); };
 $("ex").oninput = (e) => { stopTour(); const a = e.target.value / 100;
   for (const g of Object.keys(pack.groups)) if (!["case", "usb_c_port", "mode_switch"].includes(g)) amount[g] = a;
   setMode(a > 0 ? "exploded view" : "assembled"); };

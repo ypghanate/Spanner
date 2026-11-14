@@ -237,6 +237,21 @@ async def pose(image: UploadFile = File(...), session: str = Form("laptop")):
     return p
 
 
+@router.get("/qr")
+async def qr(url: str):
+    """QR code (PNG) for pairing the phone: the laptop shows it, the phone scans it."""
+    import io
+
+    import qrcode
+    from fastapi.responses import Response
+
+    q = qrcode.QRCode(box_size=8, border=2, error_correction=qrcode.constants.ERROR_CORRECT_M)
+    q.add_data(url[:400]); q.make(fit=True)
+    img = q.make_image(fill_color="#00E5FF", back_color="#05080F")
+    buf = io.BytesIO(); img.save(buf, format="PNG")
+    return Response(buf.getvalue(), media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
 @router.get("/latest")
 async def latest(session: str):
     """The phone's last results for this session: the coach's view (every ~2 s) and the keyboard pose (~4/s)."""

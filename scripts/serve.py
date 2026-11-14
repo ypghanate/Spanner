@@ -65,8 +65,18 @@ def main() -> None:
     ip = lan_ip()
     key_p, crt_p = ensure_cert(ip)
     port = int(os.getenv("SPANNER_HTTPS_PORT", "8443"))
-    print(f"\n  laptop:  https://{ip}:{port}/training/viewer/?phone=1\n  phone:   https://{ip}:{port}/training/viewer/phone.html\n"
+    phone = f"https://{ip}:{port}/training/viewer/phone.html"
+    print(f"\n  laptop:  https://{ip}:{port}/training/viewer/?phone=1\n  phone:   {phone}\n"
           "  (self-signed certificate: open the phone URL once, accept the warning, then allow the camera)\n")
+    try:
+        import qrcode
+
+        q = qrcode.QRCode(border=1)
+        q.add_data(phone)
+        q.make(fit=True)
+        q.print_ascii(invert=True)
+    except Exception:
+        pass
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port, ssl_keyfile=str(key_p), ssl_certfile=str(crt_p), log_level="warning")
 
 
