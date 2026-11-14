@@ -18,6 +18,9 @@ export const icons = {
   close: require("../../assets/icons/close.svg"),
   completionCheck: require("../../assets/icons/completion-check.svg"),
   pause: require("../../assets/icons/pause.svg"),
+  mic: require("../../assets/icons/mic.svg"),
+  speaker: require("../../assets/icons/speaker.svg"),
+  camera: require("../../assets/icons/camera.svg"),
 };
 
 export const images = {

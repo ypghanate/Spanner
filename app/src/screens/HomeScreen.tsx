@@ -1,15 +1,15 @@
 import React from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { camera, radius, useTheme } from "../theme";
 import { useSpanner } from "../state/SpannerProvider";
 import { Icon, icons, images, PrimaryCta, Txt } from "../components/ui";
 
+
 export default function HomeScreen() {
   const { c, toggle } = useTheme();
-  const { startCall, status, error, history } = useSpanner();
-  const busy = status === "connecting";
+  const { openScanner, history } = useSpanner();
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.base }}>
@@ -41,13 +41,8 @@ export default function HomeScreen() {
         </View>
 
         <View style={{ marginTop: 20 }}>
-          <PrimaryCta label={busy ? "Connecting…" : "Start video call"} onPress={() => void startCall()} disabled={busy} />
-          {busy ? <ActivityIndicator color={c.action} style={styles.spinner} /> : null}
-          {status === "error" && error ? (
-            <Txt size={12} color={c.dangerFg} style={{ marginTop: 10 }}>
-              Couldn’t reach Spanner: {error}
-            </Txt>
-          ) : null}
+          {/* Starting a call pairs this phone with the laptop webapp: the QR scanner opens first. */}
+          <PrimaryCta label="Start video call" onPress={openScanner} />
         </View>
 
         <View style={styles.recentHead}>
@@ -59,8 +54,8 @@ export default function HomeScreen() {
           <View key={h.id} style={[styles.row, { borderTopColor: c.borderSubtle }]}>
             <Icon src={icons.check} size={20} color={c.action} />
             <View style={{ flex: 1 }}>
-              <Txt weight="medium" size={15} lh={1.3}>{h.title}</Txt>
-              <Txt size={11} color={c.textSecondary} lh={1.3} style={{ marginTop: 2 }}>{h.detail}</Txt>
+              <Txt weight="medium" size={15} lh={1.3} numberOfLines={1}>{h.title}</Txt>
+              <Txt size={11} color={c.textSecondary} lh={1.3} numberOfLines={1} style={{ marginTop: 2 }}>{h.detail}</Txt>
             </View>
             <Icon src={icons.chev} size={18} color={c.textSecondary} />
           </View>
@@ -79,7 +74,6 @@ const styles = StyleSheet.create({
     position: "absolute", left: 14, top: 14, height: 28, borderRadius: radius.pill, backgroundColor: camera.surface,
     flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 10,
   },
-  spinner: { position: "absolute", right: 56, top: 18 },
   recentHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 40, marginBottom: 14, paddingRight: 14 },
   row: { flexDirection: "row", alignItems: "center", gap: 14, height: 73, borderTopWidth: 1, paddingLeft: 2 },
 });

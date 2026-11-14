@@ -3,22 +3,20 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { radius, useTheme } from "../theme";
-import { useSpanner } from "../state/SpannerProvider";
-import { absUrl } from "../lib/config";
+import { shortObject, useSpanner } from "../state/SpannerProvider";
 import { Icon, icons, images, PrimaryCta, Txt } from "../components/ui";
 
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 export default function SummaryScreen() {
   const { c } = useTheme();
-  const { summary, plan, media, dismissSummary } = useSpanner();
+  const { summary, plan, lastFrameUri, dismissSummary } = useSpanner();
   if (!summary) return null;
 
   const total = Math.max(summary.steps_total, 1);
   const done = Math.min(summary.steps_done, total);
   const complete = done >= total;
-  const object = (summary.object ?? plan?.object ?? "repair").toLowerCase();
-  const photo = [...media].reverse().find((m) => m.kind === "illustration");
+  const object = shortObject(summary.object ?? plan?.object ?? "repair");
   const title = summary.fault ?? plan?.fault ?? "Repair finished";
   const lastNote = plan?.safety_notes?.[plan.safety_notes.length - 1] ?? "Before you use it, check it works as it should.";
 
@@ -63,7 +61,11 @@ export default function SummaryScreen() {
         </View>
 
         <View style={[styles.result, { backgroundColor: c.raised }]}>
-          <Image source={photo ? { uri: absUrl(photo.url) } : images.repaired} style={styles.resultImg} contentFit="cover" />
+          {lastFrameUri ? (
+            <Image source={{ uri: lastFrameUri }} style={styles.resultImg} contentFit="cover" />
+          ) : (
+            <Image source={images.repaired} style={styles.resultImg} contentFit="cover" />
+          )}
           <View style={{ flex: 1, paddingVertical: 16, paddingRight: 16, gap: 8 }}>
             <Txt weight="semibold" size={18} numberOfLines={2}>{title}</Txt>
             {plan?.steps.length ? (

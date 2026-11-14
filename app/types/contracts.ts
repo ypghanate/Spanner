@@ -87,6 +87,8 @@ export interface RepairStep {
   illustration_prompt: string | null;
   illustration_url: string | null;
   clip_url: string | null;
+  title: string | null;
+  kind: string | null;
 }
 
 export interface RepairPlan {
@@ -98,6 +100,11 @@ export interface RepairPlan {
   safety_notes: string[];
   steps: RepairStep[];
   sources: SourceRef[];
+  generated: boolean;
+  title: string;
+  diagnosis: string;
+  target_key: string | null;
+  fault_signature: string;
 }
 
 export interface MediaUpdate {

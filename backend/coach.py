@@ -46,18 +46,27 @@ class CoachView(BaseModel):
 
 
 @lru_cache(maxsize=1)
-def _demo() -> dict:
+def _default_demo() -> dict:
     path = MODEL_DIR / "demo_plan.json"
     if not path.exists():
         raise HTTPException(503, "No demo plan yet: run `python -m training.scene3d` after building the knowledge base.")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+# The plan Claude wrote for each session's complaint (backend/planner.py). Sessions without one get the canned demo plan.
+_plans: dict[str, dict] = {}
+
+
+def _demo(session: str = "") -> dict:
+    return _plans.get(session) or _default_demo()
+
+
 def _system(demo: dict) -> str:
     plan = demo["plan"]
     key = demo.get("broken_key", "F")
+    keyline = f" The broken key is '{key}'." if plan.get("target_key") or not plan.get("generated") else ""
     lines = [f"You are Spanner, a repair coach watching a live webcam. The repair: {plan['object']}; "
-             f"fault: {plan['fault']}. The broken key is '{key}'.",
+             f"fault: {plan['fault']}.{keyline}",
              "The procedure (use these step numbers):"]
     for s in plan["steps"]:
         mistakes = "; ".join(s.get("common_mistakes", [])) or "none listed"
@@ -76,11 +85,12 @@ def _system(demo: dict) -> str:
 def _client():
     import anthropic
 
-    return anthropic.Anthropic()
+    # the SDK default is a 10 minute timeout with 2 retries: one stuck call would hold a worker thread for half an hour
+    return anthropic.Anthropic(timeout=float(os.getenv("COACH_TIMEOUT_S", "20")), max_retries=1)
 
 
-def _ask(image_b64: str, current_step: int) -> CoachView:
-    demo = _demo()
+def _ask(image_b64: str, current_step: int, session: str = "") -> CoachView:
+    demo = _demo(session)
     hint = (f"The screen currently shows step {current_step}." if current_step > 0
             else "The repair has not started on screen yet.")
     resp = _client().beta.messages.parse(
@@ -100,20 +110,34 @@ def _ask(image_b64: str, current_step: int) -> CoachView:
     return out
 
 
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+_frame_inflight: set[str] = set()        # sessions with a vision call running: a second frame is dropped, not queued
+
+
 @router.post("/frame")
 async def frame(image: UploadFile = File(...), current_step: int = Form(0), session: str = Form("laptop")):
     data = await image.read()
     if not data:
         raise HTTPException(400, "empty image")
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(413, "image too large")
+    if session in _frame_inflight:       # the previous frame is still being read: never stack Claude calls behind it
+        raise HTTPException(429, "still reading the previous frame")
+    _frame_inflight.add(session)
     t0 = time.perf_counter()
-    view = await asyncio.to_thread(_ask, base64.standard_b64encode(data).decode(), current_step)
+    try:
+        view = await asyncio.to_thread(_ask, base64.standard_b64encode(data).decode(), current_step, session)
+    finally:
+        _frame_inflight.discard(session)
     latency = round((time.perf_counter() - t0) * 1000)
     from training.feedback import record_live_mistake, record_stage_timing
     from training.kb import current_repair_id
 
     record_stage_timing(session, "coach", latency, True)          # measured latency -> Databricks dashboard
     if view.mistake and view.step_index > 0:   # the learning loop: real mistakes go to Databricks
-        record_live_mistake(session, current_repair_id(), view.step_index, view.mistake, view.what_i_see)
+        plan = _demo(session)["plan"]          # generated plans have their own step numbering: log them under their own id
+        rid = f"{current_repair_id()}:{plan['fault_signature']}" if plan.get("generated") else current_repair_id()
+        record_live_mistake(session, rid, view.step_index, view.mistake, view.what_i_see)
     out = {**view.model_dump(), "latency_ms": latency, "model": COACH_MODEL, "ts": time.time()}
     _latest.setdefault(session, {})["view"] = out
     return out
@@ -122,12 +146,13 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
 class Ask(BaseModel):
     question: str
     current_step: int = 0
+    session: str = ""
 
 
 @router.post("/ask")
 async def ask(q: Ask):
     """A free spoken question ("which way does the switch go in?") answered with the current step as context."""
-    demo = _demo()
+    demo = _demo(q.session)
     steps = demo["plan"]["steps"]
     cur = steps[q.current_step - 1] if 0 < q.current_step <= len(steps) else None
     ctx = _system(demo) + (f"\n\nThe user is on step {cur['index']}: {cur['instruction']}" if cur else "")
@@ -151,7 +176,7 @@ class Intent(BaseModel):
     command: Literal["next", "back", "close", "take_apart", "reassemble", "xray", "reset", "tour", "stop", "rewind",
                      "show_mistake", "fix_it", "shop_parts", "shop_keyboards", "camera_on", "camera_off",
                      "calibrate", "show_part", "zoom_in", "zoom_out", "lights_on", "lights_off", "specs",
-                     "sources", "ask", "none"]
+                     "sources", "ask", "new_repair", "none"]
     part: str = Field(default="", description="For show_part: socket, switch, keycap, pcb, plate, case, battery, usb, led, stabilizer, spring")
     shop_query: str = Field(default="", description="For shop_*: what to search for, in the user's words")
 
@@ -172,6 +197,8 @@ async def intent(req: IntentReq):
                 "(other/alternative/new keyboards to buy instead), camera_on (watch me), camera_off, calibrate (align the "
                 "hologram with the real keyboard, set as zero), show_part (look at a part: fill part), zoom_in, zoom_out, "
                 "lights_on, lights_off, specs, sources, ask (a real question about the repair that needs an answer), "
+                "new_repair (the person says what is broken or what they want fixed, e.g. 'my space bar rattles', "
+                "'the E key is sticky', 'I want to fix my keyboard', 'it won't turn on'), "
                 "none (noise, not addressed to Spanner). Fillers like ok, please, hey Spanner are ignored.")
     def run() -> Intent:
         resp = _client().beta.messages.parse(
@@ -229,6 +256,8 @@ async def pose(image: UploadFile = File(...), session: str = Form("laptop")):
     data = await image.read()
     if not data:
         raise HTTPException(400, "empty image")
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(413, "image too large")
     t0 = time.perf_counter()
     p = await asyncio.to_thread(_keyboard_pose, data, session)
     p["latency_ms"] = round((time.perf_counter() - t0) * 1000)
@@ -247,9 +276,27 @@ async def qr(url: str):
 
     q = qrcode.QRCode(box_size=8, border=2, error_correction=qrcode.constants.ERROR_CORRECT_M)
     q.add_data(url[:400]); q.make(fit=True)
-    img = q.make_image(fill_color="#00E5FF", back_color="#05080F")
+    # dark modules on a light ground: the polarity every phone scanner reads reliably
+    img = q.make_image(fill_color="#101512", back_color="#f2f2e9")
     buf = io.BytesIO(); img.save(buf, format="PNG")
     return Response(buf.getvalue(), media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+@router.get("/net")
+async def net():
+    """This laptop's address on the local network. A phone can't reach 'localhost', so a viewer opened as localhost asks
+    for this to build the pairing QR."""
+    import socket
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))          # no packet is sent: this only picks the outgoing interface
+        ip = s.getsockname()[0]
+    except OSError:
+        ip = ""
+    finally:
+        s.close()
+    return {"lan_ip": "" if not ip or ip.startswith("127.") else ip}
 
 
 @router.get("/latest")
@@ -259,8 +306,38 @@ async def latest(session: str):
 
 
 @router.get("/plan")
-async def plan():
-    return _demo()
+async def plan(session: str = ""):
+    """The session's own plan once Claude has written one, else the canned demo plan."""
+    return _demo(session)
+
+
+class PlanReq(BaseModel):
+    session: str
+    complaint: str
+
+
+@router.post("/plan/generate")
+async def generate_plan(req: PlanReq):
+    """What the user said they want fixed -> a Claude-written plan for that fault (slow: 5-10 s with the real model).
+
+    status: ready (plan + parts_card + say), clarify (ask the user `say`), refused (unsafe / out of scope),
+    fallback (couldn't write one; the canned plan stays and `say` explains). Only `ready` replaces the session's plan."""
+    from .planner import plan_repair
+
+    t0 = time.perf_counter()
+    try:
+        out = await asyncio.to_thread(plan_repair, req.complaint, req.session)
+    except Exception as e:                       # API down, bad key...: keep the session usable on the canned plan
+        out = {"status": "fallback", "say": "I couldn't plan that just now, so here is the standard switch repair.",
+               "errors": [f"{type(e).__name__}: {e}"]}
+    if out["status"] == "ready":
+        _plans[req.session] = {"broken_key": out["broken_key"], "plan": out["plan"], "parts_card": out.get("parts_card"),
+                               "plan_id": out["plan_id"]}
+        _latest.setdefault(req.session, {})["plan_id"] = out["plan_id"]
+    from training.feedback import record_stage_timing
+
+    record_stage_timing(req.session, "planner", round((time.perf_counter() - t0) * 1000), out["status"] == "ready")
+    return out
 
 
 @router.get("/learned")

@@ -65,18 +65,12 @@ def main() -> None:
     ip = lan_ip()
     key_p, crt_p = ensure_cert(ip)
     port = int(os.getenv("SPANNER_HTTPS_PORT", "8443"))
-    phone = f"https://{ip}:{port}/training/viewer/phone.html"
-    print(f"\n  laptop:  https://{ip}:{port}/training/viewer/?phone=1\n  phone:   {phone}\n"
-          "  (self-signed certificate: open the phone URL once, accept the warning, then allow the camera)\n")
-    try:
-        import qrcode
-
-        q = qrcode.QRCode(border=1)
-        q.add_data(phone)
-        q.make(fit=True)
-        q.print_ascii(invert=True)
-    except Exception:
-        pass
+    # The phone must join the laptop page's own session, so the pairing QR is drawn by the laptop page (it carries
+    # ?s=<session>). A QR printed here could not name that session and would pair with nothing.
+    print(f"\n  laptop:  https://{ip}:{port}/training/viewer/?phone=1\n"
+          "  1. open that on the laptop (accept the certificate warning once), click to wake Spanner\n"
+          "  2. scan the QR it shows with the Spanner app, or with the phone's camera app to use the web camera page\n"
+          "  (the app can't use a self-signed certificate: for the app, open the laptop page through a tunnel instead)\n")
     uvicorn.run("backend.main:app", host="0.0.0.0", port=port, ssl_keyfile=str(key_p), ssl_certfile=str(crt_p), log_level="warning")
 
 

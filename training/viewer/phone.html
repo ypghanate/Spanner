@@ -2,68 +2,90 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Spanner · phone camera</title>
 <style>
-  :root { --bg:#05080F; --cyan:#00E5FF; --ok:#3DFFA8; --danger:#FF3D5A; --mono:"JetBrains Mono",ui-monospace,Consolas,monospace; }
-  html,body { margin:0; height:100%; background:var(--bg); color:#e6fbff; font-family:var(--mono); }
+  :root { --base:#101512; --raised:#253027; --text:#f2f2e9; --muted:#a0a99f; --action:#caf879; --on-action:#172415; --danger:#f3917c; --warn:#ffd166; }
+  html,body { margin:0; height:100%; background:var(--base); color:var(--text); font-family:Inter,"Segoe UI",system-ui,sans-serif; }
   video { width:100vw; height:100vh; object-fit:cover; display:block; background:#000; }
-  #hud { position:fixed; left:0; right:0; bottom:0; padding:12px 14px calc(12px + env(safe-area-inset-bottom)); background:linear-gradient(0deg,#05080fee,#05080f00); font-size:12px; letter-spacing:.08em; }
-  #hud b { color:var(--cyan); } .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--danger); margin-right:6px; }
-  .dot.on { background:var(--ok); box-shadow:0 0 8px var(--ok); }
-  #box { position:fixed; border:2px solid var(--cyan); border-radius:4px; display:none; pointer-events:none; box-shadow:0 0 14px #00e5ff88; }
-  #start { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; background:#05080fee; color:var(--cyan); letter-spacing:.2em; font-size:14px; text-align:center; padding:20px; }
-  #start small { opacity:.7; letter-spacing:.08em; font-size:11px; }
+  #hud { position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); padding:12px 14px; background:var(--base); border-radius:12px; font-size:12px; font-weight:500; display:flex; gap:10px; align-items:center; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--danger); flex:none; } .dot.on { background:var(--action); }
+  #box { position:fixed; border:2px solid var(--action); border-radius:8px; display:none; pointer-events:none; }
+  #start { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:12px; background:var(--base); text-align:center; padding:24px; }
+  #start b { font-size:26px; font-weight:500; } #start small { color:var(--muted); font-size:13px; line-height:1.5; max-width:320px; }
+  #go { margin-top:8px; height:52px; padding:0 28px; border:0; border-radius:8px; background:var(--action); color:var(--on-action); font:600 15px inherit; font-family:inherit; }
 </style></head>
 <body>
 <video id="v" autoplay playsinline muted></video>
 <div id="box"></div>
-<div id="hud"><span class="dot" id="dot"></span><b>SPANNER</b> · phone camera · <span id="st">starting</span></div>
-<div id="start">TAP TO START THE CAMERA<small>point the rear camera at the keyboard and your hands; keep the whole keyboard in view</small></div>
+<div id="hud"><span class="dot" id="dot"></span><span id="st">starting</span></div>
+<div id="start"><b>Spanner phone camera</b><small>Point the rear camera at the keyboard and your hands. Keep the whole keyboard in view and the screen on.</small><button id="go">Start the camera</button></div>
 <script>
 const QP = new URLSearchParams(location.search), S = QP.get("s") || "phone", API = "";
 const v = document.getElementById("v"), st = document.getElementById("st"), dot = document.getElementById("dot"), box = document.getElementById("box");
 const c = document.createElement("canvas");
-let busyFrame = false, busyPose = false, nFrames = 0, nPoses = 0, lastLat = 0;
+let busyFrame = false, busyPose = false, nFrames = 0, lastLat = 0, frameErr = "", lastOk = 0, wake = null, running = false;
+
+/** fetch with a deadline: a dead Wi-Fi link must not leave the loops waiting for minutes with the HUD looking fine */
+function fetchT(url, init, ms) { const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms); return fetch(url, { ...init, signal: ctl.signal }).finally(() => clearTimeout(t)); }
 function grab(w, q) {
   const h = Math.round(w * v.videoHeight / v.videoWidth); c.width = w; c.height = h;
   c.getContext("2d").drawImage(v, 0, 0, w, h);
-  return new Promise((ok) => c.toBlob(ok, "image/jpeg", q));
+  return new Promise((ok, no) => c.toBlob((b) => (b ? ok(b) : no(new Error("could not read the camera"))), "image/jpeg", q));
 }
-async function post(path, blob, extra) {
+async function post(path, blob, extra, ms) {
   const fd = new FormData(); fd.append("image", blob, "f.jpg"); fd.append("session", S);
   for (const [k, val] of Object.entries(extra || {})) fd.append(k, val);
-  const r = await fetch(API + path, { method: "POST", body: fd }); if (!r.ok) throw new Error(r.status); return r.json();
+  const r = await fetchT(API + path, { method: "POST", body: fd }, ms);
+  if (!r.ok) throw new Error(path.split("/").pop() + " " + r.status);
+  return r.json();
+}
+const streaming = () => v.srcObject && v.srcObject.getVideoTracks().some((t) => t.readyState === "live") && v.videoWidth;
+function status() {
+  const age = Date.now() - lastOk;
+  const ok = lastOk && age < 4000;
+  dot.classList.toggle("on", !!ok);
+  if (!streaming()) st.textContent = "camera stopped · tap the screen to restart";
+  else if (!lastOk) st.textContent = "connecting to your laptop…";
+  else if (!ok) st.textContent = "can’t reach your laptop · retrying";
+  else st.textContent = (frameErr ? "laptop coach: " + frameErr : "streaming") + ` · ${nFrames} frames` + (lastLat ? ` · coach ${(lastLat / 1000).toFixed(1)} s` : "");
 }
 async function poseLoop() {
-  if (!busyPose && v.videoWidth) {
+  if (!busyPose && streaming()) {
     busyPose = true;
     try {
-      const p = await post("/coach/pose", await grab(480, 0.7)); nPoses++;
+      const p = await post("/coach/pose", await grab(480, 0.7), null, 6000); lastOk = Date.now();
       if (p.found) {
         const W = innerWidth, H = innerHeight, s = Math.max(W / v.videoWidth, H / v.videoHeight), vw = v.videoWidth * s, vh = v.videoHeight * s, ox = (W - vw) / 2, oy = (H - vh) / 2;
         box.style.display = "block"; box.style.left = (ox + (p.cx - p.w / 2) * vw) + "px"; box.style.top = (oy + (p.cy - p.h / 2) * vh) + "px";
         box.style.width = (p.w * vw) + "px"; box.style.height = (p.h * vh) + "px"; box.style.transform = `rotate(${p.angle}deg)`;
       } else box.style.display = "none";
-      st.textContent = `${p.found ? "keyboard " + p.angle + "°" : "no keyboard"} · pose ${p.latency_ms} ms · coach ${lastLat ? (lastLat / 1000).toFixed(1) + " s" : "…"} · ${nFrames} frames`;
-      dot.classList.add("on");
-    } catch (e) { st.textContent = "can't reach Spanner: " + e.message; dot.classList.remove("on"); }
+    } catch (e) { /* status() reports it */ }
     busyPose = false;
   }
-  setTimeout(poseLoop, 250);
+  status(); setTimeout(poseLoop, 250);
 }
 async function frameLoop() {
-  if (!busyFrame && v.videoWidth) {
+  if (!busyFrame && streaming()) {
     busyFrame = true;
-    try { const r = await post("/coach/frame", await grab(768, 0.82), { current_step: "0" }); nFrames++; lastLat = r.latency_ms; }
-    catch (e) { /* shown by the pose loop */ }
+    try { const r = await post("/coach/frame", await grab(768, 0.82), { current_step: "0" }, 25000); nFrames++; lastLat = r.latency_ms; frameErr = ""; }
+    catch (e) { frameErr = /429/.test(e.message) ? "" : /name|abort/i.test(e.name + e.message) ? "slow answer" : e.message; }
     busyFrame = false;
   }
   setTimeout(frameLoop, 1500);
 }
-document.getElementById("start").onclick = async () => {
+async function keepAwake() { try { wake = await navigator.wakeLock?.request("screen"); } catch { /* not supported or refused */ } }
+async function openCamera() {
   try {
+    v.srcObject?.getTracks().forEach((t) => t.stop());
     v.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
-    document.getElementById("start").remove(); st.textContent = "streaming"; poseLoop(); frameLoop();
-    if (screen.orientation?.lock) screen.orientation.lock("landscape").catch(() => {});
-  } catch (e) { st.textContent = "camera blocked: " + e.message + " (open this page over https and allow the camera)"; }
+    v.srcObject.getVideoTracks()[0].addEventListener("ended", status);
+    await keepAwake(); return true;
+  } catch (e) { st.textContent = "camera blocked: " + e.message + " (open this page over https and allow the camera)"; return false; }
+}
+// a locked or backgrounded phone freezes the stream: ask for the camera again when the page comes back
+document.addEventListener("visibilitychange", async () => { if (document.visibilityState === "visible" && running) { await keepAwake(); if (!streaming()) openCamera(); } });
+document.body.addEventListener("click", () => { if (running && !streaming()) openCamera(); });
+document.getElementById("go").onclick = async () => {
+  if (!(await openCamera())) return;
+  document.getElementById("start").remove(); running = true; poseLoop(); frameLoop();
 };
 </script>
 </body></html>

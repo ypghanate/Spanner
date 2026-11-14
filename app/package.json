@@ -7,7 +7,8 @@
     "start": "expo start",
     "ios": "expo start --ios",
     "typecheck": "tsc --noEmit",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "coach-smoke": "tsx scripts/coach-smoke.ts"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",

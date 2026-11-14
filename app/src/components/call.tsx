@@ -1,5 +1,5 @@
 import React, { forwardRef, useEffect, useRef, useState } from "react";
-import { Animated, Easing, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Animated, Easing, Pressable, StyleSheet, View, ViewStyle, useWindowDimensions } from "react-native";
 import { Image } from "expo-image";
 import { CameraView } from "expo-camera";
 import { LinearGradient } from "expo-linear-gradient";
@@ -11,26 +11,13 @@ import { CallEndButton, Icon, icons, images, Txt, Waveform } from "./ui";
 /** Live rear camera with the design's tint and top / bottom scrims. */
 export const CameraBackdrop = forwardRef<
   CameraView,
-  { children?: React.ReactNode; permitted: boolean; mode?: "full" | "pip" | "hidden"; pipTop?: number }
->(function CameraBackdrop({ children, permitted, mode = "full", pipTop = 224 }, ref) {
-  // The camera stays mounted in the explainer so frames keep flowing: shrunk to a picture-in-picture or hidden.
-  if (mode !== "full") {
-    const visible = mode === "pip";
+  { children?: React.ReactNode; permitted: boolean; mode?: "full" | "hidden" }
+>(function CameraBackdrop({ children, permitted, mode = "full" }, ref) {
+  // In the 3D / 2D views the camera stays mounted (hidden) so frames keep flowing.
+  if (mode === "hidden") {
     return (
-      <View
-        pointerEvents="none"
-        style={
-          visible
-            ? { position: "absolute", right: 24, top: pipTop, width: 120, height: 160, borderRadius: radius.r12, overflow: "hidden", backgroundColor: camera.surface }
-            : { position: "absolute", right: 0, top: 0, width: 64, height: 64, opacity: 0.01 }
-        }
-      >
-        {permitted ? <CameraView ref={ref} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} mute /> : <Image source={images.pip} style={StyleSheet.absoluteFill} contentFit="cover" />}
-        {visible ? (
-          <View style={{ position: "absolute", left: 6, right: 6, bottom: 6, height: 21, borderRadius: radius.r6, backgroundColor: camera.surface, alignItems: "center", justifyContent: "center" }}>
-            <Txt weight="medium" size={9} color={camera.text}>Your camera</Txt>
-          </View>
-        ) : null}
+      <View pointerEvents="none" style={{ position: "absolute", right: 0, top: 0, width: 64, height: 64, opacity: 0.01 }}>
+        {permitted ? <CameraView ref={ref} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} mute /> : null}
       </View>
     );
   }
@@ -45,6 +32,35 @@ export const CameraBackdrop = forwardRef<
       <LinearGradient pointerEvents="none" colors={[camera.scrimStrong, camera.scrimClear]} style={styles.topScrim} />
       <LinearGradient pointerEvents="none" colors={[camera.scrimClear, camera.scrimBottom]} style={styles.bottomScrim} />
       {children}
+    </View>
+  );
+});
+
+/**
+ * The live camera in a rounded box, for the side-by-side guide ("split") and the demo's picture-in-picture ("pip").
+ * Frames keep flowing from here while the diagram view is up.
+ */
+export const CameraBox = forwardRef<CameraView, { permitted: boolean; variant: "split" | "pip"; style?: ViewStyle }>(function CameraBox(
+  { permitted, variant, style },
+  ref,
+) {
+  const split = variant === "split";
+  return (
+    <View pointerEvents="none" style={[{ borderRadius: radius.r12, overflow: "hidden", backgroundColor: camera.surface }, style]}>
+      {permitted ? (
+        <CameraView ref={ref} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} mute />
+      ) : (
+        <Image source={split ? images.liveCamera : images.pip} style={StyleSheet.absoluteFill} contentFit="cover" />
+      )}
+      {split ? (
+        <View style={styles.splitLabel}>
+          <Txt weight="medium" size={10} color={camera.text}>Your camera</Txt>
+        </View>
+      ) : (
+        <View style={styles.pipLabel}>
+          <Txt weight="medium" size={9} color={camera.text}>Your camera</Txt>
+        </View>
+      )}
     </View>
   );
 });
@@ -98,6 +114,17 @@ export function UserCard({ text }: { text: string }) {
     <View style={styles.userCard}>
       <Txt weight="medium" size={10} color={camera.accent}>YOU · EXPLAINING THE PROBLEM</Txt>
       <Txt weight="medium" size={17} color={camera.text} style={{ marginTop: 14 }}>{`“${text}”`}</Txt>
+    </View>
+  );
+}
+
+/** "WHAT I'M SEEING": what diagnosing concluded, shown once the problem is understood. */
+export function FindingCard({ title, detail }: { title: string | null; detail: string }) {
+  return (
+    <View style={styles.finding}>
+      <Txt weight="medium" size={10} color={camera.accent}>WHAT I’M SEEING</Txt>
+      {title ? <Txt weight="medium" size={24} color={camera.text} numberOfLines={2} style={{ marginTop: 9 }}>{title}</Txt> : null}
+      <Txt size={12} color={camera.text} numberOfLines={3} style={{ marginTop: title ? 8 : 9 }}>{detail}</Txt>
     </View>
   );
 }
@@ -260,6 +287,9 @@ const styles = StyleSheet.create({
   liveDot: { width: 7, height: 7, borderRadius: radius.pill },
   phaseBar: { height: 36, borderRadius: radius.r8, backgroundColor: camera.surface, justifyContent: "center", paddingHorizontal: 12 },
   userCard: { borderRadius: radius.r12, backgroundColor: camera.surface, padding: 16, paddingTop: 13 },
+  finding: { minHeight: 108, borderRadius: radius.r12, backgroundColor: camera.surface, paddingHorizontal: 16, paddingTop: 13, paddingBottom: 16 },
+  splitLabel: { position: "absolute", left: 12, top: 12, height: 24, borderRadius: radius.r6, backgroundColor: camera.surface, paddingHorizontal: 10, justifyContent: "center" },
+  pipLabel: { position: "absolute", left: 6, right: 6, bottom: 6, height: 21, borderRadius: radius.r6, backgroundColor: camera.surface, alignItems: "center", justifyContent: "center" },
   stepCard: { borderRadius: radius.r12, padding: 16, gap: 12 },
   stepHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   track: { height: 4, borderRadius: radius.r2, overflow: "hidden" },

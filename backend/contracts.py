@@ -106,6 +106,10 @@ class RepairStep(BaseModel):
     illustration_prompt: str | None = None
     illustration_url: str | None = None
     clip_url: str | None = None
+    # Set on generated plans (backend/planner.py): a 2-3 word name for the step, and how the hologram viewer
+    # animates it (one of training.scene3d.KIND_NAMES).
+    title: str | None = None
+    kind: str | None = None
 
 
 class RepairPlan(BaseModel):
@@ -117,6 +121,12 @@ class RepairPlan(BaseModel):
     safety_notes: list[str] = Field(default_factory=list)
     steps: list[RepairStep]
     sources: list[SourceRef] = Field(default_factory=list)
+    # Set when Claude generated this plan from the user's complaint (backend/planner.py).
+    generated: bool = False
+    title: str = ""                     # short name of the repair for the header, e.g. "F key switch replacement"
+    diagnosis: str = ""
+    target_key: str | None = None       # layout id of the key the repair is about (e.g. "F", "SPACE")
+    fault_signature: str = ""
 
 
 # --- brain output -----------------------------------------------------------
