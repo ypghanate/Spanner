@@ -874,12 +874,27 @@ function pickVoice() {
   voice = vs.find((v) => /Google UK English Male|Ryan|George|Daniel/.test(v.name)) || vs.find((v) => v.lang.startsWith("en-GB")) || vs.find((v) => v.lang.startsWith("en")) || vs[0];
 }
 if ("speechSynthesis" in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
-function narrate(text) {
-  if (!voiceOn || !("speechSynthesis" in window) || INSTANT) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text); if (voice) u.voice = voice; u.rate = 1.03; u.pitch = 0.92; speechSynthesis.speak(u);
+// Spanner's voice: ElevenLabs through the backend (/coach/say), the browser's voice as fallback.
+let elevenOK = false, speakingUntil = 0, sayAudio = null;
+fetch((QP.get("api") || "") + "/coach/health").then((r) => r.json()).then((d) => { elevenOK = !!d.tts; }).catch(() => {});
+function browserSay(text) {
+  if (!("speechSynthesis" in window)) return;
+  const u = new SpeechSynthesisUtterance(text); if (voice) u.voice = voice; u.rate = 1.03; u.pitch = 0.92;
+  u.onend = () => { speakingUntil = performance.now() + 400; };
+  speakingUntil = performance.now() + 60000; speechSynthesis.speak(u);
 }
-$("voice").onclick = () => { voiceOn = !voiceOn; $("voice").classList.toggle("on", voiceOn); if (voiceOn) narrate("Voice on. I'm Spanner. Say next, take it apart, or show me the socket."); else speechSynthesis.cancel(); };
+function narrate(text) {
+  if (!voiceOn || INSTANT || !text) return;
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  if (sayAudio) { sayAudio.pause(); sayAudio = null; }
+  if (!elevenOK) return browserSay(text);
+  const a = new Audio((QP.get("api") || "") + "/coach/say?text=" + encodeURIComponent(text));
+  sayAudio = a; speakingUntil = performance.now() + 60000;
+  a.onended = () => { if (sayAudio === a) { sayAudio = null; speakingUntil = performance.now() + 400; } };
+  a.onerror = () => { if (sayAudio === a) { sayAudio = null; browserSay(text); } };
+  a.play().catch(() => { if (sayAudio === a) { sayAudio = null; browserSay(text); } });
+}
+$("voice").onclick = () => { voiceOn = !voiceOn; $("voice").classList.toggle("on", voiceOn); if (voiceOn) narrate("Voice on. I'm Spanner. Say next, take it apart, or show me the socket."); else { speechSynthesis.cancel(); if (sayAudio) { sayAudio.pause(); sayAudio = null; } } };
 $("say").onclick = () => { const s = plan.steps[stepIdx]; if (!s) return; if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); } narrate(`Step ${s.index}. ${s.instruction}`); };
 
 const PART_WORDS = [[/socket/, () => `socket_${brokenKey}`], [/spring|inside the switch|open the switch/, () => `switch_${brokenKey}`], [/spare|new switch|replacement/, () => "switch_spare"],
@@ -939,7 +954,7 @@ $("mic").onclick = () => {
   micOn = !micOn; $("mic").classList.toggle("on", micOn); setListen(micOn);
   if (!micOn) { rec?.stop(); rec = null; return; }
   rec = new SR(); rec.continuous = true; rec.interimResults = false; rec.lang = "en-GB";
-  rec.onresult = (e) => { const r = e.results[e.results.length - 1]; if (r.isFinal) command(r[0].transcript); };
+  rec.onresult = (e) => { const r = e.results[e.results.length - 1]; if (r.isFinal && performance.now() > speakingUntil) command(r[0].transcript); };
   rec.onend = () => { if (micOn) try { rec.start(); } catch { /* already running */ } };
   rec.onerror = (e) => { if (e.error !== "no-speech" && e.error !== "aborted") heard("", "mic error: " + e.error); if (e.error === "not-allowed") { micOn = false; setListen(false, "MIC BLOCKED"); } };
   rec.start(); if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); } 

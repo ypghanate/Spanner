@@ -151,7 +151,26 @@ async def health():
         steps = len(_demo()["plan"]["steps"])
     except HTTPException:
         steps = 0
-    return {"model": COACH_MODEL, "procedure_steps": steps, "anthropic_key": bool(os.getenv("ANTHROPIC_API_KEY"))}
+    from .voice import tts
+
+    return {"model": COACH_MODEL, "procedure_steps": steps, "anthropic_key": bool(os.getenv("ANTHROPIC_API_KEY")),
+            "tts": tts.available()}
+
+
+@router.get("/say")
+async def say(text: str):
+    """Spanner's voice: ElevenLabs speech for `text`, streamed as MP3 and cached on disk by text."""
+    from fastapi.responses import StreamingResponse
+
+    from .voice import tts
+
+    if not tts.available():
+        raise HTTPException(503, "ElevenLabs is not configured")
+    text = text.strip()[:600]
+    if not text:
+        raise HTTPException(400, "empty text")
+    return StreamingResponse(tts.stream(text), media_type="audio/mpeg",
+                             headers={"Cache-Control": "public, max-age=86400"})
 
 
 def mount(app) -> None:
