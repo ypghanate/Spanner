@@ -926,7 +926,7 @@ function heard(text, action) {
 async function command(raw) {
   const t = raw.toLowerCase().trim(); let said = "";
   if (pickOpen) return pickByVoice(raw);
-  if (/\b(start over|choose another|another device|pick a device|main menu|go back to the (menu|start)|what do you want to fix)\b/.test(t)) { heard(raw, "back to the start"); narrate("Starting over."); setTimeout(() => { location.href = "./"; }, 700); return; }
+  if (/\b(start over|choose another|another device|pick a device|main menu|go back to the (menu|start))\b/.test(t)) { heard(raw, "back to the start"); narrate("Starting over."); setTimeout(() => { location.href = "./"; }, 700); return; }
   const say = (s) => { said = s; narrate(s); };
   if (/\b(close|hide|dismiss|go away|that's enough|never ?mind)\b/.test(t)) { closePanels(); said = "closed"; }
   else if (/calibrat|align the hologram|set (this|that) as zero|zero it/.test(t)) { calibratePose(); said = "calibrated"; }
@@ -979,17 +979,23 @@ $("mic").onclick = () => {
   let recognizing = false, lastEvent = performance.now(), lastActed = { text: "", t: 0 };
   const QUICK = /^(?:\s*(?:ok(?:ay)?|hey|spanner|please|and|now|just)[,\s]*)*(close|stop|pause|next|back|calibrate|reset|rewind|x-?ray|lights (?:on|off)|take it apart|put it back|zoom (?:in|out))\b/i;
   const words = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter((w) => w.length > 2));
-  const isEcho = (text) => {        // Spanner hearing its own voice: most of the words are in what it is saying
-    if (performance.now() > speakingUntil || !currentSpeech) return false;
+  const STOCK = /what do you want to fix|i'm spanner|i am spanner|show it to me|step by step|replacement parts or other keyboards|heads up|people often|searching live|taking it apart|putting it back|starting over/i;
+  const isEcho = (text) => {        // Spanner hearing its own voice: its stock phrases, or most of the words are in what it is saying
+    if (STOCK.test(text)) return true;
+    if (performance.now() > speakingUntil + 1500 || !currentSpeech) return false;
     const a = words(text), b = words(currentSpeech); if (!a.size) return true;
     let n = 0; for (const w of a) if (b.has(w)) n++; return n / a.size >= 0.6;
   };
   const act = (text, how) => {
     const now = performance.now();
     if (text.trim().toLowerCase() === lastActed.text && now - lastActed.t < 4000) return;   // the final of a command already run
+    if (now < speakingUntil + 1500) {                               // Spanner is talking (or just stopped): that's mostly its own voice
+      const q = text.match(QUICK);
+      if (!q || isEcho(text) || words(currentSpeech).has(q[1].toLowerCase().split(" ")[0])) return;   // ignore silently
+      text = q[0];                                                 // a clean short command from you: barge in
+    } else if (isEcho(text)) { heard(text, "ignored: that was me talking"); return; }
     lastActed = { text: text.trim().toLowerCase(), t: now };
-    if (isEcho(text)) { heard(text, "ignored: that was me talking"); return; }
-    if (now < speakingUntil) stopSpeaking();                      // barge-in: you talk, Spanner stops
+    if (now < speakingUntil) stopSpeaking();
     setListen(true, "LISTENING · " + text.trim().slice(0, 40)); command(text);
   };
   rec.onstart = () => { recognizing = true; lastEvent = performance.now(); };

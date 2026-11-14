@@ -267,7 +267,7 @@ async function explodeAndFrame(v) { await setExplode(v); await frameAll(); }
 async function command(raw) {
   const t = raw.toLowerCase().trim(); let said = "";
   const say = (s) => { said = s; narrate(s); };
-  if (/\b(keyboard|rk ?61|go back|start over|choose another|another device|pick a device|main menu|what do you want to fix)\b/.test(t)) { heard(raw, "back to the device choice"); location.href = "./"; return; }
+  if (/\b(keyboard|rk ?61|go back|start over|choose another|another device|pick a device|main menu)\b/.test(t)) { heard(raw, "back to the device choice"); location.href = "./"; return; }
   if (/iphone/.test(t) && d !== "iphone15") { location.href = "./device.html?d=iphone15"; return; }
   if (/ipad|tablet/.test(t) && d !== "ipad11") { location.href = "./device.html?d=ipad11"; return; }
   if (/headphone|momentum|sennheiser/.test(t) && d !== "momentum4") { location.href = "./device.html?d=momentum4"; return; }
@@ -306,7 +306,12 @@ function startMic() {
   const QUICK = /^(?:\s*(?:ok(?:ay)?|hey|spanner|please|and|now|just)[,\s]*)*(close|stop|reset|x-?ray|take it apart|put it back|zoom (?:in|out)|keyboard|go back)\b/i;
   const words = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter((w) => w.length > 2));
   const isEcho = (text) => { if (performance.now() > speakingUntil || !currentSpeech) return false; const a = words(text), b = words(currentSpeech); if (!a.size) return true; let n = 0; for (const w of a) if (b.has(w)) n++; return n / a.size >= 0.6; };
-  const act = (text) => { const now = performance.now(); if (text.trim().toLowerCase() === lastActed.text && now - lastActed.t < 4000) return; lastActed = { text: text.trim().toLowerCase(), t: now }; if (isEcho(text)) { heard(text, "ignored: that was me talking"); return; } if (now < speakingUntil) stopSpeaking(); $("listen").textContent = "LISTENING · " + text.trim().slice(0, 40); command(text); };
+  const STOCK = /what do you want to fix|say take it apart|taking it apart|putting it back|x-ray on|x-ray off|starting over|opening the/i;
+  const act = (text) => {
+    const now = performance.now(); if (text.trim().toLowerCase() === lastActed.text && now - lastActed.t < 4000) return;
+    if (now < speakingUntil + 1500) { const q = text.match(QUICK); if (!q || STOCK.test(text) || isEcho(text) || words(currentSpeech).has(q[1].toLowerCase().split(" ")[0])) return; text = q[0]; }
+    else if (STOCK.test(text) || isEcho(text)) { heard(text, "ignored: that was me talking"); return; }
+    lastActed = { text: text.trim().toLowerCase(), t: now }; if (now < speakingUntil) stopSpeaking(); $("listen").textContent = "LISTENING · " + text.trim().slice(0, 40); command(text); };
   rec.onstart = () => { recognizing = true; lastEvent = performance.now(); };
   rec.onresult = (e) => { lastEvent = performance.now(); const r = e.results[e.results.length - 1], text = r[0].transcript; if (r.isFinal) act(text); else if (QUICK.test(text)) act(text.match(QUICK)[0]); };
   rec.onend = () => { recognizing = false; if (micOn) setTimeout(() => { try { rec.start(); } catch {} }, 250); };
