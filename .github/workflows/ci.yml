@@ -1,0 +1,33 @@
+# Runs on every push and pull request: keeps main working while 4 people merge all night.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      # pyproject.toml and uv.lock must agree, or `uv sync` breaks on teammates' laptops
+      - name: Lockfile is up to date
+        run: uv lock --check
+
+      # Light install on purpose: the tests don't need YOLO/torch (~2 GB)
+      - name: Install test dependencies
+        run: |
+          uv venv
+          uv pip install pytest pydantic anthropic python-dotenv httpx numpy opencv-python-headless
+
+      - name: Every Python file compiles
+        run: uv run --no-sync python -m compileall -q backend training databricks
+
+      - name: Tests (offline, no API keys; tests marked `live` are skipped)
+        run: uv run --no-sync pytest -q
