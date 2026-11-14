@@ -5,7 +5,7 @@ the sample questions. In the pitch, a judge types a question and Genie answers f
 
 ## Tables
 `spanner.training.gold_procedure_steps`, `gold_live_mistakes`, `gold_label_quality`, `gold_kb_coverage`,
-`gold_part_prices`, `gold_eval_scoreboard`, `bronze_part_cards`, `bronze_sources`
+`gold_part_prices`, `gold_eval_scoreboard`, `gold_stage_latency`, `bronze_part_cards`, `bronze_sources`
 
 ## Instructions (paste into the space)
 Spanner is an AI repair assistant. `gold_procedure_steps` is its knowledge base: one row per repair step;
@@ -16,6 +16,7 @@ offers found by the Linkup agent; `verified` means the fit was confirmed for the
 independent sites. `bronze_part_cards.verdict` is the repair-or-replace decision; `savings` and
 `ewaste_kg_avoided` are its impact. `gold_eval_scoreboard` compares the Adaption fine-tuned step tracker
 (`backend = adaption`) with Claude (`backend = claude`). Ignore rows where `is_mock` is true.
+`gold_stage_latency` contains p50/p90 milliseconds, sample counts and failures for every live stage.
 
 ## Sample questions
 - Which repair step do users get wrong most often, and what's the mistake?
@@ -23,3 +24,25 @@ independent sites. `bronze_part_cards.verdict` is the repair-or-replace decision
 - How does the Adaption step tracker compare with Claude on accuracy and latency?
 - Which replacement offers are verified, and what's the cheapest one for each part?
 - How many knowledge-base steps came from videos, web guides and manuals?
+- Which pipeline stage is slowest, and what is its p90 latency?
+
+## Deploy
+
+The bundle includes the AI/BI dashboard definition at
+`databricks/dashboards/spanner_training.lvdash.json`:
+
+```bash
+cd databricks
+databricks bundle deploy --var="warehouse_id=<SQL_WAREHOUSE_ID>"
+databricks bundle run training_refresh
+```
+
+For the demo learning moment, seed two distinct witnessed sessions before refreshing the
+pipeline, then run the third session:
+
+```bash
+uv run python scripts/seed_learning_demo.py
+cd databricks && databricks bundle run training_refresh
+```
+
+The third session starts with: “Users often put the switch in rotated.”

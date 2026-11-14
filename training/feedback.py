@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,6 +36,28 @@ def record_live_mistake(session_id: str, repair_id: str, step_index: int, mistak
     if os.getenv("DATABRICKS_HOST"):
         threading.Thread(target=_insert, args=(row,), daemon=True).start()  # never blocks the live loop
     return row
+
+
+def learned_mistake_for(repair_id: str, step_index: int | None = None) -> str | None:
+    """Return a mistake seen in at least two distinct sessions for this repair."""
+    if not LIVE.exists():
+        return None
+    sessions: dict[tuple[int, str], set[str]] = defaultdict(set)
+    for line in LIVE.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if row.get("repair_id") != repair_id:
+            continue
+        if step_index is not None and int(row.get("step_index", -1)) != step_index:
+            continue
+        mistake = str(row.get("mistake", "")).strip().lower()
+        if mistake:
+            sessions[(int(row.get("step_index", -1)), mistake)].add(str(row.get("session_id", "")))
+    for (_, mistake), session_ids in sessions.items():
+        if len(session_ids) >= 2:
+            return mistake
+    return None
 
 
 def _insert(row: dict) -> None:

@@ -23,6 +23,11 @@ FROM spanner.training.bronze_part_cards WHERE verdict = 'repair' AND NOT is_mock
 SELECT metric, round(value, 3) AS value, n FROM spanner.training.gold_eval_scoreboard
 WHERE eval_name = 'parts_agent' ORDER BY metric;
 
+-- 14. Live pipeline latency by stage
+SELECT stage, p50_ms, p90_ms, samples, failures
+FROM spanner.training.gold_stage_latency
+ORDER BY p50_ms DESC;
+
 -- 1. Knowledge base at a glance: procedures and steps by source type
 SELECT source_kind, procedures, steps FROM spanner.training.gold_kb_coverage;
 

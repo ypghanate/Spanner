@@ -36,6 +36,7 @@ TABLE_KEYS = {
     "bronze_manual_facts": "card_id",
     "bronze_live_mistakes": "session_id",
     "bronze_eval_results": "run_id",
+    "bronze_stage_timings": "timing_id",
 }
 
 
@@ -131,6 +132,12 @@ def collect(cfg: dict) -> dict[str, list[dict]]:
         for line in live.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 rows["bronze_live_mistakes"].append({**json.loads(line), "ingested_at": now})
+
+    timings = DATA / "live" / "stage_timings.jsonl"
+    if timings.exists():
+        for line in timings.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                rows["bronze_stage_timings"].append({**json.loads(line), "ingested_at": now})
 
     for p in sorted((DATA / "eval").glob("*.json")):  # one row per metric (long format, easy to chart)
         r = json.loads(p.read_text(encoding="utf-8"))

@@ -93,6 +93,17 @@ AS SELECT eval_name, backend, metric, max_by(value, created_at) AS value, max_by
 FROM ${catalog}.${schema}.bronze_eval_results
 GROUP BY eval_name, backend, metric;
 
+-- GOLD: live pipeline latency by stage (for the dashboard)
+CREATE OR REFRESH MATERIALIZED VIEW gold_stage_latency
+COMMENT 'P50, P90 and sample count for each live pipeline stage'
+AS SELECT stage,
+  round(percentile_approx(ms, 0.50), 1) AS p50_ms,
+  round(percentile_approx(ms, 0.90), 1) AS p90_ms,
+  count(*) AS samples,
+  sum(CASE WHEN ok THEN 0 ELSE 1 END) AS failures
+FROM ${catalog}.${schema}.bronze_stage_timings
+GROUP BY stage;
+
 -- GOLD: label quality per video (for the dashboard)
 CREATE OR REFRESH MATERIALIZED VIEW gold_label_quality
 COMMENT 'How good the teacher labels are, per video'

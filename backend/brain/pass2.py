@@ -44,6 +44,12 @@ def _plan() -> RepairPlan:
     return plan
 
 
+def _learned_warning() -> str | None:
+    from training.feedback import learned_mistake_for
+
+    return learned_mistake_for(_cfg()["repair_id"])
+
+
 def _start_parts_job(session: Any) -> None:
     if session.brain_state.get("parts_job"):
         return
@@ -108,8 +114,10 @@ async def respond(report: SituationReport, session: Any) -> BrainResponse:
     if session.plan is None or session.phase in ("identifying", "diagnosing", "researching", "safety_stop"):
         if intent == "start" or _object_in_view(report, session):
             _start_parts_job(session)
+            learned = _learned_warning()
+            warning = f"Users often {learned}. " if learned else ""
             return _guide(plan, 0, attach_plan=True,
-                          say=f"I see the keyboard. {len(plan.steps)} steps, about {plan.time_min} minutes. "
+                          say=f"{warning}I see the keyboard. {len(plan.steps)} steps, about {plan.time_min} minutes. "
                               f"Step 1: {plan.steps[0].instruction}")
         return BrainResponse(phase="identifying", say="" if intent == "none" else "Show me the keyboard.")
 

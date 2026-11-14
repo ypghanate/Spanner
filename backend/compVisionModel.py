@@ -1,9 +1,11 @@
 from collections import defaultdict
+from pathlib import Path
+
 import cv2
 from ultralytics import YOLO
 
 # 1. LOAD MODEL
-model = YOLO('yolov8n.pt')
+model = YOLO(Path(__file__).with_name('yolov8n.pt'))
 
 # Store tracking history to calculate movement direction
 track_history = defaultdict(lambda: [])

@@ -31,7 +31,7 @@ from backend.contracts import RepairPlan, RepairStep, SceneObservation, SourceRe
 from backend.parts_agent import TOOL as PARTS_TOOL
 from backend.parts_agent import card_view, get_card as get_parts_card
 from backend.parts_agent import handle_tool as handle_parts_tool
-from training.feedback import record_live_mistake
+from training.feedback import learned_mistake_for, record_live_mistake
 from training.kb import search_steps
 from training.step_tracker import describe_observation, step_check
 
@@ -62,10 +62,15 @@ def plan_from_knowledge(repair_id: str | None = None) -> RepairPlan | None:
     rec = json.loads(path.read_text(encoding="utf-8"))
     proc = rec["procedure"]
     sources = [to_source_ref(s) for s in rec.get("sources", []) if s.get("url")]
-    steps = [RepairStep(index=s["index"], instruction=s["instruction"], parts=s["parts"],
-                        expected_visual_state=s["expected_visual_state"], common_mistakes=s["common_mistakes"],
-                        sources=sources[:3])
-             for s in proc["steps"]]
+    steps = []
+    for s in proc["steps"]:
+        learned = learned_mistake_for(repair_id, s["index"])
+        mistakes = list(s["common_mistakes"])
+        if learned and learned not in mistakes:
+            mistakes.append(learned)
+        steps.append(RepairStep(index=s["index"], instruction=s["instruction"], parts=s["parts"],
+                                expected_visual_state=s["expected_visual_state"],
+                                common_mistakes=mistakes, sources=sources[:3]))
     minutes = sum(max(0.0, s["end_s"] - s["start_s"]) for s in proc["steps"]) / 60
     safety = sorted({n for s in proc["steps"] for n in s["safety_notes"]})
     return RepairPlan(object=proc["object"], fault=proc["fault"], difficulty="easy",

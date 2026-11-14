@@ -48,6 +48,11 @@ CREATE TABLE IF NOT EXISTS {catalog}.{schema}.bronze_eval_results (
   n INT, created_at STRING, ingested_at TIMESTAMP
 ) COMMENT 'Evaluation runs: Adaption step tracker vs Claude, Linkup parts-agent citation coverage';
 
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.bronze_stage_timings (
+  timing_id STRING NOT NULL, session_id STRING, ts DOUBLE, stage STRING,
+  ms DOUBLE, ok BOOLEAN, ingested_at TIMESTAMP
+) COMMENT 'Per-stage latency measured by the live repair loop';
+
 CREATE TABLE IF NOT EXISTS {catalog}.{schema}.bronze_part_offers (
   card_id STRING NOT NULL, part_name STRING, part_number STRING, retailer STRING,
   price DOUBLE, currency STRING, in_stock STRING, url STRING,

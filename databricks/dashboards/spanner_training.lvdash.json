@@ -1,0 +1,108 @@
+{
+  "datasets": [
+    {
+      "name": "mistakes",
+      "displayName": "Mistakes per step",
+      "query": "SELECT step_index, mistake, sessions, times_seen, last_seen, sessions >= 2 AS learned FROM spanner.training.gold_live_mistakes ORDER BY sessions DESC, times_seen DESC"
+    },
+    {
+      "name": "eval",
+      "displayName": "Adaption vs Haiku",
+      "query": "SELECT backend, metric, value, n FROM spanner.training.gold_eval_scoreboard WHERE eval_name = 'step_tracker' AND metric IN ('accuracy', 'mistake_recall', 'latency_p50_ms') ORDER BY metric, backend"
+    },
+    {
+      "name": "latency",
+      "displayName": "Latency per stage",
+      "query": "SELECT stage, p50_ms, p90_ms, samples, failures FROM spanner.training.gold_stage_latency ORDER BY p50_ms DESC"
+    },
+    {
+      "name": "impact",
+      "displayName": "Money and e-waste saved",
+      "query": "SELECT count(*) AS repairs_recommended, round(sum(savings), 2) AS money_saved, round(sum(ewaste_kg_avoided), 2) AS ewaste_kg_avoided, first(currency) AS currency FROM spanner.training.bronze_part_cards WHERE verdict = 'repair' AND NOT is_mock"
+    }
+  ],
+  "pages": [
+    {
+      "name": "spanner01",
+      "displayName": "Repair intelligence",
+      "layout": [
+        {
+          "widget": {
+            "name": "impact_text",
+            "textbox_spec": "# Spanner repair intelligence\n\nLive learning loop, model comparison, pipeline latency and repair impact."
+          },
+          "position": {"x": 0, "y": 0, "width": 12, "height": 1}
+        },
+        {
+          "widget": {
+            "name": "mistake_table",
+            "queries": [{"name": "main", "query": {"datasetName": "mistakes", "fields": [
+              {"name": "step_index", "expression": "`step_index`"},
+              {"name": "mistake", "expression": "`mistake`"},
+              {"name": "sessions", "expression": "`sessions`"},
+              {"name": "learned", "expression": "`learned`"}
+            ], "disaggregated": true}}],
+            "spec": {"version": 3, "widgetType": "table", "encodings": {
+              "columns": [
+                {"fieldName": "step_index", "displayName": "Step"},
+                {"fieldName": "mistake", "displayName": "Mistake"},
+                {"fieldName": "sessions", "displayName": "Sessions"},
+                {"fieldName": "learned", "displayName": "In knowledge base"}
+              ]
+            }}
+          },
+          "position": {"x": 0, "y": 1, "width": 6, "height": 5}
+        },
+        {
+          "widget": {
+            "name": "eval_chart",
+            "queries": [{"name": "main", "query": {"datasetName": "eval", "fields": [
+              {"name": "backend", "expression": "`backend`"},
+              {"name": "metric", "expression": "`metric`"},
+              {"name": "value", "expression": "`value`"}
+            ], "disaggregated": true}}],
+            "spec": {"version": 3, "widgetType": "bar", "encodings": {
+              "x": {"fieldName": "metric", "scale": {"type": "categorical"}, "displayName": "Metric"},
+              "y": {"fieldName": "value", "scale": {"type": "quantitative"}, "displayName": "Value"},
+              "color": {"fieldName": "backend", "scale": {"type": "categorical"}, "displayName": "Backend"}
+            }}
+          },
+          "position": {"x": 6, "y": 1, "width": 6, "height": 5}
+        },
+        {
+          "widget": {
+            "name": "latency_chart",
+            "queries": [{"name": "main", "query": {"datasetName": "latency", "fields": [
+              {"name": "stage", "expression": "`stage`"},
+              {"name": "p50_ms", "expression": "`p50_ms`"},
+              {"name": "p90_ms", "expression": "`p90_ms`"}
+            ], "disaggregated": true}}],
+            "spec": {"version": 3, "widgetType": "bar", "encodings": {
+              "x": {"fieldName": "stage", "scale": {"type": "categorical"}, "displayName": "Stage"},
+              "y": {"fieldName": "p50_ms", "scale": {"type": "quantitative"}, "displayName": "P50 ms"}
+            }}
+          },
+          "position": {"x": 0, "y": 6, "width": 8, "height": 5}
+        },
+        {
+          "widget": {
+            "name": "impact_table",
+            "queries": [{"name": "main", "query": {"datasetName": "impact", "fields": [
+              {"name": "repairs_recommended", "expression": "`repairs_recommended`"},
+              {"name": "money_saved", "expression": "`money_saved`"},
+              {"name": "ewaste_kg_avoided", "expression": "`ewaste_kg_avoided`"}
+            ], "disaggregated": false}}],
+            "spec": {"version": 3, "widgetType": "table", "encodings": {
+              "columns": [
+                {"fieldName": "repairs_recommended", "displayName": "Repairs"},
+                {"fieldName": "money_saved", "displayName": "Money saved"},
+                {"fieldName": "ewaste_kg_avoided", "displayName": "E-waste avoided (kg)"}
+              ]
+            }}
+          },
+          "position": {"x": 8, "y": 6, "width": 4, "height": 5}
+        }
+      ]
+    }
+  ]
+}

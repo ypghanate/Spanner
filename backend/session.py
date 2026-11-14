@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Coroutine
 
 from .contracts import (
@@ -15,6 +17,8 @@ from .contracts import (
 )
 
 log = logging.getLogger(__name__)
+ROOT = Path(__file__).resolve().parents[1]
+LIVE = ROOT / "data" / "live"
 
 SlowHandler = Callable[["Session", Any], Awaitable[None]]
 
@@ -131,7 +135,13 @@ class Session:
     # -- timings --------------------------------------------------------------
 
     def record_timing(self, stage: str, ms: float, ok: bool) -> None:
-        self.timings.append({"ts": time.time(), "stage": stage, "ms": round(ms, 1), "ok": ok})
+        ts = time.time()
+        timing = {"ts": ts, "stage": stage, "ms": round(ms, 1), "ok": ok}
+        self.timings.append(timing)
+        LIVE.mkdir(parents=True, exist_ok=True)
+        with (LIVE / "stage_timings.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"timing_id": f"{self.id}:{time.time_ns()}",
+                                "session_id": self.id, **timing}) + "\n")
 
     # -- background tasks -----------------------------------------------------
 

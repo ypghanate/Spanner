@@ -14,6 +14,9 @@ variables:
   vs_endpoint:
     description: Vector Search endpoint (Free Edition allows one; an existing one is reused)
     default: spanner-vs
+  warehouse_id:
+    description: SQL warehouse used by the AI/BI dashboard
+    default: ""
 
 resources:
   pipelines:
@@ -49,6 +52,14 @@ resources:
             client: "2"
             dependencies:
               - databricks-vectorsearch
+
+  dashboards:
+    spanner_training:
+      display_name: Spanner repair intelligence
+      file_path: ./dashboards/spanner_training.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.catalog}
+      dataset_schema: ${var.schema}
 
 targets:
   dev:
