@@ -1,0 +1,207 @@
+{
+ "card_id": "5c0176542c94",
+ "identity": {
+  "brand": "Royal",
+  "model": "Kludge RK61",
+  "model_number": "",
+  "year_or_revision": "",
+  "category": "",
+  "evidence": "typed: Royal Kludge RK61",
+  "confidence": 1.0
+ },
+ "part_needed": "mechanical switch (MX-compatible, 3-pin or 5-pin)",
+ "fault": "one key no longer registers or double-types because its mechanical switch has failed; replace the switch",
+ "options": [
+  {
+   "offer": {
+    "part_name": "Hot-Swappable Switches For RK Royal Kludge RK61 Mechanical Gaming Keyboard /New",
+    "part_number": "",
+    "retailer": "eBay",
+    "price": 5.97,
+    "currency": "USD",
+    "in_stock": "unknown",
+    "url": "https://www.ebay.com/itm/236381945101",
+    "compatible_models_listed": [
+     "Royal Kludge RK61"
+    ]
+   },
+   "verdict": {
+    "fits": "yes",
+    "reason": "The eBay listing explicitly names the Royal Kludge RK61 as its compatible model, and RK's own store and RTINGS say the hot-swappable RK61 accepts 3-pin or 5-pin mechanical switches, though some older RK61 versions have soldered switches that cannot be swapped this way.",
+    "supporting_urls": [
+     "https://www.ebay.com/itm/236381945101",
+     "https://rkgamingstore.com/products/rk61-60-color-block-edition",
+     "https://www.rtings.com/keyboard/reviews/royal-kludge/rk61"
+    ]
+   },
+   "verified": true,
+   "independent_sources": 3
+  },
+  {
+   "offer": {
+    "part_name": "1 Set Linear Switches 67g 3 Pins Shaft Switch for GH60 RK61 GK61 GK64 Keypads",
+    "part_number": "",
+    "retailer": "eBay UK",
+    "price": 0.0,
+    "currency": "GBP",
+    "in_stock": "unknown",
+    "url": "https://www.ebay.co.uk/itm/394448699773",
+    "compatible_models_listed": [
+     "GH60",
+     "RK61",
+     "GK61",
+     "GK64 Keypads"
+    ]
+   },
+   "verdict": {
+    "fits": "yes",
+    "reason": "The eBay listing explicitly names RK61 as a compatible model for these 3-pin linear switches, and Royal Kludge's product page and other sources state the RK61 is hot-swappable and accepts any compatible 3-pin or 5-pin mechanical switch.",
+    "supporting_urls": [
+     "https://www.ebay.co.uk/itm/394448699773",
+     "https://rkgamingstore.com/products/rk61-60-color-block-edition",
+     "https://www.lolvvv.com/review/royal-kludge-rk61",
+     "https://manuals.plus/video/8e4c6366ff391c362c6a3943fd19f4c580967dcc5cc1096fc3b0648f096abe5a",
+     "https://galido.net/techdeals/rk-royal-kludge-rk61-wired-60-mechanical-gaming-keyboard/"
+    ]
+   },
+   "verified": true,
+   "independent_sources": 5
+  },
+  {
+   "offer": {
+    "part_name": "Cherry MX Blue Switches (sold in sets of 10)",
+    "part_number": "achersw0115316",
+    "retailer": "Mechboards UK",
+    "price": 0.0,
+    "currency": "GBP",
+    "in_stock": "unknown",
+    "url": "https://mechboards.co.uk/products/cherry-mx-blue",
+    "compatible_models_listed": []
+   },
+   "verdict": {
+    "fits": "yes",
+    "reason": "Mechboards lists the Cherry MX Blue as a standard plate-mount 3-pin MX switch, and RK sources say the hot-swappable RK61 accepts any compatible 3-pin or 5-pin mechanical switch (older non-hot-swap RK61 units may differ).",
+    "supporting_urls": [
+     "https://mechboards.co.uk/products/cherry-mx-blue",
+     "https://rkgamingstore.com/products/rk61-60-color-block-edition",
+     "https://galido.net/techdeals/rk-royal-kludge-rk61-wired-60-mechanical-gaming-keyboard/"
+    ]
+   },
+   "verified": true,
+   "independent_sources": 3
+  }
+ ],
+ "decision": {
+  "verdict": "repair",
+  "repair_cost": 4.51,
+  "new_price": 39.0,
+  "currency": "GBP",
+  "savings": 34.49,
+  "ewaste_kg_avoided": 0.5,
+  "reason": "The part costs 4.51 vs 39.00 for a new one (12% of the price).",
+  "sources": [
+   "https://www.ebay.com/itm/236381945101",
+   "https://www.ebay.com/itm/314606736369"
+  ]
+ },
+ "recall": {
+  "status": "none_found",
+  "summary": "None of the provided sources names a recall or official safety notice for the Royal Kludge RK61; one Reddit user reports their RK61 caught fire, but that is an individual anecdote, not a recall.",
+  "urls": [
+   "https://www.reddit.com/r/MechanicalKeyboards/comments/1o14ado/royal_kludge_safety_psa/"
+  ]
+ },
+ "manual_url": "",
+ "manual": null,
+ "tutorials": [
+  {
+   "title": "Royal Kludge RK61 with Matcha Green Switches | Budget doesn't equal bad - YouTube",
+   "url": "https://www.youtube.com/watch?v=9vJODP6_s1g",
+   "chapter": "",
+   "start_s": 0
+  },
+  {
+   "title": "ROYAL KLUDGE RK61 MOD - 60% Mechanical Keyboard Red Switches RGB | Modifying | Typing Sounds - YouTube",
+   "url": "https://www.youtube.com/watch?v=7OYqa5fSISA",
+   "chapter": "",
+   "start_s": 0
+  },
+  {
+   "title": "Royal Kludge Rk61 Tear Down - Disassembly and Desoldering - YouTube",
+   "url": "https://www.youtube.com/watch?v=VJQ4lg8x0b4",
+   "chapter": "",
+   "start_s": 0
+  }
+ ],
+ "sources": [
+  "https://aliexpress.com/item/32980039972.html",
+  "https://catalog.asbis.com/product/rk-61-wh-brnsw-us",
+  "https://ecommerce.datablitz.com.ph/products/royal-kludge-rk61-tri-mode-rgb-61-keys-hot-swappable-mechanical-keyboard-black-red-switch",
+  "https://forums.overclockers.co.uk/threads/60-mechanical-keyboard.18859992/",
+  "https://forums.overclockers.co.uk/threads/cheapish-portable-ish-mechanical-keyboard.18985699/",
+  "https://g2g.news/gaming/royal-kludge-rk61-and-rk71-best-customizable-gaming-keyboards-under-rs-6000-available-in-india/",
+  "https://galido.net/techdeals/rk-royal-kludge-rk61-wired-60-mechanical-gaming-keyboard/",
+  "https://he.aliexpress.com/w/wholesale-royal-kludge-rk61-red-switches.html",
+  "https://hirosarts.com/blog/gateron-yellow-vs-red-comparison/",
+  "https://keeb-finder.com/switches/gateron-red",
+  "https://keybumps.com/switches/gateron-smd-red.html",
+  "https://lamerenville.com/517807/RK-ROYAL-KLUDGE-RK61-Mechaniczna-Klawiatura-Gaming-60",
+  "https://manuals.plus/video/8e4c6366ff391c362c6a3943fd19f4c580967dcc5cc1096fc3b0648f096abe5a",
+  "https://mechanicalkeyboards.com/products/gateron-milky-red-45g-linear-switch",
+  "https://mechanicalkeyboards.com/products/gateron-milky-yellow-50g-linear",
+  "https://mechanicalkeyboards.com/shop/index.php?l=product_list&m=84",
+  "https://mechboards.co.uk/products/cherry-mx-blue",
+  "https://mechboards.co.uk/products/kailh-box-white",
+  "https://mechboards.co.uk/products/rk-gaming-rk61-1",
+  "https://rkgamingstore.com/blogs/community/mechanical-keyboard-switches-explained",
+  "https://rkgamingstore.com/collections/kailh-switches",
+  "https://rkgamingstore.com/collections/rk-keyboard",
+  "https://rkgamingstore.com/pages/faqs-rk?shpxid=a32ccca4-11a5-4c01-9d1a-81bad8a80eaa",
+  "https://rkgamingstore.com/pages/keyboard-buying-guide",
+  "https://rkgamingstore.com/products/rk-x-ltc-kailh-canary-switches",
+  "https://rkgamingstore.com/products/rk61-60-color-block-edition",
+  "https://rkgamingstore.com/products/rk61-60-percent-keyboard",
+  "https://rkgamingstore.com/products/s98-de-96-qwertz-kabellose-mechanische-tastatur",
+  "https://technicskeyboard.com/how-to-fix-the-rk61-keyboard/",
+  "https://www.aliexpress.com/i/4001132794821.html",
+  "https://www.aliexpress.com/s/wiki-ssr/article/https//www.aliexpress.com/s/wiki-ssr/article/3-pin-and-5-pin-switch",
+  "https://www.aliexpress.us/item/3256806403480285.html?gatewayAdapt=glo2usa4itemAdapt",
+  "https://www.amazon.co.uk/CHERRY-RGB-BROWN-SWITCH-KIT/dp/B0CBS5M29R",
+  "https://www.amazon.co.uk/CHERRY-RGB-RED-SWITCH-KIT/dp/B0CBS4HJJR",
+  "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-Mechanical-Swappable/dp/B0H25SN2BJ",
+  "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-Mechanical-Ultra-Compact-Black/dp/B0832LSV8N",
+  "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-Ultra-Compact-Multi-Device-Orange-Backlit-Brown-Switch/dp/B08613PF77",
+  "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-Wireless-Mechanical/dp/B0GQH2KNLB",
+  "https://www.amazon.co.uk/Wireless-Bluetooth-Multi-Device-Mechanical-Rechargeable/dp/B0731CJ4ZJ",
+  "https://www.amazon.co.uk/royal-kludge-rk61/s?k=royal+kludge+rk61",
+  "https://www.amazon.com/Gateron-Yellow-Switches-Mechanical-Keyboard/dp/B09P51LHB1",
+  "https://www.amazon.com/RK-ROYAL-KLUDGE-Ultra-Compact-Multi-Device/dp/B08613PF77",
+  "https://www.amazon.com/ask/questions/asin/B07P832XSX",
+  "https://www.autoecole44.com/KLUDGE-RK61-60-Wired-Mechanical-Keyboard-Hot-Swappable-Red/313889",
+  "https://www.autoecole44.com/Mechanical-Gaming-Keyboard-Bluetooth-Hot-Swappable-Blue/245978",
+  "https://www.autoecole44.com/Mechanical-Keyboard-Bluetooth-2-4G-USB-RGB-Hot-Swappable/1236004",
+  "https://www.ebay.co.uk/itm/394448699773",
+  "https://www.ebay.co.uk/shop/royal-kludge-rk61?_nkw=royal+kludge+rk61",
+  "https://www.ebay.com/itm/128017261745",
+  "https://www.ebay.com/itm/146963200322",
+  "https://www.ebay.com/itm/236381945101",
+  "https://www.ebay.com/itm/314606736369",
+  "https://www.enostech.com/royal-kludge-rk61-60-wireless-keyboard-review/",
+  "https://www.homegearskh.com/product-page/royal-kludge-rk61",
+  "https://www.lolvvv.com/review/royal-kludge-rk61",
+  "https://www.manuals.ca/royal-kludge/rk61/manual",
+  "https://www.newegg.com/p/173-08AZ-00010",
+  "https://www.onecomputerguy.com/royal-kludge-rk61-review/",
+  "https://www.reddit.com/r/MechanicalKeyboards/comments/1o14ado/royal_kludge_safety_psa/",
+  "https://www.reddit.com/r/MechanicalKeyboards/comments/ktttff/rk61_switches/",
+  "https://www.reddit.com/r/MechanicalKeyboards/comments/l0fh9d/where_to_buy_switch_replacement_for_rk61/",
+  "https://www.reddit.com/r/MechanicalKeyboards/comments/p708pr/royal_kludge_rk61/",
+  "https://www.rockpapershotgun.com/this-hot-swap-mechanical-keyboard-is-3999-at-amazon-today",
+  "https://www.rtings.com/keyboard/reviews/royal-kludge/rk61",
+  "https://www.youtube.com/watch?v=7OYqa5fSISA",
+  "https://www.youtube.com/watch?v=9vJODP6_s1g",
+  "https://www.youtube.com/watch?v=VJQ4lg8x0b4"
+ ],
+ "searched_at": "2026-11-14T18:28:40.694786+00:00",
+ "mock": false
+}

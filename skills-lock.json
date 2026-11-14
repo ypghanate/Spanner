@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "skills": {
+    "linkup-extract": {
+      "source": "LinkupPlatform/skills",
+      "sourceType": "github",
+      "skillPath": "skills/linkup-extract/SKILL.md",
+      "computedHash": "9de6f4d4357e1484d059aeac399dfd7fdb0973e2db905661ef1f33df57cb5fc9"
+    },
+    "linkup-fetch": {
+      "source": "LinkupPlatform/skills",
+      "sourceType": "github",
+      "skillPath": "skills/linkup-fetch/SKILL.md",
+      "computedHash": "6c19280a9cdad8357ce8b1c38a75498d39cce451d1768974a683d738a104ba2e"
+    },
+    "linkup-research": {
+      "source": "LinkupPlatform/skills",
+      "sourceType": "github",
+      "skillPath": "skills/linkup-research/SKILL.md",
+      "computedHash": "f2131881346ef551a1ab0afefc972cf3b9d3ef3ca73d583eb85e6679750ad091"
+    },
+    "linkup-search": {
+      "source": "LinkupPlatform/skills",
+      "sourceType": "github",
+      "skillPath": "skills/linkup-search/SKILL.md",
+      "computedHash": "c0f5e967ad4049a26b41e819766e7185a3344dfa8c61a259952d7f47a4187e31"
+    },
+    "linkup-workflow": {
+      "source": "LinkupPlatform/skills",
+      "sourceType": "github",
+      "skillPath": "skills/linkup-workflow/SKILL.md",
+      "computedHash": "7c47282e2e48f3a6fb03e57825a0f75f7f89ff87032b3e4d13a02d0d71df9c01"
+    }
+  }
+}

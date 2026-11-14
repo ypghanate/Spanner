@@ -1,0 +1,67 @@
+# Databricks Asset Bundle for Spanner's training data.
+#   cd databricks
+#   databricks bundle deploy            # creates the pipeline + job in your workspace
+#   databricks bundle run training_refresh   # quality pipeline, then knowledge-base index
+bundle:
+  name: spanner-training
+
+variables:
+  catalog:
+    description: Unity Catalog catalog (on Free Edition use an existing one, e.g. workspace)
+    default: spanner
+  schema:
+    default: training
+  vs_endpoint:
+    description: Vector Search endpoint (Free Edition allows one; an existing one is reused)
+    default: spanner-vs
+  warehouse_id:
+    description: SQL warehouse used by the AI/BI dashboard
+    default: ""
+
+resources:
+  pipelines:
+    training_quality:
+      name: spanner-training-quality
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      serverless: true
+      configuration:
+        catalog: ${var.catalog}
+        schema: ${var.schema}
+      libraries:
+        - file:
+            path: ./pipelines/training_quality.sql
+
+  jobs:
+    training_refresh:
+      name: spanner-training-refresh
+      tasks:
+        - task_key: quality_pipeline
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.training_quality.id}
+        - task_key: knowledge_base_index
+          depends_on:
+            - task_key: quality_pipeline
+          environment_key: default
+          spark_python_task:
+            python_file: ./src/build_index.py
+            parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}", "--endpoint", "${var.vs_endpoint}"]
+      environments:
+        - environment_key: default
+          spec:
+            client: "2"
+            dependencies:
+              - databricks-vectorsearch
+
+  dashboards:
+    spanner_training:
+      display_name: Spanner repair intelligence
+      file_path: ./dashboards/spanner_training.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.catalog}
+      dataset_schema: ${var.schema}
+
+targets:
+  dev:
+    default: true
+    mode: development

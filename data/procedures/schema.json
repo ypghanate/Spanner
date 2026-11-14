@@ -1,0 +1,182 @@
+{
+ "$defs": {
+  "Procedure": {
+   "properties": {
+    "object": {
+     "description": "The object being repaired, e.g. 'road bike'.",
+     "title": "Object",
+     "type": "string"
+    },
+    "fault": {
+     "description": "The fault being fixed, e.g. 'chain came off the rear cog'.",
+     "title": "Fault",
+     "type": "string"
+    },
+    "tools_needed": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Tools Needed",
+     "type": "array"
+    },
+    "parts": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Parts",
+     "type": "array"
+    },
+    "steps": {
+     "items": {
+      "$ref": "#/$defs/ProcedureStep"
+     },
+     "title": "Steps",
+     "type": "array"
+    },
+    "notes": {
+     "description": "Anything the steps don't capture: variations, tips, caveats.",
+     "title": "Notes",
+     "type": "string"
+    }
+   },
+   "required": [
+    "object",
+    "fault",
+    "tools_needed",
+    "parts",
+    "steps",
+    "notes"
+   ],
+   "title": "Procedure",
+   "type": "object"
+  },
+  "ProcedureStep": {
+   "properties": {
+    "index": {
+     "description": "1-based step number.",
+     "title": "Index",
+     "type": "integer"
+    },
+    "title": {
+     "description": "Short imperative title.",
+     "title": "Title",
+     "type": "string"
+    },
+    "instruction": {
+     "description": "One or two sentences telling a beginner exactly what to do.",
+     "title": "Instruction",
+     "type": "string"
+    },
+    "parts": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Parts",
+     "type": "array"
+    },
+    "tools": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Tools",
+     "type": "array"
+    },
+    "expected_visual_state": {
+     "description": "What the camera should see when this step is done. Concrete and checkable.",
+     "title": "Expected Visual State",
+     "type": "string"
+    },
+    "common_mistakes": {
+     "description": "Mistakes a beginner makes at this step, each detectable on camera if possible.",
+     "items": {
+      "type": "string"
+     },
+     "title": "Common Mistakes",
+     "type": "array"
+    },
+    "safety_notes": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Safety Notes",
+     "type": "array"
+    },
+    "start_s": {
+     "description": "Where this step starts in the source video, seconds.",
+     "title": "Start S",
+     "type": "number"
+    },
+    "end_s": {
+     "description": "Where this step ends in the source video, seconds.",
+     "title": "End S",
+     "type": "number"
+    }
+   },
+   "required": [
+    "index",
+    "title",
+    "instruction",
+    "parts",
+    "tools",
+    "expected_visual_state",
+    "common_mistakes",
+    "safety_notes",
+    "start_s",
+    "end_s"
+   ],
+   "title": "ProcedureStep",
+   "type": "object"
+  }
+ },
+ "description": "A Procedure plus where it came from. This is the file format in data/procedures/.",
+ "properties": {
+  "procedure_id": {
+   "title": "Procedure Id",
+   "type": "string"
+  },
+  "repair_id": {
+   "title": "Repair Id",
+   "type": "string"
+  },
+  "source_kind": {
+   "default": "video",
+   "title": "Source Kind",
+   "type": "string"
+  },
+  "source_videos": {
+   "items": {
+    "type": "string"
+   },
+   "title": "Source Videos",
+   "type": "array"
+  },
+  "sources": {
+   "items": {
+    "additionalProperties": true,
+    "type": "object"
+   },
+   "title": "Sources",
+   "type": "array"
+  },
+  "keyframes": {
+   "additionalProperties": {
+    "type": "string"
+   },
+   "default": {},
+   "title": "Keyframes",
+   "type": "object"
+  },
+  "procedure": {
+   "$ref": "#/$defs/Procedure"
+  }
+ },
+ "required": [
+  "procedure_id",
+  "repair_id",
+  "source_videos",
+  "sources",
+  "procedure"
+ ],
+ "title": "ProcedureRecord",
+ "type": "object"
+}

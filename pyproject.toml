@@ -21,10 +21,23 @@ dependencies = [
     "databricks-sql-connector",
     "databricks-sdk",
     "fal-client",
+    "lap>=0.5.12",
 ]
 
 [dependency-groups]
 dev = ["pytest"]
+# Training / knowledge pipeline + Linkup parts agent (training/, databricks/, backend/parts_agent.py).
+# Not needed to run the live backend: `uv sync --group training` only on the machine that builds data.
+training = [
+    "qrcode[pil]>=8",
+    "faster-whisper",
+    "tavily-python>=0.8",
+    "linkup-sdk>=0.24",
+    "mlflow-skinny>=3.18",
+    "google-genai",      # Gemini watches YouTube tutorials by URL (training/youtube_labels.py)
+    "trimesh",           # procedural 3D model of the demo object (training/scene3d.py)
+    "scipy",
+]
 
 [tool.uv]
 package = false

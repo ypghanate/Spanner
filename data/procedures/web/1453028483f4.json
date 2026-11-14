@@ -1,0 +1,121 @@
+{
+ "procedure_id": "sony_wh1000xm4_ear_cushions__web_1453028483f4",
+ "repair_id": "sony_wh1000xm4_ear_cushions",
+ "source_kind": "web",
+ "source_videos": [
+  "1453028483f4"
+ ],
+ "sources": [
+  {
+   "url": "https://www.earpads-headphones.com/blogs/headphone-ear-pads-guide/sony-wh-1000xm4-ear-pads-replacement-step-by-step-guide-no-tools",
+   "title": "Sony WH-1000XM4 Ear Pads Replacement – Step-by-Step Guide (No Tools)\n– Earpads-Headphones.com",
+   "kind": "web"
+  }
+ ],
+ "keyframes": {},
+ "procedure": {
+  "object": "Sony WH-1000XM4 wireless headphones",
+  "fault": "worn, flaking ear cushions that need replacing",
+  "tools_needed": [
+   "plastic pry tool",
+   "microfiber cloth"
+  ],
+  "parts": [
+   "ear cushion",
+   "ear cup",
+   "cushion mounting ring",
+   "speaker grille"
+  ],
+  "steps": [
+   {
+    "index": 1,
+    "title": "Remove the old ear cushion",
+    "instruction": "Insert a thin plastic pry tool between the ear cushion and the ear cup and gently lift outward to release the internal clips, working your way around the ear cup rather than forcing one clip at a time.",
+    "parts": [
+     "ear cushion",
+     "ear cup",
+     "cushion mounting ring"
+    ],
+    "tools": [
+     "plastic pry tool"
+    ],
+    "expected_visual_state": "The old ear cushion is fully detached and lying separately; the ear cup is open showing the speaker grille and the clip slots around its rim.",
+    "common_mistakes": [
+     "Yanking the ear cushion outward aggressively in one spot instead of working around the rim",
+     "Using a metal tool or screwdriver that scratches the ear cup",
+     "Prying on a single clip until it bends or snaps"
+    ],
+    "safety_notes": [
+     "Never force the ear cushion outward aggressively; the plastic clips and ring can break.",
+     "Use only a plastic tool to avoid scratching or damaging the ear cup."
+    ],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 2,
+    "title": "Inspect and clean the ear cup",
+    "instruction": "Check the plastic clip slots and speaker grille for damage, then gently wipe away dust and flaked material with a dry microfiber cloth.",
+    "parts": [
+     "ear cup",
+     "speaker grille"
+    ],
+    "tools": [
+     "microfiber cloth"
+    ],
+    "expected_visual_state": "The ear cup rim and speaker grille are free of dust and flakes of old cushion leather, with no visibly broken clip slots.",
+    "common_mistakes": [
+     "Pressing hard on the speaker grille while cleaning",
+     "Using a wet cloth or liquid cleaner on the speaker grille"
+    ],
+    "safety_notes": [
+     "Clean gently and keep moisture away from the speaker grille."
+    ],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 3,
+    "title": "Align and clip in the new ear cushion",
+    "instruction": "Position the new ear cushion so its cushion mounting ring lines up with the clip slots on the ear cup, press it in until all clips are secured, then press gently all around the cushion to confirm it is fully seated.",
+    "parts": [
+     "ear cushion",
+     "cushion mounting ring",
+     "ear cup"
+    ],
+    "tools": [],
+    "expected_visual_state": "The new ear cushion sits flush against the ear cup all the way around with no gaps or raised edges.",
+    "common_mistakes": [
+     "Installing the cushion rotated so the mounting ring does not line up with the clip slots",
+     "Leaving one section unclipped, visible as a gap or raised edge between cushion and ear cup"
+    ],
+    "safety_notes": [
+     "Do not force the cushion if it will not seat; recheck alignment instead."
+    ],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 4,
+    "title": "Repeat on the other side",
+    "instruction": "Repeat the removal, cleaning and installation on the other ear cup so both ear cushions are new.",
+    "parts": [
+     "ear cushion",
+     "ear cup",
+     "cushion mounting ring"
+    ],
+    "tools": [
+     "plastic pry tool"
+    ],
+    "expected_visual_state": "Both ear cups have new, matching ear cushions seated flush with no gaps.",
+    "common_mistakes": [
+     "Replacing only one ear cushion, leaving an old and a new cushion that look and feel different"
+    ],
+    "safety_notes": [],
+    "start_s": 0.0,
+    "end_s": 0.0
+   }
+  ],
+  "notes": "Page is a retailer blog with heavy promotion; the actual procedure is brief. The XM4 cushions attach via a clip ring rather than magnets. The page title says 'no tools' but the steps and FAQ recommend a thin plastic pry tool; a fingernail may work but is not mentioned. Replacement reportedly takes 5–10 minutes. Always replace both cushions together for balanced comfort, seal and ANC. Some tool lists and cleaning sections on the page were empty in the extracted text."
+ }
+}

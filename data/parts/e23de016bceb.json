@@ -1,0 +1,75 @@
+{
+ "card_id": "e23de016bceb",
+ "identity": {
+  "brand": "Royal",
+  "model": "Kludge RK61 hot-swappable",
+  "model_number": "",
+  "year_or_revision": "",
+  "category": "",
+  "evidence": "typed: Royal Kludge RK61 hot-swappable",
+  "confidence": 1.0
+ },
+ "part_needed": "mechanical switch (3-pin MX-style, hot-swap)",
+ "fault": "dead switch: key no longer registers",
+ "options": [],
+ "decision": null,
+ "recall": {
+  "status": "none_found",
+  "summary": "None of the provided sources names the Royal Kludge RK61 hot-swappable in any recall or official safety notice; one Reddit post anecdotally describes an RK61 catching fire, but no source documents a related recall.",
+  "urls": [
+   "https://www.reddit.com/r/MechanicalKeyboards/comments/1o14ado/royal_kludge_safety_psa/"
+  ]
+ },
+ "manual_url": "",
+ "manual": null,
+ "tutorials": [
+  {
+   "title": "ROYAL KLUDGE RK61 MOD - 60% Mechanical Keyboard Red Switches RGB | Modifying | Typing Sounds - YouTube",
+   "url": "https://www.youtube.com/watch?v=7OYqa5fSISA",
+   "chapter": "",
+   "start_s": 0
+  },
+  {
+   "title": "💣 ¿El mejor mecánico 60% ISO ES Barato? Review Royal Kludge RK61 | Español | 2023 - YouTube",
+   "url": "https://www.youtube.com/watch?v=RibrWQQLXxw",
+   "chapter": "",
+   "start_s": 0
+  },
+  {
+   "title": "TAPE MOD RK61 ROYAL KLUDGE - Mechanical Keyboard Red Switches RGB | Modding | Typing Sounds - YouTube",
+   "url": "https://www.youtube.com/watch?v=r84f_47qies",
+   "chapter": "",
+   "start_s": 0
+  }
+ ],
+ "sources": [
+  "https://galido.net/techdeals/rk-royal-kludge-rk61-wired-60-mechanical-gaming-keyboard/",
+  "https://mechboards.co.uk/collections/royal-kludge",
+  "https://rkgamingstore.com/collections/61-keys",
+  "https://rkgamingstore.com/collections/kailh-switches",
+  "https://rkgamingstore.com/collections/rk-magnetic-switch-gaming-keyboards",
+  "https://rkgamingstore.com/collections/rk61",
+  "https://rkgamingstore.com/products/panda-switches",
+  "https://rkgamingstore.com/products/rk-x-ltc-kailh-canary-switches",
+  "https://rkgamingstore.com/products/rk61-60-color-block-edition",
+  "https://rkgamingstore.com/products/rk61-60-percent-keyboard",
+  "https://rkgamingstore.com/products/royal-kludge-rk61-61-keys-wireless-60-mechanical-gaming-keyboard-hot-swappable-red-switch",
+  "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-Mechanical-Accessories/dp/B0BB193QL7",
+  "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-Mechanical-Ultra-Compact-Black/dp/B0832LSV8N",
+  "https://www.amazon.co.uk/Wireless-Bluetooth-Multi-Device-Mechanical-Rechargeable-Black/dp/B0731H35J8",
+  "https://www.currys.co.uk/gaming/gaming-accessories/keyboards/keyboard-switches",
+  "https://www.currys.co.uk/store-finder/crawley-2266.html",
+  "https://www.keyboardco.com/type/mechanical-keyboard-parts-and-mods.asp",
+  "https://www.overclockers.co.uk/peripherals/keyboards/custom-keyboards/keyboard-switches",
+  "https://www.overclockers.co.uk/peripherals/keyboards/custom-keyboards/keyboard-switches/gateron-switches",
+  "https://www.reddit.com/r/MechanicalKeyboards/comments/1o14ado/royal_kludge_safety_psa/",
+  "https://www.reddit.com/r/MechanicalKeyboards/comments/rkzbce/can_i_replace_rk_switches_with_gateron_switches/",
+  "https://www.scan.co.uk/shop-by-brand/scan",
+  "https://www.scan.co.uk/shop/computer-hardware/keyboards/all",
+  "https://www.youtube.com/watch?v=7OYqa5fSISA",
+  "https://www.youtube.com/watch?v=RibrWQQLXxw",
+  "https://www.youtube.com/watch?v=r84f_47qies"
+ ],
+ "searched_at": "2026-11-14T17:20:43.715242+00:00",
+ "mock": false
+}

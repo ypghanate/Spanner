@@ -1,0 +1,19 @@
+{
+  "repair_id": "rk61_switch_replacement",
+  "object": "Royal Kludge RK61 60% mechanical keyboard (hot-swappable)",
+  "fault": "one key no longer registers or double-types because its mechanical switch has failed; replace the switch",
+  "parts": ["keycap", "mechanical switch", "hot-swap socket", "switch pins", "plate", "PCB", "stabilizer", "space bar", "case", "USB-C port"],
+  "tools": ["keycap puller", "switch puller", "tweezers"],
+  "test_videos": [],
+  "segment_seconds": 10,
+  "frames_per_segment": 6,
+  "label_model": "claude-opus-5-5",
+  "effort": "medium",
+  "whisper_model": "small",
+  "language": "en",
+  "web_queries": [
+    "Royal Kludge RK61 hot swap switch replacement step by step",
+    "how to replace a broken switch on a hot-swappable mechanical keyboard",
+    "RK61 key not working fix switch"
+  ]
+}

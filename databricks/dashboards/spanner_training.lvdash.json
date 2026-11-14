@@ -1,0 +1,273 @@
+{
+  "datasets": [
+    {
+      "name": "headline",
+      "displayName": "Learning loop at a glance",
+      "query": "SELECT (SELECT count(DISTINCT session_id) FROM ${catalog}.${schema}.bronze_stage_timings) AS live_sessions, (SELECT count(*) FROM ${catalog}.${schema}.bronze_live_mistakes WHERE repair_id = 'rk61_switch_replacement' AND length(trim(mistake)) > 0) AS mistakes_caught, (SELECT count(*) FROM (SELECT step_index, lower(trim(mistake)) AS m FROM ${catalog}.${schema}.bronze_live_mistakes WHERE repair_id = 'rk61_switch_replacement' AND length(trim(mistake)) > 0 GROUP BY step_index, lower(trim(mistake)) HAVING count(DISTINCT session_id) >= 2)) AS warnings_learned"
+    },
+    {
+      "name": "stuck",
+      "displayName": "Where people get stuck",
+      "query": "WITH m AS (SELECT step_index, lower(trim(mistake)) AS mistake, count(DISTINCT session_id) AS sessions, count(*) AS times_seen, max(ts) AS last_seen FROM ${catalog}.${schema}.bronze_live_mistakes WHERE repair_id = 'rk61_switch_replacement' AND length(trim(mistake)) > 0 GROUP BY step_index, lower(trim(mistake))), s AS (SELECT step_index, min(instruction) AS instruction FROM ${catalog}.${schema}.gold_procedure_steps WHERE repair_id = 'rk61_switch_replacement' AND source_kind = 'canonical' GROUP BY step_index) SELECT concat('Step ', m.step_index, ': ', coalesce(left(s.instruction, 48), '')) AS step, m.step_index, m.mistake, m.sessions, m.times_seen, m.last_seen, CASE WHEN m.sessions >= 2 THEN 'Now a warning for the next person' ELSE 'Seen in one session so far' END AS status FROM m LEFT JOIN s ON s.step_index = m.step_index ORDER BY m.sessions DESC, m.times_seen DESC"
+    },
+    {
+      "name": "impact",
+      "displayName": "Repair instead of replace",
+      "query": "SELECT count(*) AS repairs_recommended, round(sum(savings), 2) AS money_saved, round(sum(ewaste_kg_avoided), 2) AS ewaste_kg_avoided FROM ${catalog}.${schema}.bronze_part_cards WHERE verdict = 'repair' AND NOT is_mock"
+    },
+    {
+      "name": "decisions",
+      "displayName": "Repair-or-replace decisions",
+      "query": "SELECT concat(brand, ' ', model) AS device, part_needed AS part, repair_cost, new_price, savings, ewaste_kg_avoided, substr(searched_at, 1, 16) AS decided_at FROM ${catalog}.${schema}.bronze_part_cards WHERE verdict = 'repair' AND NOT is_mock ORDER BY searched_at DESC"
+    },
+    {
+      "name": "parts",
+      "displayName": "Verified replacement parts",
+      "query": "SELECT part_needed AS part, retailer, price, currency, independent_sources AS sources, CASE WHEN verified THEN 'Fits, verified' ELSE 'Fits, unverified' END AS compatibility, url FROM ${catalog}.${schema}.gold_part_prices WHERE lower(model) LIKE '%rk61%' ORDER BY part, rank_in_card"
+    },
+    {
+      "name": "latency",
+      "displayName": "Live latency per stage",
+      "query": "SELECT * FROM (SELECT stage, 'typical (p50)' AS percentile, round(percentile_approx(ms, 0.5), 0) AS ms, count(*) AS samples FROM ${catalog}.${schema}.bronze_stage_timings WHERE ok GROUP BY stage UNION ALL SELECT stage, 'slow (p90)' AS percentile, round(percentile_approx(ms, 0.9), 0) AS ms, count(*) AS samples FROM ${catalog}.${schema}.bronze_stage_timings WHERE ok GROUP BY stage) ORDER BY ms DESC"
+    },
+    {
+      "name": "kb",
+      "displayName": "Knowledge base sources",
+      "query": "SELECT CASE source_kind WHEN 'canonical' THEN 'Final procedure' WHEN 'video' THEN 'Repair videos' WHEN 'web' THEN 'Web guides' WHEN 'manual' THEN 'Manuals' ELSE source_kind END AS source, steps, procedures FROM ${catalog}.${schema}.gold_kb_coverage WHERE repair_id = 'rk61_switch_replacement' ORDER BY steps DESC"
+    },
+    {
+      "name": "eval_quality",
+      "displayName": "Step judge accuracy",
+      "query": "SELECT CASE backend WHEN 'adaption' THEN 'Adaption fine-tune' WHEN 'claude' THEN 'Claude Haiku' ELSE backend END AS model, CASE metric WHEN 'accuracy' THEN 'Step accuracy' WHEN 'mistake_recall' THEN 'Mistakes caught' ELSE metric END AS metric, round(value, 3) AS value, n FROM ${catalog}.${schema}.gold_eval_scoreboard WHERE eval_name = 'step_tracker' AND metric IN ('accuracy', 'mistake_recall') ORDER BY metric, backend"
+    },
+    {
+      "name": "eval_latency",
+      "displayName": "Step judge latency",
+      "query": "SELECT CASE backend WHEN 'adaption' THEN 'Adaption fine-tune' WHEN 'claude' THEN 'Claude Haiku' ELSE backend END AS model, round(value, 0) AS latency_ms, n FROM ${catalog}.${schema}.gold_eval_scoreboard WHERE eval_name = 'step_tracker' AND metric = 'latency_p50_ms' ORDER BY backend"
+    }
+  ],
+  "pages": [
+    {
+      "name": "learns",
+      "displayName": "Spanner learns from every repair",
+      "layout": [
+        {
+          "widget": {
+            "name": "intro",
+            "textbox_spec": "# Spanner learns from every repair\n\nEach live session writes what the camera saw and where the person went wrong. A mistake seen in two or more sessions becomes a warning the next person hears before they reach that step. The data below is written by the live app, not loaded for the demo."
+          },
+          "position": {"x": 0, "y": 0, "width": 12, "height": 2}
+        },
+        {
+          "widget": {
+            "name": "stuck_chart",
+            "queries": [{"name": "main_query", "query": {"datasetName": "stuck", "fields": [
+              {"name": "step", "expression": "`step`"},
+              {"name": "sessions", "expression": "`sessions`"},
+              {"name": "status", "expression": "`status`"}
+            ], "disaggregated": true}}],
+            "spec": {"version": 3, "widgetType": "bar",
+              "encodings": {
+                "y": {"fieldName": "step", "scale": {"type": "categorical"}, "displayName": "Repair step"},
+                "x": {"fieldName": "sessions", "scale": {"type": "quantitative"}, "displayName": "Sessions where someone got it wrong"},
+                "color": {"fieldName": "status", "scale": {"type": "categorical"}, "displayName": "Status"}
+              },
+              "frame": {"showTitle": true, "title": "Where people get stuck", "showDescription": true, "description": "One bar per step of the RK61 switch replacement. Sessions, not frames: the same mistake repeated in one session counts once."}}
+          },
+          "position": {"x": 0, "y": 2, "width": 8, "height": 6}
+        },
+        {
+          "widget": {
+            "name": "sessions_counter",
+            "queries": [{"name": "main_query", "query": {"datasetName": "headline", "fields": [{"name": "live_sessions", "expression": "`live_sessions`"}], "disaggregated": true}}],
+            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "live_sessions", "displayName": "Live sessions"}},
+              "frame": {"showTitle": true, "title": "Live repair sessions"}}
+          },
+          "position": {"x": 8, "y": 2, "width": 4, "height": 2}
+        },
+        {
+          "widget": {
+            "name": "mistakes_counter",
+            "queries": [{"name": "main_query", "query": {"datasetName": "headline", "fields": [{"name": "mistakes_caught", "expression": "`mistakes_caught`"}], "disaggregated": true}}],
+            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "mistakes_caught", "displayName": "Mistakes caught"}},
+              "frame": {"showTitle": true, "title": "Mistakes the camera caught"}}
+          },
+          "position": {"x": 8, "y": 4, "width": 4, "height": 2}
+        },
+        {
+          "widget": {
+            "name": "learned_counter",
+            "queries": [{"name": "main_query", "query": {"datasetName": "headline", "fields": [{"name": "warnings_learned", "expression": "`warnings_learned`"}], "disaggregated": true}}],
+            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "warnings_learned", "displayName": "Warnings learned"}},
+              "frame": {"showTitle": true, "title": "Warnings now given to the next person"}}
+          },
+          "position": {"x": 8, "y": 6, "width": 4, "height": 2}
+        },
+        {
+          "widget": {
+            "name": "stuck_table",
+            "queries": [{"name": "main_query", "query": {"datasetName": "stuck", "fields": [
+              {"name": "step", "expression": "`step`"},
+              {"name": "mistake", "expression": "`mistake`"},
+              {"name": "sessions", "expression": "`sessions`"},
+              {"name": "times_seen", "expression": "`times_seen`"},
+              {"name": "status", "expression": "`status`"},
+              {"name": "last_seen", "expression": "`last_seen`"}
+            ], "disaggregated": true}}],
+            "spec": {"version": 3, "widgetType": "table", "encodings": {"columns": [
+              {"fieldName": "step", "displayName": "Step"},
+              {"fieldName": "mistake", "displayName": "What went wrong"},
+              {"fieldName": "sessions", "displayName": "Sessions"},
+              {"fieldName": "times_seen", "displayName": "Times seen"},
+              {"fieldName": "status", "displayName": "What happens next"},
+              {"fieldName": "last_seen", "displayName": "Last seen"}
+            ]},
+              "frame": {"showTitle": true, "title": "What the next person is warned about, and why", "showDescription": true, "description": "The warning is spoken by Spanner when that step opens: \"People often put the switch in rotated here.\""}}
+          },
+          "position": {"x": 0, "y": 8, "width": 12, "height": 5}
+        },
+        {
+          "widget": {
+            "name": "repairs_counter",
+            "queries": [{"name": "main_query", "query": {"datasetName": "impact", "fields": [{"name": "repairs_recommended", "expression": "`repairs_recommended`"}], "disaggregated": true}}],
+            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "repairs_recommended", "displayName": "Repairs"}},
+              "frame": {"showTitle": true, "title": "Devices kept out of the bin"}}
+          },
+          "position": {"x": 0, "y": 13, "width": 4, "height": 2}
+        },
+        {
+          "widget": {
+            "name": "money_counter",
+            "queries": [{"name": "main_query", "query": {"datasetName": "impact", "fields": [{"name": "money_saved", "expression": "`money_saved`"}], "disaggregated": true}}],
+            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "money_saved", "displayName": "GBP saved"}},
+              "frame": {"showTitle": true, "title": "Money saved by repairing (GBP)"}}
+          },
+          "position": {"x": 0, "y": 15, "width": 4, "height": 2}
+        },
+        {
+          "widget": {
+            "name": "ewaste_counter",
+            "queries": [{"name": "main_query", "query": {"datasetName": "impact", "fields": [{"name": "ewaste_kg_avoided", "expression": "`ewaste_kg_avoided`"}], "disaggregated": true}}],
+            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "ewaste_kg_avoided", "displayName": "kg"}},
+              "frame": {"showTitle": true, "title": "E-waste avoided (kg)"}}
+          },
+          "position": {"x": 0, "y": 17, "width": 4, "height": 2}
+        },
+        {
+          "widget": {
+            "name": "decisions_table",
+            "queries": [{"name": "main_query", "query": {"datasetName": "decisions", "fields": [
+              {"name": "device", "expression": "`device`"},
+              {"name": "part", "expression": "`part`"},
+              {"name": "repair_cost", "expression": "`repair_cost`"},
+              {"name": "new_price", "expression": "`new_price`"},
+              {"name": "savings", "expression": "`savings`"},
+              {"name": "decided_at", "expression": "`decided_at`"}
+            ], "disaggregated": true}}],
+            "spec": {"version": 3, "widgetType": "table", "encodings": {"columns": [
+              {"fieldName": "device", "displayName": "Device"},
+              {"fieldName": "part", "displayName": "Part needed"},
+              {"fieldName": "repair_cost", "displayName": "Part (GBP)"},
+              {"fieldName": "new_price", "displayName": "New device (GBP)"},
+              {"fieldName": "savings", "displayName": "Saved (GBP)"},
+              {"fieldName": "decided_at", "displayName": "Decided"}
+            ]},
+              "frame": {"showTitle": true, "title": "Repair or replace: what the Linkup agent decided", "showDescription": true, "description": "Cheapest part verified to fit the exact model on two or more independent sites, against the live price of a new unit."}}
+          },
+          "position": {"x": 4, "y": 13, "width": 8, "height": 6}
+        },
+        {
+          "widget": {
+            "name": "parts_table",
+            "queries": [{"name": "main_query", "query": {"datasetName": "parts", "fields": [
+              {"name": "part", "expression": "`part`"},
+              {"name": "retailer", "expression": "`retailer`"},
+              {"name": "price", "expression": "`price`"},
+              {"name": "currency", "expression": "`currency`"},
+              {"name": "compatibility", "expression": "`compatibility`"},
+              {"name": "sources", "expression": "`sources`"}
+            ], "disaggregated": true}}],
+            "spec": {"version": 3, "widgetType": "table", "encodings": {"columns": [
+              {"fieldName": "part", "displayName": "Part"},
+              {"fieldName": "retailer", "displayName": "Retailer"},
+              {"fieldName": "price", "displayName": "Price"},
+              {"fieldName": "currency", "displayName": "Currency"},
+              {"fieldName": "compatibility", "displayName": "Fits the RK61?"},
+              {"fieldName": "sources", "displayName": "Independent sources"}
+            ]},
+              "frame": {"showTitle": true, "title": "Replacement parts for the RK61, with their evidence", "showDescription": true, "description": "Found live by the Linkup agent. Every offer is checked against the model on independent pages before it is shown to the user."}}
+          },
+          "position": {"x": 0, "y": 19, "width": 12, "height": 5}
+        },
+        {
+          "widget": {
+            "name": "latency_chart",
+            "queries": [{"name": "main_query", "query": {"datasetName": "latency", "fields": [
+              {"name": "stage", "expression": "`stage`"},
+              {"name": "ms", "expression": "`ms`"},
+              {"name": "percentile", "expression": "`percentile`"}
+            ], "disaggregated": true}}],
+            "spec": {"version": 3, "widgetType": "bar",
+              "encodings": {
+                "y": {"fieldName": "stage", "scale": {"type": "categorical"}, "displayName": "Stage"},
+                "x": {"fieldName": "ms", "scale": {"type": "quantitative"}, "displayName": "Milliseconds"},
+                "color": {"fieldName": "percentile", "scale": {"type": "categorical"}, "displayName": ""}
+              },
+              "frame": {"showTitle": true, "title": "How long each live decision takes", "showDescription": true, "description": "Measured in the running app. \"coach\" is one webcam frame in, step and mistake out."}}
+          },
+          "position": {"x": 0, "y": 24, "width": 7, "height": 6}
+        },
+        {
+          "widget": {
+            "name": "kb_chart",
+            "queries": [{"name": "main_query", "query": {"datasetName": "kb", "fields": [
+              {"name": "source", "expression": "`source`"},
+              {"name": "steps", "expression": "`steps`"}
+            ], "disaggregated": true}}],
+            "spec": {"version": 3, "widgetType": "bar",
+              "encodings": {
+                "y": {"fieldName": "source", "scale": {"type": "categorical"}, "displayName": "Source"},
+                "x": {"fieldName": "steps", "scale": {"type": "quantitative"}, "displayName": "Steps"}
+              },
+              "frame": {"showTitle": true, "title": "What the procedure was built from", "showDescription": true, "description": "Repair videos watched by Gemini, web guides found with Tavily, written into one procedure by Claude, quality-checked by the Lakeflow pipeline."}}
+          },
+          "position": {"x": 7, "y": 24, "width": 5, "height": 6}
+        },
+        {
+          "widget": {
+            "name": "eval_quality_chart",
+            "queries": [{"name": "main_query", "query": {"datasetName": "eval_quality", "fields": [
+              {"name": "metric", "expression": "`metric`"},
+              {"name": "value", "expression": "`value`"},
+              {"name": "model", "expression": "`model`"}
+            ], "disaggregated": true}}],
+            "spec": {"version": 3, "widgetType": "bar",
+              "encodings": {
+                "x": {"fieldName": "metric", "scale": {"type": "categorical"}, "displayName": ""},
+                "y": {"fieldName": "value", "scale": {"type": "quantitative", "domain": {"min": 0, "max": 1}}, "displayName": "Share correct (0 to 1)"},
+                "color": {"fieldName": "model", "scale": {"type": "categorical"}, "displayName": "Model"}
+              },
+              "frame": {"showTitle": true, "title": "Step judge: Adaption fine-tune against Claude Haiku", "showDescription": true, "description": "On held-out frames from real repair sessions. Empty until the evaluation has run."}}
+          },
+          "position": {"x": 0, "y": 30, "width": 7, "height": 6}
+        },
+        {
+          "widget": {
+            "name": "eval_latency_chart",
+            "queries": [{"name": "main_query", "query": {"datasetName": "eval_latency", "fields": [
+              {"name": "model", "expression": "`model`"},
+              {"name": "latency_ms", "expression": "`latency_ms`"}
+            ], "disaggregated": true}}],
+            "spec": {"version": 3, "widgetType": "bar",
+              "encodings": {
+                "x": {"fieldName": "model", "scale": {"type": "categorical"}, "displayName": ""},
+                "y": {"fieldName": "latency_ms", "scale": {"type": "quantitative"}, "displayName": "Typical answer time (ms)"}
+              },
+              "frame": {"showTitle": true, "title": "Same judges, time per decision", "showDescription": true, "description": "The fine-tune runs on the laptop: no API call, works offline."}}
+          },
+          "position": {"x": 7, "y": 30, "width": 5, "height": 6}
+        }
+      ]
+    }
+  ]
+}

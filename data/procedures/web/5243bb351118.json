@@ -1,0 +1,111 @@
+{
+ "procedure_id": "sony_wh1000xm4_ear_cushions__web_5243bb351118",
+ "repair_id": "sony_wh1000xm4_ear_cushions",
+ "source_kind": "web",
+ "source_videos": [
+  "5243bb351118"
+ ],
+ "sources": [
+  {
+   "url": "https://centralsound.co/pages/how-to-replace-sony-wh-1000xm4-ear-pad-cushions",
+   "title": "How to Replace Sony WH-1000XM4 Ear Pad Cushions",
+   "kind": "web"
+  }
+ ],
+ "keyframes": {},
+ "procedure": {
+  "object": "Sony WH-1000XM4 wireless headphones",
+  "fault": "worn, flaking ear cushions that need replacing",
+  "tools_needed": [
+   "plastic pry tool"
+  ],
+  "parts": [
+   "ear cushion",
+   "ear cup",
+   "foam insert"
+  ],
+  "steps": [
+   {
+    "index": 1,
+    "title": "Pry off the old ear cushion",
+    "instruction": "Slide the plastic pry tool under the edge where the ear cushion meets the ear cup and gently lift. Work around the edge a little at a time until the cushion unclips and comes off.",
+    "parts": [
+     "ear cushion",
+     "ear cup"
+    ],
+    "tools": [
+     "plastic pry tool"
+    ],
+    "expected_visual_state": "The old ear cushion is fully detached and set aside. The ear cup's open face, its mounting clips and the foam insert over the driver are visible.",
+    "common_mistakes": [
+     "Prying hard in one spot instead of working gradually around the edge, which can break the clips on the ear cup",
+     "Pulling the cushion off by its leatherette instead of levering at the base, which tears the cushion and leaves the base clipped on"
+    ],
+    "safety_notes": [
+     "Go slowly to avoid damaging the plastic clips on the ear cup",
+     "Keep the pry tool shallow so it does not dig into the driver area"
+    ],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 2,
+    "title": "Remove the old foam insert",
+    "instruction": "Lift out the old foam insert that sits over the driver inside the ear cup.",
+    "parts": [
+     "foam insert",
+     "ear cup"
+    ],
+    "tools": [],
+    "expected_visual_state": "There is no foam inside the ear cup. The driver area is exposed with nothing covering it.",
+    "common_mistakes": [
+     "Leaving pieces of old foam stuck inside the ear cup",
+     "Poking or pressing on the driver while pulling the foam out"
+    ],
+    "safety_notes": [
+     "Do not push on or puncture the driver underneath the foam"
+    ],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 3,
+    "title": "Place the new foam insert",
+    "instruction": "Set the new foam insert over the driver so it lies flat inside the ear cup.",
+    "parts": [
+     "foam insert",
+     "ear cup"
+    ],
+    "tools": [],
+    "expected_visual_state": "The new foam insert sits flat and centered over the driver inside the ear cup, with no folds or raised edges.",
+    "common_mistakes": [
+     "Foam insert folded, bunched or off-center",
+     "Forgetting to install the foam insert before attaching the new cushion"
+    ],
+    "safety_notes": [],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 4,
+    "title": "Snap on the new ear cushion",
+    "instruction": "Line up the new ear cushion with the clips on the ear cup, then press down firmly all the way around until it snaps into place. Repeat steps 1 to 4 on the other side.",
+    "parts": [
+     "ear cushion",
+     "ear cup"
+    ],
+    "tools": [],
+    "expected_visual_state": "The new ear cushion sits flush against the ear cup all the way around, with no gaps or lifted sections. Both ear cups have new cushions fitted.",
+    "common_mistakes": [
+     "Cushion misaligned with the clips so it sits crooked or leaves a gap",
+     "Not pressing all the way around, leaving part of the cushion unclipped so it falls off later",
+     "Putting the left cushion on the right ear cup"
+    ],
+    "safety_notes": [],
+    "start_s": 0.0,
+    "end_s": 0.0
+   }
+  ],
+  "notes": "The source page is a retailer guide (CentralSound) whose ear pad kit includes a pair of pads, foam inserts and a pry tool. It says the job takes about 5 minutes. XM4 pads do not fit the WH-1000XM3 or XM5. A customer review of a different product notes that replacement pads can come off easily if not fully seated, so press firmly around the whole edge. The page shows no photos per step, so the visual states are inferred from the text. The left/right mix-up mistake is a general tip and is not stated on the page. A linked video (youtube lcqp3PRrrtY) shows the procedure."
+ }
+}

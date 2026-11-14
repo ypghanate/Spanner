@@ -24,7 +24,8 @@ class Settings:
     elevenlabs_api_key: str
     elevenlabs_voice_id: str
     together_api_key: str
-    adaption_model_id: str
+    adaption_api_key: str          # ADAPTION_API_KEY, else TOGETHER_API_KEY (same rule as the step tracker)
+    pass1_adaption_model_id: str   # Pass 1's OWN fine-tune. Never the step tracker's ADAPTION_MODEL_ID.
     adaption_base_url: str
     fal_key: str
     # switches
@@ -37,7 +38,11 @@ class Settings:
     pass1_model: str = "claude-haiku-5-5"
     dataset_model: str = "claude-opus-5-5"
     eleven_tts_model: str = "eleven_flash_v2_5"
-    eleven_stt_model: str = "scribe_v1"
+    eleven_stt_model: str = "scribe_v1"            # one-shot /audio fallback
+    eleven_stt_live_model: str = "scribe_v2_realtime"
+    eleven_tts_format: str = "mp3_44100_64"         # cached files and live stream
+    live_sample_rate: int = 16000                   # phone mic PCM16 mono
+    live_vad_silence_s: float = 0.7                 # silence that ends an utterance
     # timeouts (seconds)
     vision_timeout_s: float = 6.0
     claude_timeout_s: float = 10.0
@@ -57,7 +62,8 @@ def get_settings() -> Settings:
         elevenlabs_api_key=os.getenv("ELEVENLABS_API_KEY", ""),
         elevenlabs_voice_id=os.getenv("ELEVENLABS_VOICE_ID", ""),
         together_api_key=os.getenv("TOGETHER_API_KEY", ""),
-        adaption_model_id=os.getenv("ADAPTION_MODEL_ID", ""),
+        adaption_api_key=os.getenv("ADAPTION_API_KEY") or os.getenv("TOGETHER_API_KEY", ""),
+        pass1_adaption_model_id=os.getenv("PASS1_ADAPTION_MODEL_ID", ""),
         adaption_base_url=os.getenv("ADAPTION_BASE_URL", "https://api.together.xyz/v1"),
         fal_key=os.getenv("FAL_KEY", ""),
         pass1_backend=os.getenv("PASS1_BACKEND", "claude").strip().lower(),
@@ -65,6 +71,8 @@ def get_settings() -> Settings:
         use_mocks=_flag("USE_MOCKS", "1"),
         store_backend=os.getenv("STORE_BACKEND", "sqlite").strip().lower(),
         mock_latency_ms=int(os.getenv("MOCK_LATENCY_MS", "0") or 0),
+        media_cache_dir=Path(os.getenv("MEDIA_CACHE_DIR") or ROOT / "backend" / "media_cache"),
+        training_data_dir=Path(os.getenv("TRAINING_DATA_DIR") or ROOT / "training" / "data"),
     )
 
 
