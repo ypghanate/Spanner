@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from training.feedback import learned_mistake_for, record_live_mistake
 
 REPAIR_ID = "rk61_switch_replacement"
-STEP_INDEX = 6
+STEP_INDEX = 7            # "Hold the switch over the empty hole, facing the same way as its neighbours"
 MISTAKE = "put the switch in rotated"
 
 

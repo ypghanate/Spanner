@@ -4,7 +4,7 @@ Create it in Databricks: **Genie → New space**, add the tables below, paste th
 the sample questions. In the pitch, a judge types a question and Genie answers from live data.
 
 ## Tables
-`spanner.training.gold_procedure_steps`, `gold_live_mistakes`, `gold_label_quality`, `gold_kb_coverage`,
+`workspace.training.gold_procedure_steps`, `gold_live_mistakes`, `gold_label_quality`, `gold_kb_coverage`,
 `gold_part_prices`, `gold_eval_scoreboard`, `gold_stage_latency`, `bronze_part_cards`, `bronze_sources`
 
 ## Instructions (paste into the space)
@@ -26,23 +26,22 @@ independent sites. `bronze_part_cards.verdict` is the repair-or-replace decision
 - How many knowledge-base steps came from videos, web guides and manuals?
 - Which pipeline stage is slowest, and what is its p90 latency?
 
-## Deploy
-
-The bundle includes the AI/BI dashboard definition at
-`databricks/dashboards/spanner_training.lvdash.json`:
+## Deploy (no CLI needed)
 
 ```bash
-cd databricks
-databricks bundle deploy --var="warehouse_id=<SQL_WAREHOUSE_ID>"
-databricks bundle run training_refresh
+python databricks/deploy_dashboard.py --check   # runs every dashboard query, shows row counts
+python databricks/deploy_dashboard.py           # creates/updates + publishes the dashboard, creates the Genie space
 ```
 
-For the demo learning moment, seed two distinct witnessed sessions before refreshing the
-pipeline, then run the third session:
+Deployed on 14 Nov:
+- Dashboard "Spanner repair intelligence": https://dbc-e2205585-ca78.cloud.databricks.com/dashboardsv3/01f1e0626c6410fcabd7e34a5f6d10d3/published
+- Genie space: https://dbc-e2205585-ca78.cloud.databricks.com/genie/rooms/01f1e062be211dd88b29266342579fb7
+  (the API does not take sample questions yet: paste the ones above into the space's settings)
 
-```bash
-uv run python scripts/seed_learning_demo.py
-cd databricks && databricks bundle run training_refresh
-```
+The learning loop reads `bronze_live_mistakes` directly (2+ distinct sessions), so a warning appears without a
+pipeline refresh. The gold views (`gold_*`) refresh with the Lakeflow pipeline `spanner-training-quality`
+(start it from the Pipelines page, or `python -m training.pipeline databricks sync` then a refresh).
 
-The third session starts with: “Users often put the switch in rotated.”
+For the demo learning moment, two real sessions with the same mistake are enough; `scripts/seed_learning_demo.py`
+is the fallback (step 7, "put the switch in rotated") if rehearsal time runs out. Either way, session three
+starts step 7 with: "Heads up. People often put the switch in rotated at this step."

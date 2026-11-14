@@ -723,6 +723,18 @@ function blip(f = 880, d = 0.05) {
 }
 
 let runId = 0;
+// the learning loop: mistakes other people made at this step (2+ sessions, from Databricks) become a warning
+let learned = {}, warnedSteps = new Set();
+function refreshLearned() {
+  fetch((QP.get("api") || "") + "/coach/learned").then((r) => r.json()).then((d) => { learned = d.learned || {}; }).catch(() => {});
+}
+function warnLearned(s) {
+  const m = learned[s.index]; if (!m || warnedSteps.has(s.index) || INSTANT) return;
+  warnedSteps.add(s.index);
+  $("sm").textContent = `⚠ Learned from earlier sessions: people often ${m} here`;
+  setTimeout(() => { showTag(`switch_${brokenKey}`, "LEARNED · " + m.toUpperCase().slice(0, 48), "red", 3.2); narrate(`Heads up. People often ${m} at this step. That came from earlier repair sessions.`); }, 2200);
+}
+refreshLearned(); setInterval(refreshLearned, 30000);
 async function goStep(i, note = "", silent = false) {
   if (!plan.steps.length) return;
   if (mistakeOn) { mistakeOn = false; $("mistake").classList.remove("on"); $("fixit").style.display = "none"; }
@@ -736,6 +748,7 @@ async function goStep(i, note = "", silent = false) {
   typeText($("si"), s.instruction);
   $("sd").textContent = s.expected_visual_state ? `✓ Done when: ${s.expected_visual_state}` : "";
   $("sm").textContent = s.common_mistakes?.length ? `⚠ ${s.common_mistakes[0]}` : "";
+  warnLearned(s);
   $("tools").innerHTML = (TOOL_OF[s.kind] || "HANDS").split(" · ").map((t) => `<span class="chip">${t}</span>`).join("");
   dots();
   if (!silent) narrate(`Step ${s.index}. ${s.instruction}`);

@@ -120,6 +120,7 @@ def test_local_kb_search_finds_step(canonical, monkeypatch):
 def test_track_step_logs_mistakes_to_learning_loop(tmp_path, monkeypatch):
     monkeypatch.setattr(feedback, "LIVE", tmp_path / "mistakes.jsonl")
     monkeypatch.delenv("DATABRICKS_HOST", raising=False)
+    monkeypatch.setenv("SPANNER_LIVE_LOG", "1")           # this test is about the file the loop writes
     monkeypatch.setattr(knowledge, "step_check", lambda *a, **k: {"status": "error", "mistake": "cable pulled",
                                                                  "step_status": "mistake", "backend": "x", "latency_ms": 1})
     step = RepairStep(index=1, instruction="Twist off", expected_visual_state="grille visible", common_mistakes=[])

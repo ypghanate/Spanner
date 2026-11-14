@@ -108,10 +108,11 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
     t0 = time.perf_counter()
     view = await asyncio.to_thread(_ask, base64.standard_b64encode(data).decode(), current_step)
     latency = round((time.perf_counter() - t0) * 1000)
-    if view.mistake and view.step_index > 0:   # the learning loop: real mistakes go to Databricks
-        from training.feedback import record_live_mistake
-        from training.kb import current_repair_id
+    from training.feedback import record_live_mistake, record_stage_timing
+    from training.kb import current_repair_id
 
+    record_stage_timing(session, "coach", latency, True)          # measured latency -> Databricks dashboard
+    if view.mistake and view.step_index > 0:   # the learning loop: real mistakes go to Databricks
         record_live_mistake(session, current_repair_id(), view.step_index, view.mistake, view.what_i_see)
     return {**view.model_dump(), "latency_ms": latency, "model": COACH_MODEL}
 
@@ -143,6 +144,15 @@ async def ask(q: Ask):
 @router.get("/plan")
 async def plan():
     return _demo()
+
+
+@router.get("/learned")
+async def learned():
+    """{step_index: mistake} learned from earlier sessions (2+ sessions made it), straight from Databricks."""
+    from training.feedback import learned_mistakes
+    from training.kb import current_repair_id
+
+    return {"repair_id": current_repair_id(), "learned": await asyncio.to_thread(learned_mistakes, current_repair_id())}
 
 
 @router.get("/health")

@@ -23,6 +23,7 @@ def isolated_env(monkeypatch, tmp_path):
     for var in KEY_VARS:
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("USE_MOCKS", "1")
+    monkeypatch.setenv("SPANNER_LIVE_LOG", "0")      # never write data/live/*.jsonl or Databricks from tests
     monkeypatch.setenv("PASS1_BACKEND", "claude")
     monkeypatch.setenv("MOCK_LATENCY_MS", "0")
     monkeypatch.setenv("MEDIA_CACHE_DIR", str(tmp_path / "media_cache"))
