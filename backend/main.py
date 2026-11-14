@@ -2,8 +2,10 @@
 
 Fast loop  (inline, every frame):   preprocess -> detect -> FrameResponse (+ queued brain events)
 Slow loop  (background, keyframes): understand -> Pass 1 -> safety -> Pass 2 -> TTS -> queued event
-Voice      (live websocket):        mic PCM -> realtime STT -> Pass 1 -> safety -> Pass 2 -> streamed TTS
-           (fallback route /audio): m4a clip -> STT -> Pass 1 -> safety -> Pass 2 -> TTS url
+Live socket (WS /session/{id}/live): frames in -> frame_result out; voice clips or streamed PCM in ->
+           STT -> Pass 1 -> safety -> Pass 2 -> response (+ tts_url or streamed MP3); every brain
+           result is pushed the moment it is ready
+Fallbacks  (HTTP): POST /frame (events ride the reply), POST /audio (m4a clip -> TTS url)
 
 Stages come from mocks.load_stages(): the real function when USE_MOCKS=0 and the module exists,
 otherwise a mock, so every route works on fixtures with no API keys.
@@ -11,11 +13,14 @@ otherwise a mock, so every route works on fixtures with no API keys.
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import contextlib
 import inspect
 import json
 import logging
 import re
+import sys
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -24,15 +29,17 @@ from typing import Any
 
 from fastapi import FastAPI, File, Form, Request, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
+from pydantic import ValidationError
 
 from . import mocks
 from .brain import pass1 as pass1_mod
 from .config import get_settings
 from .contracts import (
-    AudioResponse, BrainResponse, Detection, FrameQuality, FrameResponse, LiveBargeIn, LiveError,
-    LiveFinal, LivePartial, LiveResponse, LiveStart, LiveStop, LiveTtsEnd, LiveTtsStart,
-    SessionCreate, SessionCreated, SessionSummary, Transcript,
+    AudioResponse, BrainResponse, Detection, FrameQuality, FrameResponse, LiveAudio, LiveBargeIn,
+    LiveError, LiveEvent, LiveFinal, LiveFrame, LiveFrameResult, LivePartial, LivePlayback,
+    LiveResponse, LiveStart, LiveStop, LiveTtsEnd, LiveTtsStart, LiveUtterance, SessionCreate,
+    SessionCreated, SessionSummary, Transcript,
 )
 from .session import Session, SessionManager, UnknownSession
 from .voice import stt as stt_mod
@@ -115,6 +122,29 @@ def looks_like_echo(heard: str, spoken: str) -> bool:
     return sum(w in s for w in h) / len(h) >= 0.7
 
 
+async def _run_warm(name: str, warm) -> None:
+    t0 = time.perf_counter()
+    try:
+        await asyncio.to_thread(warm)
+        log.info("%s warmed up in %.1fs", name, time.perf_counter() - t0)
+    except Exception:
+        log.warning("%s warm-up failed; the first frame will be slow", name, exc_info=True)
+
+
+def start_warmups(orch: "Orchestrator") -> list[asyncio.Task]:
+    """A real vision stage may expose warm() (load weights, run a dummy frame). Run those in the
+    background at startup so the first live frame doesn't blow its timeout on model loading."""
+    tasks = []
+    for name in ("preprocess", "detect", "understand"):
+        if not orch.stages.real.get(name):
+            continue
+        module = sys.modules.get(getattr(getattr(orch.stages, name), "__module__", ""))
+        warm = getattr(module, "warm", None)
+        if callable(warm):
+            tasks.append(asyncio.create_task(_run_warm(name, warm)))
+    return tasks
+
+
 def tts_url_for(text: str) -> str | None:
     name = tts_mod.start(text)
     return f"/tts/{name}" if name else None
@@ -126,6 +156,8 @@ class Orchestrator:
     def __init__(self) -> None:
         self.stages = mocks.get_stages()
         self.sessions = SessionManager(slow_handler=self.slow_loop)
+        self.parts_poll_s = 2.0          # how often a Linkup parts job is polled
+        self.parts_timeout_s = 180.0     # give up on a parts job after this long
 
     # store writes never break the request
     def write(self, table: str, row: dict) -> None:
@@ -166,7 +198,8 @@ class Orchestrator:
 
     # -- fast loop ------------------------------------------------------------
 
-    async def handle_frame(self, session: Session, jpeg: bytes, meta: dict) -> FrameResponse:
+    async def handle_frame(self, session: Session, jpeg: bytes, meta: dict,
+                           drain_events: bool = True) -> FrameResponse:
         st = self.stages
         session.frame_seq += 1
         frame_id = f"{session.id}-{session.frame_seq:05d}"
@@ -211,7 +244,7 @@ class Orchestrator:
                                       "x": d.box.x, "y": d.box.y, "w": d.box.w, "h": d.box.h})
 
         return FrameResponse(frame_id=frame_id, quality=quality, detections=detections,
-                             events=session.drain_events())
+                             events=session.drain_events() if drain_events else [])
 
     # -- the brain (shared by slow loop, /audio and live voice) ----------------
 
@@ -219,11 +252,20 @@ class Orchestrator:
         """Pass 1 -> safety -> Pass 2. Caller must hold session.brain_lock."""
         st, s = self.stages, get_settings()
         inp = pass1_mod.build_input(session, transcript)
+        session.last_step_check = None                          # never let Pass 2 read a stale check
+        check_task = self._start_step_check(session, transcript)  # runs alongside Pass 1
         try:
             report = await call_stage(st.pass1, inp, session.id, st.store,
                                       timeout=s.claude_timeout_s + 2, session=session, name="pass1")
         except Exception as e:
+            if check_task is not None:
+                check_task.cancel()
             raise BrainError(f"pass1 failed: {e}") from e
+        if check_task is not None:
+            try:
+                session.last_step_check = await check_task
+            except Exception:
+                log.warning("step tracker failed; Pass 2 runs without a step check", exc_info=True)
         session.last_report = report
         self.write("situation_reports", {"session_id": session.id, "ts": time.time(),
                                          "json": report.model_dump_json()})
@@ -246,7 +288,51 @@ class Orchestrator:
             "session_id": session.id, "ts": time.time(), "phase": response.phase,
             "current_step": response.current_step, "step_status": response.step_status,
             "say": response.say, "alert_json": response.alert.model_dump_json() if response.alert else None})
+        self._watch_parts(session)
         return report, response
+
+    # -- knowledge-layer hooks --------------------------------------------------
+
+    def _start_step_check(self, session: Session, transcript: Transcript | None) -> asyncio.Task | None:
+        """Is the current step done, or is the user making a mistake? Only while guiding, with a step
+        and something the camera has seen. 3 s budget; a failure never blocks the brain."""
+        step = session.current_step()
+        if session.phase not in ("guiding", "verifying") or step is None or not session.observations:
+            return None
+        return asyncio.create_task(call_stage(
+            self.stages.track_step, step, session.observations[-1], transcript.text if transcript else "",
+            session.id, session.brain_state.get("repair_id"),
+            timeout=3.0, session=session, name="track_step"))
+
+    def _watch_parts(self, session: Session) -> None:
+        """Pass 2 starts a Linkup parts job and leaves its id in session.brain_state["parts_job"];
+        we poll it and push the finished card to the phone."""
+        job = session.brain_state.get("parts_job")
+        if not job or job in session.parts_jobs:
+            return
+        session.parts_jobs.add(job)
+        session.spawn(f"parts:{job}", self._poll_parts(session, job), timeout=self.parts_timeout_s + 10)
+
+    async def _poll_parts(self, session: Session, job: str) -> None:
+        loop = asyncio.get_running_loop()
+        end = loop.time() + self.parts_timeout_s
+        while True:
+            try:
+                result = await self.stages.parts_card(job)
+            except Exception:
+                log.warning("parts job %s: polling failed", job, exc_info=True)
+                return
+            status = result.get("status")
+            if status == "ready":
+                session.queue_event(BrainResponse(phase=session.phase, parts_card=result["card"]))
+                return
+            if status != "researching":
+                log.warning("parts job %s ended as %s: %s", job, status, result.get("error", ""))
+                return
+            if loop.time() >= end:
+                log.warning("parts job %s still running after %.0fs; giving up", job, self.parts_timeout_s)
+                return
+            await asyncio.sleep(self.parts_poll_s)
 
     # -- slow loop ------------------------------------------------------------
 
@@ -325,48 +411,93 @@ class Orchestrator:
                 "voice_waiting": st["voice_waiting"], "live": session.live_conn is not None}
 
 
-# --- live voice websocket ---------------------------------------------------
+# --- live session websocket -------------------------------------------------
 
 class LiveConnection:
-    """One phone <-> server voice socket for a session (see CONTRACTS.md for the protocol)."""
+    """One phone <-> server socket for a session: camera frames in, voice in, and every brain
+    result pushed back the moment it is ready (see CONTRACTS.md for the protocol)."""
 
-    ECHO_TAIL_S = 2.0
+    ECHO_TAIL_S = 2.0       # the text echo guard stays on this long after our own speech
+    MUTE_TAIL_S = 0.7       # mic audio / clips are dropped this long after the phone says playback ended
 
     def __init__(self, orch: Orchestrator, ws: WebSocket, session: Session) -> None:
         self.orch, self.ws, self.session = orch, ws, session
         self.transcriber = stt_mod.make_live_transcriber()
-        self.started = False
+        self.started = False                   # realtime STT stream opened (PCM path only)
+        self.keyterms: list[str] = []
+        self.tts_mode = "url"                  # "url": replies carry tts_url; "stream": MP3 on this socket
         self.queue: asyncio.Queue[tuple[str, float, int]] = asyncio.Queue()
-        self.pending = 0
-        self.seq = 0                       # bumps whenever the user starts or finishes an utterance
+        self.pending = 0                       # utterances being transcribed or answered
+        self.seq = 0                           # bumps whenever the user starts or finishes an utterance
         self.speaking_task: asyncio.Task | None = None
-        self.speaking = False
+        self.speaking = False                  # the server is streaming TTS (stream mode)
+        self.playback = False                  # the phone says it is playing a reply
+        self.playback_ended_at = float("-inf")
         self.spoken_text = ""
-        self.spoken_at = 0.0
+        self.spoken_at = float("-inf")
         self.closed = False
+        self.loop: asyncio.AbstractEventLoop | None = None
+        self._out: asyncio.Queue[BrainResponse] = asyncio.Queue()    # pushed events, in order
+        self._pending_frame: tuple[bytes, float | None] | None = None
+        self._frame_task: asyncio.Task | None = None
+        self._clip_tasks: set[asyncio.Task] = set()
 
-    async def send(self, msg) -> None:
+    # -- outbound -------------------------------------------------------------
+
+    async def send(self, msg) -> bool:
         if self.closed:
-            return
+            return False
         try:
             await self.ws.send_text(msg.model_dump_json())
+            return True
         except Exception:
             self.closed = True
+            return False
+
+    def push(self, response: BrainResponse) -> bool:
+        """Called by Session.queue_event (from any thread). False = not accepted, so the session
+        keeps the event queued for the next frame reply or connection."""
+        if self.closed or self.loop is None:
+            return False
+        self.loop.call_soon_threadsafe(self._out.put_nowait, response)
+        return True
+
+    async def _pump(self) -> None:
+        while True:
+            r = await self._out.get()
+            if not await self.send(LiveEvent(response=r)):
+                self.session.events.append(r)           # socket died mid-send: don't lose it
 
     async def close(self, code: int = 1000) -> None:
         self.closed = True
         with contextlib.suppress(Exception):
             await self.ws.close(code=code)
 
-    # -- speaking -------------------------------------------------------------
+    # -- replies and speech ---------------------------------------------------
+
+    @property
+    def muted(self) -> bool:
+        """The phone is playing audio (or just stopped): its mic is muted, so drop what arrives."""
+        return self.playback or (time.monotonic() - self.playback_ended_at) < self.MUTE_TAIL_S
 
     def _echo(self, heard: str) -> bool:
-        recent = self.speaking or (time.monotonic() - self.spoken_at) < self.ECHO_TAIL_S
+        recent = (self.speaking or self.playback
+                  or (time.monotonic() - self.spoken_at) < self.ECHO_TAIL_S)
         return recent and looks_like_echo(heard, self.spoken_text)
+
+    async def _send_reply(self, response: BrainResponse, speak: bool) -> None:
+        """Send the answer to something the user said, and speak it unless it is stale."""
+        speak = speak and bool(response.say)
+        if speak and self.tts_mode == "url":
+            response.tts_url = tts_url_for(response.say)        # None when TTS is off: the phone speaks `say`
+            self.spoken_text, self.spoken_at = response.say, time.monotonic()
+        await self.send(LiveResponse(response=response, speak=speak or not response.say))
+        if speak and self.tts_mode == "stream":
+            self._start_speaking(response.say)
 
     def _start_speaking(self, text: str) -> None:
         if not tts_mod.available():
-            return                         # no TTS tts_start follows: the app speaks `say` itself
+            return                         # no tts_start follows: the app speaks `say` itself
         self.spoken_text = text
         self.speaking_task = asyncio.create_task(self._speak(text))
 
@@ -400,18 +531,64 @@ class LiveConnection:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
 
-    # -- inbound --------------------------------------------------------------
+    # -- utterance bookkeeping ------------------------------------------------
 
-    async def _ensure_started(self, keyterms: list[str] | None = None) -> None:
+    def _begin_pending(self) -> None:
+        self.pending += 1
+        self.session.voice_waiting = True
+
+    def _end_pending(self) -> None:
+        self.pending -= 1
+        self.session.voice_waiting = self.pending > 0
+
+    async def _accept_utterance(self, text: str, duration: float, already_pending: bool = False) -> None:
+        self.seq += 1
+        await self.send(LiveFinal(text=text))
+        if not already_pending:
+            self._begin_pending()
+        self.queue.put_nowait((text, duration, self.seq))
+
+    async def _worker(self) -> None:
+        while True:
+            text, duration, seq = await self.queue.get()
+            try:
+                await self._handle_utterance(text, duration, seq)
+            except Exception:
+                log.exception("live utterance failed")
+            finally:
+                self._end_pending()
+
+    async def _handle_utterance(self, text: str, duration: float, seq: int) -> None:
+        session = self.session
+        transcript = Transcript(text=text, language="en", duration_s=duration)
+        self.orch.write("transcripts", {"session_id": session.id, "ts": time.time(),
+                                        "text": text, "duration_s": duration, "source": "live"})
+        async with session.brain_lock:
+            try:
+                _, response = await self.orch.run_brain(session, transcript)
+            except BrainError:
+                log.warning("brain failed on live utterance", exc_info=True)
+                response = BrainResponse(phase=session.phase, say=APOLOGY_BRAIN)
+        # If the user began a new utterance while the brain ran, the reply is stale: show it, don't say it.
+        await self._send_reply(response, speak=(seq == self.seq))
+
+    # -- inbound: voice -------------------------------------------------------
+
+    async def _ensure_started(self) -> None:
         if self.started:
             return
         self.started = True
-        terms = [*(keyterms or []), *keyterms_for(self.session)]
         try:
-            await self.transcriber.start(terms)
+            await self.transcriber.start([*self.keyterms, *keyterms_for(self.session)])
         except stt_mod.SttError as e:
             self.started = False
             await self.send(LiveError(code="stt_unavailable", message=str(e)))
+
+    async def _on_pcm(self, pcm: bytes) -> None:
+        if self.muted:
+            return                          # the phone is playing a reply: this is its own speaker
+        await self._ensure_started()
+        await self.transcriber.send(pcm)
 
     async def _results_loop(self) -> None:
         async for r in self.transcriber.results():
@@ -428,86 +605,147 @@ class LiveConnection:
                     continue
                 if self.speaking:
                     await self.barge_in()
-                self.seq += 1
-                await self.send(LiveFinal(text=r.text))
-                self.pending += 1
-                self.session.voice_waiting = True
-                self.queue.put_nowait((r.text, r.duration_s, self.seq))
+                await self._accept_utterance(r.text, r.duration_s)
             else:
                 await self.send(LiveError(code="stt_error", message=r.message))
 
-    async def _worker(self) -> None:
-        while True:
-            text, duration, seq = await self.queue.get()
-            try:
-                await self._handle_utterance(text, duration, seq)
-            except Exception:
-                log.exception("live utterance failed")
-            finally:
-                self.pending -= 1
-                self.session.voice_waiting = self.pending > 0
+    async def _on_utterance(self, msg: LiveUtterance) -> None:
+        if self.muted:
+            return
+        try:
+            audio = base64.b64decode(msg.audio_b64, validate=True)
+        except (ValueError, binascii.Error):
+            await self.send(LiveError(code="bad_message", message="audio_b64 is not valid base64"))
+            return
+        task = asyncio.create_task(self._process_clip(audio, msg))
+        self._clip_tasks.add(task)
+        task.add_done_callback(self._clip_tasks.discard)
 
-    async def _handle_utterance(self, text: str, duration: float, seq: int) -> None:
-        session = self.session
-        transcript = Transcript(text=text, language="en", duration_s=duration)
-        self.orch.write("transcripts", {"session_id": session.id, "ts": time.time(),
-                                        "text": text, "duration_s": duration, "source": "live"})
-        async with session.brain_lock:
+    async def _process_clip(self, audio: bytes, msg: LiveUtterance) -> None:
+        s = get_settings()
+        self._begin_pending()                       # voice_waiting covers transcription too
+        enqueued = False
+        try:
+            transcript: Transcript | None = None
             try:
-                _, response = await self.orch.run_brain(session, transcript)
-            except BrainError:
-                log.warning("brain failed on live utterance", exc_info=True)
-                response = BrainResponse(phase=session.phase, say=APOLOGY_BRAIN)
-        await self.send(LiveResponse(response=response))
-        # If the user began a new utterance while the brain ran, the reply is stale: show it, don't speak it.
-        if response.say and seq == self.seq:
-            self._start_speaking(response.say)
+                transcript = await call_stage(
+                    self.orch.stages.transcribe, audio, f"utterance.{msg.format}",
+                    [*self.keyterms, *keyterms_for(self.session)], msg.duration_s,
+                    timeout=s.stt_timeout_s + 1, session=self.session, name="stt")
+            except Exception:
+                log.warning("speech-to-text failed on a clip", exc_info=True)
+            text = transcript.text.strip() if transcript else ""
+            if not text:
+                await self._send_reply(BrainResponse(phase=self.session.phase, say=APOLOGY_NO_SPEECH), speak=True)
+                return
+            await self._accept_utterance(text, transcript.duration_s, already_pending=True)
+            enqueued = True                         # the worker ends the pending count
+        finally:
+            if not enqueued:
+                self._end_pending()
+
+    # -- inbound: frames ------------------------------------------------------
+
+    async def _on_frame(self, msg: LiveFrame) -> None:
+        try:
+            jpeg = base64.b64decode(msg.jpeg_b64, validate=True)
+        except (ValueError, binascii.Error):
+            await self.send(LiveError(code="bad_frame", message="jpeg_b64 is not valid base64"))
+            return
+        if not jpeg or len(jpeg) > MAX_FRAME_BYTES:
+            await self.send(LiveError(code="bad_frame", message="empty or oversized frame"))
+            return
+        self._pending_frame = (jpeg, msg.ts)        # newest wins: an older waiting frame is replaced
+        if self._frame_task is None or self._frame_task.done():
+            self._frame_task = asyncio.create_task(self._frame_worker())
+
+    async def _frame_worker(self) -> None:
+        while self._pending_frame is not None and not self.closed:
+            jpeg, ts = self._pending_frame
+            self._pending_frame = None
+            try:
+                result = await self.orch.handle_frame(self.session, jpeg, {"ts": ts}, drain_events=False)
+            except Exception:
+                log.exception("frame failed")
+                continue
+            await self.send(LiveFrameResult(result=result))
+            for ev in self.session.drain_events():  # anything queued while no socket was connected
+                self._out.put_nowait(ev)
 
     # -- main loop ------------------------------------------------------------
 
     async def run(self) -> None:
+        self.loop = asyncio.get_running_loop()
+        for ev in self.session.drain_events():      # backlog from before this connection
+            self._out.put_nowait(ev)
         results = asyncio.create_task(self._results_loop())
         worker = asyncio.create_task(self._worker())
+        pump = asyncio.create_task(self._pump())
         try:
             while not self.closed:
                 msg = await self.ws.receive()
                 if msg["type"] == "websocket.disconnect":
                     break
                 if msg.get("bytes") is not None:
-                    await self._ensure_started()
-                    await self.transcriber.send(msg["bytes"])
+                    await self._on_pcm(msg["bytes"])
                 elif msg.get("text") is not None:
-                    if not await self._on_control(msg["text"]):
+                    if not await self._on_message(msg["text"]):
                         break
         finally:
             self.closed = True
-            for t in (results, worker, self.speaking_task):
-                if t is not None and not t.done():
+            tasks = [results, worker, pump, self.speaking_task, self._frame_task, *self._clip_tasks]
+            tasks = [t for t in tasks if t is not None]
+            for t in tasks:
+                if not t.done():
                     t.cancel()
-            await asyncio.gather(results, worker, *( [self.speaking_task] if self.speaking_task else []),
-                                 return_exceptions=True)
+            await asyncio.gather(*tasks, return_exceptions=True)
+            while not self._out.empty():            # unsent events go back to the session's queue
+                self.session.events.append(self._out.get_nowait())
             await self.transcriber.close()
             self.session.voice_waiting = False
             if self.session.live_conn is self:
                 self.session.live_conn = None
 
-    async def _on_control(self, text: str) -> bool:
+    async def _on_message(self, text: str) -> bool:
+        """Handle one JSON message from the phone. False ends the connection."""
         try:
             data = json.loads(text)
             kind = data.get("type")
         except (ValueError, AttributeError):
-            await self.send(LiveError(code="bad_message", message="expected a JSON control message"))
+            await self.send(LiveError(code="bad_message", message="expected a JSON message"))
             return True
-        if kind == "start":
-            await self._ensure_started(LiveStart.model_validate(data).keyterms)
-        elif kind == "barge_in":
-            LiveBargeIn.model_validate(data)
-            await self.barge_in()
-        elif kind == "stop":
-            LiveStop.model_validate(data)
-            return False
-        else:
-            await self.send(LiveError(code="bad_message", message=f"unknown message type {kind!r}"))
+        try:
+            if kind == "frame":
+                await self._on_frame(LiveFrame.model_validate(data))
+            elif kind == "utterance":
+                await self._on_utterance(LiveUtterance.model_validate(data))
+            elif kind == "audio":
+                try:
+                    pcm = base64.b64decode(LiveAudio.model_validate(data).pcm_b64, validate=True)
+                except (ValueError, binascii.Error):
+                    await self.send(LiveError(code="bad_message", message="pcm_b64 is not valid base64"))
+                    return True
+                await self._on_pcm(pcm)
+            elif kind == "playback":
+                p = LivePlayback.model_validate(data)
+                now = time.monotonic()
+                if p.state == "start":
+                    self.playback = True
+                else:
+                    self.playback, self.playback_ended_at, self.spoken_at = False, now, now
+            elif kind == "start":
+                s = LiveStart.model_validate(data)
+                self.keyterms, self.tts_mode = s.keyterms, s.tts
+            elif kind == "barge_in":
+                LiveBargeIn.model_validate(data)
+                await self.barge_in()
+            elif kind == "stop":
+                LiveStop.model_validate(data)
+                return False
+            else:
+                await self.send(LiveError(code="bad_message", message=f"unknown message type {kind!r}"))
+        except ValidationError as e:
+            await self.send(LiveError(code="bad_message", message=f"bad {kind!r} message: {e.errors()[0]['msg']}"))
         return True
 
 
@@ -559,6 +797,7 @@ def create_app() -> FastAPI:
         mocks.reset_stages()
         app.state.orch = Orchestrator()
         log.info("stages: %s", app.state.orch.stages.describe())
+        app.state.warm_tasks = start_warmups(app.state.orch)      # keep references so they aren't collected
         yield
         orch: Orchestrator = app.state.orch
         for s in orch.sessions.all():
@@ -635,7 +874,10 @@ def create_app() -> FastAPI:
 
     @app.get("/tts/{filename}")
     async def get_tts(filename: str):
-        path = await tts_mod.wait_for(filename)
+        stream = await tts_mod.progressive(filename)          # still being generated: send as it arrives
+        if stream is not None:
+            return StreamingResponse(stream, media_type="audio/mpeg")
+        path = await tts_mod.wait_for(filename, timeout=1.0)  # already finished (or failed)
         if path is None:
             return JSONResponse({"detail": "speech not available"}, status_code=404)
         return FileResponse(path, media_type="audio/mpeg")

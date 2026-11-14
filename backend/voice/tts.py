@@ -37,6 +37,7 @@ async def close_client() -> None:
     for t in list(_inflight.values()):
         t.cancel()
     _inflight.clear()
+    _progress.clear()
     _client = None
 
 
@@ -72,13 +73,41 @@ async def _open_stream(text: str) -> AsyncIterator[bytes]:
     )
 
 
-async def _generate(text: str, path: Path) -> None:
+class _Progress:
+    """Audio produced so far for one file in flight, so GET /tts can start before it is complete.
+
+    `event` is replaced on every change: a reader checks the state, grabs the current event and
+    awaits it; the writer sets the old event after changing the state. Single event loop, no locks."""
+
+    def __init__(self) -> None:
+        self.chunks: list[bytes] = []
+        self.done = False
+        self.event = asyncio.Event()
+
+    def _changed(self) -> None:
+        old, self.event = self.event, asyncio.Event()
+        old.set()
+
+    def add(self, chunk: bytes) -> None:
+        self.chunks.append(chunk)
+        self._changed()
+
+    def finish(self) -> None:
+        self.done = True
+        self._changed()
+
+
+_progress: dict[str, _Progress] = {}
+
+
+async def _generate(text: str, path: Path, prog: _Progress) -> None:
     part = path.with_suffix(".part")
     try:
         with part.open("wb") as f:
             async for chunk in await _open_stream(text):
                 if chunk:
                     f.write(chunk)
+                    prog.add(chunk)
         part.replace(path)
     except asyncio.CancelledError:
         part.unlink(missing_ok=True)
@@ -88,6 +117,43 @@ async def _generate(text: str, path: Path) -> None:
         _errors[path.name] = str(e)
         log.warning("TTS generation failed: %s", e)
         raise
+    finally:
+        prog.finish()
+
+
+async def progressive(filename: str, first_byte_timeout: float = 8.0) -> AsyncIterator[bytes] | None:
+    """Audio for a file that is still being generated, as an async iterator that yields chunks as
+    they arrive. None when the file is already complete on disk (serve the file), unknown, or
+    generation failed before producing any audio (answer 404 so the app speaks the text itself)."""
+    if not _is_safe_name(filename) or (cache_dir() / filename).exists():
+        return None
+    prog = _progress.get(filename)
+    if prog is None:
+        return None
+    loop = asyncio.get_running_loop()
+    end = loop.time() + first_byte_timeout
+    while not prog.chunks and not prog.done:
+        left = end - loop.time()
+        if left <= 0:
+            return None
+        try:
+            await asyncio.wait_for(prog.event.wait(), left)
+        except asyncio.TimeoutError:
+            return None
+    if not prog.chunks:
+        return None
+
+    async def gen() -> AsyncIterator[bytes]:
+        i = 0
+        while True:
+            while i < len(prog.chunks):
+                yield prog.chunks[i]
+                i += 1
+            if prog.done:
+                return
+            await prog.event.wait()
+
+    return gen()
 
 
 def start(text: str) -> str | None:
@@ -101,9 +167,12 @@ def start(text: str) -> str | None:
     if path.exists() or name in _inflight:
         return name
     _errors.pop(name, None)
-    task = asyncio.get_running_loop().create_task(_generate(text, path), name=f"tts:{name}")
+    prog = _Progress()
+    _progress[name] = prog
+    task = asyncio.get_running_loop().create_task(_generate(text, path, prog), name=f"tts:{name}")
     _inflight[name] = task
-    task.add_done_callback(lambda t, n=name: (_inflight.pop(n, None), t.exception() if not t.cancelled() else None))
+    task.add_done_callback(lambda t, n=name: (_inflight.pop(n, None), _progress.pop(n, None),
+                                              t.exception() if not t.cancelled() else None))
     return name
 
 

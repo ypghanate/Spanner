@@ -19,11 +19,11 @@ def keys(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def clean_tts_state():
-    tts._inflight.clear()
-    tts._errors.clear()
+    for d in (tts._inflight, tts._errors, tts._progress):
+        d.clear()
     yield
-    tts._inflight.clear()
-    tts._errors.clear()
+    for d in (tts._inflight, tts._errors, tts._progress):
+        d.clear()
 
 
 def fake_stream(chunks, calls, delay=0.0):
@@ -360,5 +360,85 @@ def test_tts_then_stt_round_trip():
         assert len(audio) > 1000
         t = await stt.transcribe(audio, "round_trip.mp3")
         assert "hex" in t.text.lower()
+
+    run(main())
+
+
+# --- progressive serving -----------------------------------------------------
+
+def test_progressive_yields_the_first_audio_before_generation_finishes(keys, monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(tts, "_open_stream", fake_stream([b"a", b"b", b"c", b"d"], calls, delay=0.1))
+
+    async def main():
+        name = tts.start("a longer reply")
+        stream = await tts.progressive(name)
+        assert stream is not None
+        t0 = asyncio.get_running_loop().time()
+        it = stream.__aiter__()
+        first = await it.__anext__()
+        assert asyncio.get_running_loop().time() - t0 < 0.3, "first chunk should not wait for the whole reply"
+        assert first == b"a"
+        assert not (tts.cache_dir() / name).exists(), "generation is still running"
+        rest = [c async for c in it]
+        assert first + b"".join(rest) == b"abcd"
+        await asyncio.sleep(0.05)
+        assert (tts.cache_dir() / name).read_bytes() == b"abcd"
+        assert await tts.progressive(name) is None, "finished files are served from disk"
+
+    run(main())
+    assert calls == ["a longer reply"]
+
+
+def test_two_listeners_both_get_every_chunk(keys, monkeypatch):
+    monkeypatch.setattr(tts, "_open_stream", fake_stream([b"1", b"2", b"3"], [], delay=0.05))
+
+    async def main():
+        name = tts.start("shared")
+        s1, s2 = await tts.progressive(name), await tts.progressive(name)
+
+        async def drain(s):
+            return b"".join([c async for c in s])
+        return await asyncio.gather(drain(s1), drain(s2))
+
+    assert run(main()) == [b"123", b"123"]
+
+
+def test_progressive_is_none_when_generation_fails_before_any_audio(keys, monkeypatch):
+    async def boom(text):
+        raise RuntimeError("elevenlabs down")
+    monkeypatch.setattr(tts, "_open_stream", boom)
+
+    async def main():
+        name = tts.start("hello")
+        return await tts.progressive(name)
+
+    assert run(main()) is None
+
+
+def test_progressive_ends_cleanly_if_generation_dies_midway(keys, monkeypatch):
+    async def partial(text):
+        async def gen():
+            yield b"abc"
+            raise RuntimeError("connection reset")
+        return gen()
+    monkeypatch.setattr(tts, "_open_stream", partial)
+
+    async def main():
+        name = tts.start("cut short")
+        stream = await tts.progressive(name)
+        got = [c async for c in stream]
+        await asyncio.sleep(0.05)
+        return got, (tts.cache_dir() / name).exists()
+
+    got, cached = run(main())
+    assert got == [b"abc"] and cached is False, "a truncated reply must not be cached"
+
+
+def test_progressive_rejects_unknown_and_unsafe_names(keys):
+    async def main():
+        assert await tts.progressive("0000000000000000.mp3") is None
+        assert await tts.progressive("../x.mp3") is None
+        assert await tts.progressive("x.wav") is None
 
     run(main())

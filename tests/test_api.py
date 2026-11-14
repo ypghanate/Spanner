@@ -12,8 +12,10 @@ from starlette.websockets import WebSocketDisconnect
 
 from backend import main as main_mod
 from backend.contracts import AudioResponse, FrameResponse, SessionSummary, Transcript
+from backend.vision import detect as vision_detect
 from backend.voice import tts
 from tests.conftest import set_env
+from tests.helpers import StubBoxes, StubResult, StubYolo
 
 ROOT = Path(__file__).resolve().parent.parent
 JPEG = (ROOT / "fixtures" / "frames" / "placeholder.jpg").read_bytes()
@@ -63,7 +65,7 @@ def test_health_lists_every_stage_as_mock(client):
     body = client.get("/health").json()
     assert body["status"] == "ok" and body["use_mocks"] is True
     assert set(body["stages"]) == {"preprocess", "detect", "understand", "safety", "pass2", "pass1",
-                                   "transcribe", "store"}
+                                   "transcribe", "track_step", "parts_card", "store"}
     assert set(body["stages"].values()) == {"mock"}
     assert body["pass1_backend"] == "claude"
 
@@ -215,6 +217,8 @@ def test_safety_stop_on_mains_or_gas(client):
 def test_real_mode_without_any_keys_degrades_instead_of_crashing(monkeypatch):
     """USE_MOCKS=0 with no API keys: real Pass 1 / STT fail, the heuristic and apologies take over."""
     set_env(monkeypatch, USE_MOCKS="0")
+    vision_detect.reset()
+    monkeypatch.setattr(vision_detect, "_load_model", lambda: StubYolo())      # not the real model
     with TestClient(main_mod.create_app()) as c:
         stages = c.get("/health").json()["stages"]
         assert stages["pass1"] == "real" and stages["transcribe"] == "real"
@@ -347,8 +351,21 @@ def guarded(fn, seconds=15):
         raise box["err"]
 
 
-def recv(ws):
-    m = ws.receive()
+def recv(ws, timeout=10.0):
+    """Next websocket message as ("json", obj) or ("bytes", data). Raises instead of blocking forever:
+    a test that waits on a message that never comes must fail, not hang the run and the TestClient."""
+    import anyio
+    rx = getattr(ws, "_send_rx", None)                # Starlette 1.x TestClient: an anyio receive stream
+    if rx is not None:
+        async def get():
+            with anyio.fail_after(timeout):
+                return await rx.receive()
+        try:
+            m = ws.portal.call(get)
+        except TimeoutError:
+            raise AssertionError(f"no websocket message within {timeout}s") from None
+    else:                                             # other versions: plain blocking receive
+        m = ws.receive()
     if m["type"] == "websocket.close":
         raise WebSocketDisconnect(m.get("code", 1000))
     if m.get("bytes") is not None:
@@ -473,6 +490,7 @@ def test_live_streams_spoken_reply_between_tts_start_and_end(client, monkeypatch
 
     def scenario():
         with client.websocket_connect(f"/session/{sid}/live") as ws:
+            ws.send_text(json.dumps({"type": "start", "tts": "stream"}))
             ws.send_bytes(ONE_SECOND)
             collect_until(ws, "response")
             got = collect_until(ws, "tts_end")
@@ -488,6 +506,7 @@ def test_barge_in_stops_the_spoken_reply_quickly(client, monkeypatch):
 
     def scenario():
         with client.websocket_connect(f"/session/{sid}/live") as ws:
+            ws.send_text(json.dumps({"type": "start", "tts": "stream"}))
             ws.send_bytes(ONE_SECOND)
             collect_until(ws, "response")
             assert recv(ws) == ("json", {"type": "tts_start"})
@@ -514,6 +533,7 @@ def test_echo_of_our_own_speech_is_ignored(client, monkeypatch):
 
     def scenario():
         with client.websocket_connect(f"/session/{sid}/live") as ws:
+            ws.send_text(json.dumps({"type": "start", "tts": "stream"}))
             ws.send_bytes(ONE_SECOND)
             collect_until(ws, "response")
             assert recv(ws) == ("json", {"type": "tts_start"})
@@ -547,6 +567,7 @@ def test_real_speech_over_the_reply_interrupts_and_is_answered(client, monkeypat
 
     def scenario():
         with client.websocket_connect(f"/session/{sid}/live") as ws:
+            ws.send_text(json.dumps({"type": "start", "tts": "stream"}))
             ws.send_bytes(ONE_SECOND)
             collect_until(ws, "response")
             assert recv(ws) == ("json", {"type": "tts_start"})
@@ -585,3 +606,520 @@ def test_keyterms_come_from_step_parts_and_observations():
     assert terms[:3] == ["brake_pad", "rim", "tyre"] and "allen_bolt" in terms and "hex key" not in terms
     assert len(terms) == len(set(terms))
     assert "4 mm or 5 mm hex key" in terms
+
+
+# --- live socket: frames, clips, push, playback mute ------------------------
+
+import base64  # noqa: E402
+
+B64_JPEG = base64.b64encode(JPEG).decode()
+B64_CLIP = base64.b64encode(AUDIO).decode()
+
+
+def connect(client, sid):
+    return client.websocket_connect(f"/session/{sid}/live")
+
+
+def send(ws, **msg):
+    ws.send_text(json.dumps(msg))
+
+
+def next_json(ws, timeout=10.0):
+    t, v = recv(ws, timeout)
+    assert t == "json", f"expected a JSON message, got {len(v)} binary bytes"
+    return v
+
+
+def assert_silent(ws, seconds=0.6):
+    """Nothing at all arrives within `seconds`."""
+    try:
+        got = recv(ws, seconds)
+    except AssertionError as e:
+        assert "no websocket message" in str(e), e
+        return
+    pytest.fail(f"unexpected message: {got if got[0] == 'json' else ('bytes', len(got[1]))}")
+
+
+def test_frame_over_the_socket_returns_a_frame_result(client):
+    sid = new_session(client)
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, type="frame", jpeg_b64=B64_JPEG, ts=1.5)
+            m = next_json(ws)
+            assert m["type"] == "frame_result"
+            fr = FrameResponse.model_validate(m["result"])
+            assert fr.frame_id == f"{sid}-00001" and fr.quality.is_keyframe
+            assert {d.label for d in fr.detections} == {"brake_pad", "rim"}
+            assert fr.events == [], "on the socket, brain results are pushed, never piggy-backed"
+
+    guarded(scenario)
+    assert store_of(client).read("frames")[0]["ts"] == 1.5
+
+
+def test_slow_loop_reply_is_pushed_without_another_frame(client):
+    import asyncio
+    sid = new_session(client)
+    stages = client.app.state.orch.stages
+    orig = stages.pass2
+
+    async def slow_pass2(report, session):          # the reply is ready well after the frame was answered,
+        await asyncio.sleep(0.4)                    # so nothing but a push can deliver it
+        return await orig(report, session)
+    stages.pass2 = slow_pass2
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, type="frame", jpeg_b64=B64_JPEG)               # frame 1 is a keyframe -> slow loop
+            assert next_json(ws)["type"] == "frame_result"
+            ev = next_json(ws)                                      # arrives on its own: no second frame sent
+            assert ev["type"] == "event" and ev["response"]["phase"] == "identifying"
+            assert ev["response"]["say"]
+
+    guarded(scenario)
+    assert client.get(f"/session/{sid}/state").json()["queued_events"] == 0, "pushed, not queued"
+
+
+def test_events_queued_before_the_socket_connected_are_delivered_on_connect(client):
+    sid = new_session(client)
+    from backend.contracts import BrainResponse
+    client.app.state.orch.sessions.get(sid).queue_event(BrainResponse(phase="diagnosing", say="while you were away"))
+
+    def scenario():
+        with connect(client, sid) as ws:
+            ev = next_json(ws)
+            assert ev["type"] == "event" and ev["response"]["say"] == "while you were away"
+
+    guarded(scenario)
+
+
+def test_media_is_pushed_as_a_media_only_event(client):
+    from backend.contracts import MediaUpdate
+    sid = new_session(client)
+    session = client.app.state.orch.sessions.get(sid)
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, type="start")
+            assert wait_until(lambda: session.live_conn is not None and session.live_conn.loop is not None)
+            session.queue_media(MediaUpdate(kind="illustration", step_index=1, url="/media/s1.png"))   # another thread
+            ev = next_json(ws)
+            assert ev["type"] == "event" and ev["response"]["say"] == ""
+            assert ev["response"]["media"][0]["url"] == "/media/s1.png"
+
+    guarded(scenario)
+
+
+def test_a_burst_of_frames_keeps_only_the_newest_waiting_frame(client):
+    import asyncio
+    sid = new_session(client)
+    orch = client.app.state.orch
+    seen: list[float] = []
+    original = orch.handle_frame
+
+    async def slow(session, jpeg, meta, drain_events=True):
+        seen.append(meta["ts"])
+        await asyncio.sleep(0.25)
+        return await original(session, jpeg, meta, drain_events)
+    orch.handle_frame = slow
+
+    def scenario():
+        with connect(client, sid) as ws:
+            for ts in (1.0, 2.0, 3.0, 4.0, 5.0):
+                send(ws, type="frame", jpeg_b64=B64_JPEG, ts=ts)
+            results = []
+            while len(results) < 2:
+                m = next_json(ws)
+                if m["type"] == "frame_result":
+                    results.append(m)
+            assert_silent(ws, 0.8)                                  # frames 2-4 were dropped, not queued
+
+    guarded(scenario)
+    assert seen == [1.0, 5.0]
+
+
+@pytest.mark.parametrize("msg,code", [
+    ({"type": "frame", "jpeg_b64": "!!!not base64!!!"}, "bad_frame"),
+    ({"type": "frame", "jpeg_b64": ""}, "bad_frame"),
+    ({"type": "utterance", "audio_b64": "!!!"}, "bad_message"),
+    ({"type": "audio", "pcm_b64": "!!!"}, "bad_message"),
+    ({"type": "playback", "state": "pause"}, "bad_message"),
+    ({"type": "frame"}, "bad_message"),
+    ({"type": "start", "tts": "carrier-pigeon"}, "bad_message"),
+])
+def test_malformed_messages_get_an_error_and_the_socket_stays_open(client, msg, code):
+    sid = new_session(client)
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, **msg)
+            err = next_json(ws)
+            assert err["type"] == "error" and err["code"] == code, err
+            send(ws, type="frame", jpeg_b64=B64_JPEG)               # still alive
+            assert next_json(ws)["type"] == "frame_result"
+
+    guarded(scenario)
+
+
+def test_voice_clip_gets_a_transcript_a_response_and_a_tts_url(client, monkeypatch):
+    fake_tts(monkeypatch, [b"ID3", b"audio"])
+    sid = new_session(client)
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, type="start")
+            send(ws, type="utterance", audio_b64=B64_CLIP, format="m4a", duration_s=2.0)
+            final = next_json(ws)
+            assert final["type"] == "final" and "hex key" in final["text"]
+            resp = next_json(ws)
+            assert resp["type"] == "response" and resp["speak"] is True
+            url = resp["response"]["tts_url"]
+            assert url and url.startswith("/tts/") and url.endswith(".mp3")
+            assert client.get(url).content == b"ID3audio"
+            assert_silent(ws)                                       # url mode: no audio on the socket
+
+    guarded(scenario)
+    assert store_of(client).read("transcripts")[-1]["source"] == "live"
+    assert not client.get(f"/session/{sid}/state").json()["voice_waiting"]
+
+
+def test_voice_clip_without_tts_keys_has_no_url_but_still_speaks_via_say(client):
+    sid = new_session(client)
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, type="utterance", audio_b64=B64_CLIP)
+            next_json(ws)
+            resp = next_json(ws)
+            assert resp["speak"] is True and resp["response"]["say"] and resp["response"]["tts_url"] is None
+
+    guarded(scenario)
+
+
+def test_failed_clip_gets_an_apology_and_no_brain_run(client):
+    sid = new_session(client)
+
+    async def boom(*a, **k):
+        raise RuntimeError("scribe down")
+    client.app.state.orch.stages.transcribe = boom
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, type="utterance", audio_b64=B64_CLIP)
+            resp = next_json(ws)
+            assert resp["type"] == "response" and resp["response"]["say"] == main_mod.APOLOGY_NO_SPEECH
+            assert_silent(ws)
+
+    guarded(scenario)
+    assert not store_of(client).read("situation_reports")
+    assert not client.get(f"/session/{sid}/state").json()["voice_waiting"]
+
+
+def test_audio_and_clips_are_dropped_while_the_phone_is_playing_a_reply(client):
+    sid = new_session(client)
+    calls = []
+    orig = client.app.state.orch.stages.transcribe
+
+    async def counting(*a, **k):
+        calls.append(1)
+        return await orig(*a, **k)
+    client.app.state.orch.stages.transcribe = counting
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, type="playback", state="start")
+            send(ws, type="utterance", audio_b64=B64_CLIP)          # its own speaker: dropped
+            ws.send_bytes(ONE_SECOND)                               # streaming audio: dropped
+            send(ws, type="audio", pcm_b64=base64.b64encode(ONE_SECOND).decode())
+            assert_silent(ws, 0.8)
+            assert calls == []
+            send(ws, type="playback", state="end")
+            send(ws, type="utterance", audio_b64=B64_CLIP)          # still inside the reverberation tail: dropped
+            assert_silent(ws, 0.3)
+            assert calls == []
+            time.sleep(main_mod.LiveConnection.MUTE_TAIL_S + 0.2)   # now the tail has passed
+            send(ws, type="utterance", audio_b64=B64_CLIP)
+            assert next_json(ws)["type"] == "final"
+            assert next_json(ws)["type"] == "response"
+            assert calls == [1]
+
+    guarded(scenario)
+
+
+def test_a_reply_is_shown_but_not_spoken_if_the_user_started_talking_again(client, monkeypatch):
+    import asyncio
+    fake_tts(monkeypatch, [b"x"])
+    sid = new_session(client)
+    stages = client.app.state.orch.stages
+    orig = stages.pass2
+
+    async def slow_pass2(report, session):
+        await asyncio.sleep(0.6)
+        return await orig(report, session)
+    stages.pass2 = slow_pass2
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, type="utterance", audio_b64=B64_CLIP)
+            assert next_json(ws)["type"] == "final"
+            conn = client.app.state.orch.sessions.get(sid).live_conn
+            inject(client, conn, "partial", "actually hold on")      # new speech while the brain works
+            got = collect_until(ws, "response")
+            resp = got[-1][1]
+            assert any(t == "json" and v["type"] == "partial" for t, v in got)
+            assert resp["speak"] is False and resp["response"]["tts_url"] is None
+            assert resp["response"]["say"], "the reply itself is still delivered"
+
+    guarded(scenario)
+
+
+def test_pcm_audio_over_a_json_message_works_like_a_binary_frame(client):
+    sid = new_session(client)
+
+    def scenario():
+        with connect(client, sid) as ws:
+            send(ws, type="audio", pcm_b64=base64.b64encode(ONE_SECOND).decode())
+            assert [next_json(ws)["type"], next_json(ws)["type"], next_json(ws)["type"]] == ["partial", "final", "response"]
+
+    guarded(scenario)
+
+
+def test_tts_url_streams_progressively_while_it_is_still_being_generated(client, monkeypatch):
+    import asyncio
+    set_env(monkeypatch, ELEVENLABS_API_KEY="k", ELEVENLABS_VOICE_ID="v")
+
+    async def open_stream(text):
+        async def gen():
+            for i in range(8):
+                await asyncio.sleep(0.1)
+                yield bytes([i]) * 10
+        return gen()
+    monkeypatch.setattr(tts, "_open_stream", open_stream)
+    sid = new_session(client)
+    a = post_audio(client, sid, "start.m4a")                        # starts generation, returns at once
+    t0 = time.perf_counter()
+    with client.stream("GET", a.tts_url) as r:
+        assert r.status_code == 200 and r.headers["content-type"] == "audio/mpeg"
+        chunks = iter(r.iter_bytes())
+        first = next(chunks)
+        t_first = time.perf_counter() - t0
+        rest = b"".join(chunks)
+    assert t_first < 0.5, f"first audio took {t_first:.2f}s; the whole reply takes ~0.8s"
+    assert first + rest == b"".join(bytes([i]) * 10 for i in range(8))
+    assert client.get(a.tts_url).content == first + rest             # now a plain cached file
+
+
+# --- knowledge hooks: step tracker and the Linkup parts card ------------------
+
+def drive_to_guiding(client, sid, via_socket_ws=None):
+    """Talk to the mock brain until it is guiding step 1 (the mock needs a few turns)."""
+    for _ in range(8):
+        if via_socket_ws is not None:
+            send(via_socket_ws, type="utterance", audio_b64=B64_CLIP)
+            collect_until(via_socket_ws, "response")
+        else:
+            post_audio(client, sid, "question.m4a")
+        if client.get(f"/session/{sid}/state").json()["phase"] == "guiding":
+            return
+    raise AssertionError("never reached guiding")
+
+
+def card_events(messages):
+    return [v for t, v in messages if t == "json" and v["type"] == "event" and v["response"].get("parts_card")]
+
+
+def test_parts_card_is_pushed_once_when_the_job_finishes(client):
+    sid = new_session(client)
+    orch = client.app.state.orch
+    orch.parts_poll_s = 0.05
+
+    def scenario():
+        with connect(client, sid) as ws:
+            drive_to_guiding(client, sid, via_socket_ws=ws)
+            got = collect_until(ws, "event", limit=20)               # the card arrives on its own
+            ev = card_events(got)[0]
+            card = ev["response"]["parts_card"]
+            assert card["title"] == "Replace the brake pads" and len(card["options"]) == 3
+            assert card["options"][0]["badge"].startswith("✓ Fits your")
+            assert card["decision"]["verdict"] == "repair" and ev["response"]["phase"] == "guiding"
+            send(ws, type="utterance", audio_b64=B64_CLIP)           # another turn: the same job is not pushed again
+            more = collect_until(ws, "response")
+            assert card_events(more) == []
+            assert_silent(ws, 0.4)
+
+    guarded(scenario)
+    job = client.app.state.orch.sessions.get(sid).brain_state["parts_job"]
+    assert job.startswith("mock-parts-") and job in client.app.state.orch.sessions.get(sid).parts_jobs
+
+
+def test_parts_card_without_a_socket_waits_in_the_queue_for_the_next_frame(client):
+    sid = new_session(client)
+    client.app.state.orch.parts_poll_s = 0.05
+    drive_to_guiding(client, sid)
+    assert wait_until(lambda: client.get(f"/session/{sid}/state").json()["queued_events"] >= 1)
+    fr = FrameResponse.model_validate(post_frame(client, sid).json())
+    cards = [e.parts_card for e in fr.events if e.parts_card]
+    assert len(cards) == 1 and cards[0]["title"] == "Replace the brake pads"
+
+
+@pytest.mark.parametrize("result", [{"status": "failed", "error": "linkup down"}, {"status": "unknown_job"}, "raise"])
+def test_a_failed_parts_job_pushes_nothing_and_breaks_nothing(client, result):
+    sid = new_session(client)
+    client.app.state.orch.parts_poll_s = 0.05
+
+    async def poll(job):
+        if result == "raise":
+            raise RuntimeError("boom")
+        return result
+    client.app.state.orch.stages.parts_card = poll
+    drive_to_guiding(client, sid)
+    time.sleep(0.4)
+    state = client.get(f"/session/{sid}/state").json()
+    assert state["phase"] == "guiding" and state["queued_events"] == 0
+
+
+def test_a_parts_job_that_never_finishes_is_abandoned(client):
+    sid = new_session(client)
+    orch = client.app.state.orch
+    orch.parts_poll_s, orch.parts_timeout_s = 0.02, 0.2
+    polls = []
+
+    async def forever(job):
+        polls.append(1)
+        return {"status": "researching"}
+    orch.stages.parts_card = forever
+    drive_to_guiding(client, sid)
+    time.sleep(0.8)
+    n = len(polls)
+    time.sleep(0.3)
+    assert 3 <= n and len(polls) == n, "polling must stop after the timeout"
+
+
+def tracker_recording(client, result=None, exc=None):
+    calls = []
+
+    async def fake(step, observation, said="", session_id=None, repair_id=None):
+        calls.append({"step": getattr(step, "index", None), "said": said, "session": session_id, "repair": repair_id})
+        if exc:
+            raise exc
+        return result
+    client.app.state.orch.stages.track_step = fake
+    return calls
+
+
+def test_step_tracker_is_not_called_before_guiding(client):
+    sid = new_session(client)
+    calls = tracker_recording(client, {"step_status": "done"})
+    post_frame(client, sid)                                          # an observation exists
+    wait_until(lambda: not client.get(f"/session/{sid}/state").json()["slow_busy"])
+    post_audio(client, sid)                                          # phase is still identifying/diagnosing
+    assert calls == []
+    assert client.app.state.orch.sessions.get(sid).last_step_check is None
+
+
+def test_step_tracker_needs_something_the_camera_has_seen(client):
+    sid = new_session(client)
+    drive_to_guiding(client, sid)                                    # no frame was ever sent: no observation
+    calls = tracker_recording(client, {"step_status": "done"})
+    post_audio(client, sid)
+    assert calls == []
+
+
+def test_step_tracker_runs_while_guiding_and_a_mistake_becomes_an_alert(client):
+    sid = new_session(client)
+    post_frame(client, sid)                                          # give it an observation
+    wait_until(lambda: not client.get(f"/session/{sid}/state").json()["slow_busy"])
+    drive_to_guiding(client, sid)
+    calls = tracker_recording(client, {"step_status": "mistake", "mistake": "pad pushed in upside down",
+                                       "status": "error", "backend": "adaption"})
+    client.app.state.orch.sessions.get(sid).brain_state["repair_id"] = "bike-brake"
+    a = post_audio(client, sid, "question.m4a")
+    assert a.response.alert and a.response.alert.severity == "danger"
+    assert a.response.alert.message == "Pad pushed in upside down."          # the tracker's words, as a sentence
+    assert calls and calls[0]["step"] == 1 and calls[0]["said"] and calls[0]["session"] == sid
+    assert calls[0]["repair"] == "bike-brake"
+    assert client.get(f"/session/{sid}/state").json()["last_step_check"]["step_status"] == "mistake"
+    assert "track_step" in {t["stage"] for t in client.get(f"/session/{sid}/state").json()["timings"]}
+
+
+def test_a_done_check_from_the_camera_advances_the_step_without_the_user_saying_so(client):
+    sid = new_session(client)
+    post_frame(client, sid)
+    wait_until(lambda: not client.get(f"/session/{sid}/state").json()["slow_busy"])
+    drive_to_guiding(client, sid)
+    before = client.get(f"/session/{sid}/state").json()["current_step_index"]
+    tracker_recording(client, {"step_status": "done", "mistake": "", "status": "done"})
+
+    def scenario():
+        orch = client.app.state.orch
+        session = orch.sessions.get(sid)
+
+        async def keyframe_turn():          # what the slow loop does on a keyframe: no speech
+            async with session.brain_lock:
+                return await orch.run_brain(session, None)
+        return client.portal.call(keyframe_turn)
+
+    _, response = scenario()
+    assert response.current_step == before + 2, "step index is 1-based, so one step further"
+
+
+@pytest.mark.parametrize("failure", [RuntimeError("tracker down"), TimeoutError()])
+def test_a_failing_step_tracker_never_blocks_the_brain(client, failure):
+    sid = new_session(client)
+    post_frame(client, sid)
+    wait_until(lambda: not client.get(f"/session/{sid}/state").json()["slow_busy"])
+    drive_to_guiding(client, sid)
+    calls = tracker_recording(client, exc=failure)
+    # a verdict left over from an earlier turn must never reach Pass 2 (the mock would raise an alert on it)
+    client.app.state.orch.sessions.get(sid).last_step_check = {"step_status": "mistake", "mistake": "stale"}
+    a = post_audio(client, sid)
+    assert calls and a.response.phase == "guiding" and a.response.alert is None
+    assert client.get(f"/session/{sid}/state").json()["last_step_check"] is None
+
+
+def test_real_mode_uses_the_real_knowledge_functions_for_the_new_stages(monkeypatch):
+    set_env(monkeypatch, USE_MOCKS="0")
+    vision_detect.reset()
+    monkeypatch.setattr(vision_detect, "_load_model", lambda: StubYolo())      # not the real model
+    with TestClient(main_mod.create_app()) as c:
+        stages = c.get("/health").json()["stages"]
+        assert stages["track_step"] == "real" and stages["parts_card"] == "real"
+
+
+# --- the real detect stage in the fast loop -----------------------------------
+
+def test_real_detect_is_warmed_at_startup_and_feeds_the_fast_loop(monkeypatch):
+    set_env(monkeypatch, USE_MOCKS="0")
+    vision_detect.reset()
+    box = StubResult(StubBoxes([[76.8, 57.6, 384, 288]], [0.88], [0], [5]))        # placeholder.jpg is 768x576
+    model = StubYolo([StubResult(None), box])                                       # first call is the warm-up frame
+    monkeypatch.setattr(vision_detect, "_load_model", lambda: model)
+    try:
+        with TestClient(main_mod.create_app()) as c:
+            assert c.get("/health").json()["stages"]["detect"] == "real"
+            assert wait_until(lambda: len(model.calls) == 1), "warm-up should run at startup, before any frame"
+            sid = new_session(c)
+            fr = FrameResponse.model_validate(post_frame(c, sid).json())
+            assert [(d.label, d.track_id) for d in fr.detections] == [("bicycle", 5)]
+            b = fr.detections[0].box
+            assert (b.x, b.y, b.w, b.h) == pytest.approx((0.1, 0.1, 0.4, 0.4))
+            assert [call["persist"] for call in model.calls] == [False, False]    # fresh tracker for the new session
+            assert "detect" in {t["stage"] for t in c.get(f"/session/{sid}/state").json()["timings"]}
+    finally:
+        vision_detect.reset()
+
+
+def test_a_broken_detector_does_not_stop_frames(monkeypatch):
+    set_env(monkeypatch, USE_MOCKS="0")
+    vision_detect.reset()
+
+    def boom():
+        raise RuntimeError("weights missing")
+    monkeypatch.setattr(vision_detect, "_load_model", boom)
+    try:
+        with TestClient(main_mod.create_app()) as c:
+            sid = new_session(c)
+            r = post_frame(c, sid)
+            assert r.status_code == 200 and FrameResponse.model_validate(r.json()).detections == []
+    finally:
+        vision_detect.reset()

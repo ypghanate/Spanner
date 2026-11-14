@@ -1,4 +1,14 @@
-# Adaption runbook: fine-tune Pass 1
+# Adaption runbook: fine-tune Pass 1 (OPTIONAL: not the team's Adaption entry)
+
+> **Read this first.** On 14 Nov the team decided that Adaption fine-tunes the **step tracker**, not Pass 1
+> (`VISION.md`, "Fine-tuning"; steps in `training/README.md`: `adaption_dataset.py`, `step_tracker.py`,
+> `eval_step_tracker.py`). Pass 1 stays on Claude. **Do not spend Adaption credits on Pass 1** unless the
+> team reverses that decision; the 1250 credits are for the step tracker.
+>
+> The two use different model variables: the step tracker reads `ADAPTION_MODEL_ID`; Pass 1 reads its own
+> `PASS1_ADAPTION_MODEL_ID`. Putting the step tracker's id in the Pass 1 variable is refused at runtime.
+>
+> What follows is kept as a reference in case Pass 1 is fine-tuned later.
 
 A person does the Adaption steps (their website or API). Nothing in this repo launches a training run. Target launch: **about 01:00 Sunday**, so it trains overnight while the team sleeps.
 
@@ -58,7 +68,7 @@ Check before uploading:
 ```bash
 # .env
 TOGETHER_API_KEY=...
-ADAPTION_MODEL_ID=<the trained model id>
+PASS1_ADAPTION_MODEL_ID=<the trained model id>   # NOT ADAPTION_MODEL_ID (the step tracker's)
 ADAPTION_BASE_URL=https://api.together.xyz/v1     # change if Adaption serves it elsewhere
 
 uv run python training/eval.py                    # prints the table, writes RESULTS.md and results.svg

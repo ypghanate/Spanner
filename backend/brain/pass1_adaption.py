@@ -3,10 +3,15 @@
 
 Same interface as Claude's Pass 1. The dispatcher in pass1.run() wraps this in an 800 ms
 timeout and falls back to Claude on any failure.
+
+The team's Adaption entry is the STEP TRACKER (training/step_tracker.py), which reads
+ADAPTION_MODEL_ID. Pass 1 stays on Claude by default; if Pass 1 is ever fine-tuned too, its model
+goes in PASS1_ADAPTION_MODEL_ID, a separate variable, so the two can never be mixed up.
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 
 import httpx
@@ -51,10 +56,15 @@ def parse_report(text: str) -> SituationReport:
 
 async def run_adaption(inp: Pass1Input) -> SituationReport:
     s = get_settings()
-    if not s.adaption_model_id or not s.together_api_key:
-        raise AdaptionError("ADAPTION_MODEL_ID / TOGETHER_API_KEY not set")
+    if not s.pass1_adaption_model_id or not s.adaption_api_key:
+        raise AdaptionError("PASS1_ADAPTION_MODEL_ID / TOGETHER_API_KEY not set")
+    if s.pass1_adaption_model_id == os.getenv("ADAPTION_MODEL_ID"):
+        # ADAPTION_MODEL_ID is the step tracker's model. It was trained on a different prompt and
+        # would answer Pass 1 with the wrong JSON on every call.
+        raise AdaptionError("PASS1_ADAPTION_MODEL_ID is the step tracker's ADAPTION_MODEL_ID; "
+                            "Pass 1 needs its own fine-tuned model")
     payload = {
-        "model": s.adaption_model_id,
+        "model": s.pass1_adaption_model_id,
         "messages": [
             {"role": "system", "content": load_system_prompt()},
             {"role": "user", "content": render_user(inp)},
@@ -67,7 +77,7 @@ async def run_adaption(inp: Pass1Input) -> SituationReport:
         resp = await _get_client().post(
             f"{s.adaption_base_url.rstrip('/')}/chat/completions",
             json=payload,
-            headers={"Authorization": f"Bearer {s.together_api_key}"},
+            headers={"Authorization": f"Bearer {s.adaption_api_key}"},
         )
         resp.raise_for_status()
         body = resp.json()

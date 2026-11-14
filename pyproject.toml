@@ -21,6 +21,7 @@ dependencies = [
     "databricks-sql-connector",
     "databricks-sdk",
     "fal-client",
+    "lap>=0.5.12",
 ]
 
 [dependency-groups]

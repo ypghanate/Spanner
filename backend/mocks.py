@@ -12,6 +12,13 @@ Stage signatures P2/P4 must expose (also in CONTRACTS.md). Sync or async both wo
     backend.brain.safety.check(report, session) -> BrainResponse | None
     backend.brain.pass2.respond(report, session) -> BrainResponse
     backend.store.get_store() -> Store   # .write(table, row) non-blocking, .read(table, limit), .flush()
+
+Knowledge-layer stages (Aura Maker's backend/knowledge.py; mocked the same way):
+
+    backend.knowledge.track_step_async(step, observation, said, session_id, repair_id) -> dict
+        # {"step_status": "in_progress" | "done" | "mistake" | None, "mistake": str, ...}
+    backend.knowledge.get_parts_card_async(job) -> dict
+        # {"status": "researching" | "ready" | "failed" | "unknown_job", "card": {...}}
 """
 from __future__ import annotations
 
@@ -133,6 +140,7 @@ async def mock_pass2_respond(report: SituationReport, session: Any) -> BrainResp
     if phase == "diagnosing":
         return _brain("researching")
     if phase == "researching" or session.plan is None:
+        state.setdefault("parts_job", f"mock-parts-{session.id}")      # P4's convention: the job id lives here
         return _guiding(plan, 0, attach_plan=True)
 
     if phase == "done":
@@ -142,10 +150,18 @@ async def mock_pass2_respond(report: SituationReport, session: Any) -> BrainResp
     plan = session.plan
     pos = session.current_step_index or 0
     text = f"{report.camera_sees} {report.summary}".lower()
-    if "touching the tyre" in text or "touching the tire" in text:
+    check = session.last_step_check or {}
+    if check.get("step_status") == "mistake" or "touching the tyre" in text or "touching the tire" in text:
         r = _brain("alert")
         r.current_step = plan.steps[pos].index
+        if check.get("mistake"):
+            r.alert.message = check["mistake"][:1].upper() + check["mistake"][1:] + "."
         return r
+    if check.get("step_status") == "done" and intent == "none":
+        # the camera clearly sees the step is complete: move on without waiting for the user to say so
+        if pos + 1 >= len(plan.steps):
+            return _brain("done")
+        return _guiding(plan, pos + 1)
     if intent == "step_done":
         if pos + 1 >= len(plan.steps):
             return _brain("done")
@@ -154,6 +170,37 @@ async def mock_pass2_respond(report: SituationReport, session: Any) -> BrainResp
         step = plan.steps[pos]
         return _guiding(plan, pos, say=f"For step {step.index}: {step.instruction}")
     return _guiding(plan, pos, say="")
+
+
+async def mock_track_step(step: Any, observation: Any, said: str = "", session_id: str | None = None,
+                          repair_id: str | None = None) -> dict:
+    """Step tracker stand-in: a pad touching the tyre is a mistake, a centred pad means done."""
+    await _latency()
+    text = observation if isinstance(observation, str) else f"{observation.state} {' '.join(observation.anomalies)}"
+    text = text.lower()
+    if "touching the tyre" in text or "touching the tire" in text:
+        status, mistake = "error", "pad is touching the tyre"
+    elif "centred" in text or "centered" in text:
+        status, mistake = "done", ""
+    else:
+        status, mistake = "in_progress", ""
+    contract = {"not_started": None, "in_progress": "in_progress", "done": "done", "error": "mistake"}[status]
+    return {"status": status, "mistake": mistake, "backend": "mock", "latency_ms": 0, "step_status": contract}
+
+
+_mock_jobs: dict[str, int] = {}
+
+
+async def mock_get_parts_card(job: str) -> dict:
+    """A Linkup job that is 'researching' on the first poll and 'ready' on the second."""
+    await _latency()
+    if not job.startswith("mock-parts-"):
+        return {"status": "unknown_job"}
+    polls = _mock_jobs.get(job, 0)
+    _mock_jobs[job] = polls + 1
+    if polls < 1:
+        return {"status": "researching"}
+    return {"status": "ready", "card": fixture_json("parts_card")}
 
 
 class MockStore:
@@ -236,6 +283,8 @@ class Stages:
     pass2: Callable
     pass1: Callable
     transcribe: Callable
+    track_step: Callable
+    parts_card: Callable
     store: Any
     real: dict[str, bool] = field(default_factory=dict)
 
@@ -252,6 +301,8 @@ def load_stages() -> Stages:
         "pass2": ("backend.brain.pass2.respond", mock_pass2_respond),
         "pass1": ("backend.brain.pass1.run", mock_pass1_run),
         "transcribe": ("backend.voice.stt.transcribe", mock_transcribe),
+        "track_step": ("backend.knowledge.track_step_async", mock_track_step),
+        "parts_card": ("backend.knowledge.get_parts_card_async", mock_get_parts_card),
     }
     fns: dict[str, Callable] = {}
     real: dict[str, bool] = {}
@@ -279,4 +330,5 @@ def reset_stages() -> None:
     _stages = None
     _frame_counts.clear()
     _obs_counts.clear()
+    _mock_jobs.clear()
     _mock_store.tables.clear()

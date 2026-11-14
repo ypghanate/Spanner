@@ -6,7 +6,7 @@ import pytest
 from backend import config, mocks
 
 KEY_VARS = ["ANTHROPIC_API_KEY", "ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID", "TOGETHER_API_KEY",
-            "ADAPTION_MODEL_ID", "FAL_KEY"]
+            "ADAPTION_API_KEY", "ADAPTION_MODEL_ID", "PASS1_ADAPTION_MODEL_ID", "FAL_KEY"]
 
 
 def set_env(monkeypatch, **env) -> config.Settings:

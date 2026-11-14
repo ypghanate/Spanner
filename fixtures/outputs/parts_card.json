@@ -1,0 +1,85 @@
+{
+  "card_id": "1f4c59871f67",
+  "title": "Replace the brake pads",
+  "model": "Shimano BR-R451 caliper",
+  "model_read_from": "typed: Shimano BR-R451 caliper",
+  "decision": {
+    "verdict": "repair",
+    "headline": "Repair it: £10.00 in parts vs £249.00 new. Saves £239.00 and 0.25 kg of e-waste",
+    "why": "The part costs 10.00 vs 249.00 for a new one (4% of the price).",
+    "sources": [
+      "https://shop0.example/p/0",
+      "https://newshop.example/item"
+    ]
+  },
+  "safety": null,
+  "recall_checked": true,
+  "options": [
+    {
+      "retailer": "shop0.example",
+      "part": "brake pads (mock 0)",
+      "part_number": "MOCK-0",
+      "price": "£10.00",
+      "in_stock": "yes",
+      "url": "https://shop0.example/p/0",
+      "verified": true,
+      "badge": "✓ Fits your Shimano BR-R451 caliper · 2 sources",
+      "why": "mock",
+      "evidence": [
+        "https://shop0.example/p/0",
+        "https://forum.example/t/1"
+      ]
+    },
+    {
+      "retailer": "shop1.example",
+      "part": "brake pads (mock 1)",
+      "part_number": "MOCK-1",
+      "price": "£13.00",
+      "in_stock": "yes",
+      "url": "https://shop1.example/p/1",
+      "verified": true,
+      "badge": "✓ Fits your Shimano BR-R451 caliper · 2 sources",
+      "why": "mock",
+      "evidence": [
+        "https://shop1.example/p/1",
+        "https://forum.example/t/1"
+      ]
+    },
+    {
+      "retailer": "shop2.example",
+      "part": "brake pads (mock 2)",
+      "part_number": "MOCK-2",
+      "price": "£16.00",
+      "in_stock": "yes",
+      "url": "https://shop2.example/p/2",
+      "verified": true,
+      "badge": "✓ Fits your Shimano BR-R451 caliper · 2 sources",
+      "why": "mock",
+      "evidence": [
+        "https://shop2.example/p/2",
+        "https://forum.example/t/1"
+      ]
+    }
+  ],
+  "manual": {
+    "title": "Mock manual",
+    "url": "https://manufacturer.example/manual.pdf",
+    "key_fact": "Caliper bolt torque: 25 Nm (p. 42)",
+    "steps": [
+      "Remove the pad pin (p. 42)",
+      "Slide out the pads (p. 42)"
+    ],
+    "warnings": [
+      "Mock warning"
+    ]
+  },
+  "tutorial": {
+    "title": "Mock tutorial",
+    "url": "https://www.youtube.com/watch?v=mock&t=95",
+    "chapter": "Replacing the pads",
+    "start_s": 95
+  },
+  "as_of": "Prices as of 14 Nov 16:48 UTC",
+  "sources_count": 7,
+  "mock": true
+}

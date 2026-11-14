@@ -246,7 +246,7 @@ def test_run_survives_a_broken_store(monkeypatch):
 
 
 def adaption_env(monkeypatch, timeout=0.8):
-    s = set_env(monkeypatch, PASS1_BACKEND="adaption", ADAPTION_MODEL_ID="spanner-p1",
+    s = set_env(monkeypatch, PASS1_BACKEND="adaption", PASS1_ADAPTION_MODEL_ID="spanner-p1",
                 TOGETHER_API_KEY="tok", ADAPTION_BASE_URL="https://llm.test/v1")
     fast = dataclasses.replace(s, adaption_timeout_s=timeout)
     monkeypatch.setattr(pass1, "get_settings", lambda: fast)
@@ -360,3 +360,71 @@ def test_haiku_returns_a_valid_report_quickly():
     elapsed = time.perf_counter() - t0
     assert r.user_intent == "step_done"
     assert elapsed < 3.0, f"Pass 1 took {elapsed:.1f}s (target ~1s)"
+
+
+# --- Pass 1 vs the step tracker: separate Adaption models --------------------
+
+def endpoint_counting(monkeypatch):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return chat_reply(report(summary="from adaption").model_dump_json())
+    adaption_client(monkeypatch, handler)
+    return calls
+
+
+def test_the_step_trackers_model_id_alone_never_reaches_the_pass1_endpoint(monkeypatch):
+    """ADAPTION_MODEL_ID belongs to the step tracker. Setting it must not make Pass 1 call that model."""
+    set_env(monkeypatch, PASS1_BACKEND="adaption", ADAPTION_MODEL_ID="step-tracker-ft",
+            TOGETHER_API_KEY="tok", ADAPTION_BASE_URL="https://llm.test/v1")
+    calls = endpoint_counting(monkeypatch)
+    stub_claude(monkeypatch, report(summary="from claude"))
+    store = MockStore()
+    out = run(pass1.run(inp("x"), "s", store=store))
+    assert out.summary == "from claude" and calls == []
+    assert store.read("pass1_calls")[0]["backend"] == "adaption_fallback"
+
+
+def test_a_pass1_model_id_equal_to_the_step_trackers_is_refused(monkeypatch):
+    set_env(monkeypatch, PASS1_BACKEND="adaption", ADAPTION_MODEL_ID="same-id", PASS1_ADAPTION_MODEL_ID="same-id",
+            TOGETHER_API_KEY="tok", ADAPTION_BASE_URL="https://llm.test/v1")
+    calls = endpoint_counting(monkeypatch)
+    with pytest.raises(pass1_adaption.AdaptionError, match="step tracker"):
+        run(pass1_adaption.run_adaption(inp("x")))
+    stub_claude(monkeypatch, report(summary="from claude"))
+    assert run(pass1.run(inp("x"), "s", store=MockStore())).summary == "from claude"
+    assert calls == []
+
+
+def test_both_models_can_be_configured_at_once(monkeypatch):
+    set_env(monkeypatch, PASS1_BACKEND="adaption", ADAPTION_MODEL_ID="step-tracker-ft",
+            PASS1_ADAPTION_MODEL_ID="pass1-ft", TOGETHER_API_KEY="tok", ADAPTION_BASE_URL="https://llm.test/v1")
+    calls = endpoint_counting(monkeypatch)
+    out = run(pass1.run(inp("x"), "s", store=MockStore()))
+    assert out.summary == "from adaption"
+    assert json.loads(calls[0].content)["model"] == "pass1-ft"
+
+
+def test_adaption_api_key_takes_precedence_over_the_together_key(monkeypatch):
+    set_env(monkeypatch, PASS1_BACKEND="adaption", PASS1_ADAPTION_MODEL_ID="pass1-ft", TOGETHER_API_KEY="together",
+            ADAPTION_API_KEY="other-provider", ADAPTION_BASE_URL="https://llm.test/v1")
+    calls = endpoint_counting(monkeypatch)
+    run(pass1.run(inp("x"), "s", store=MockStore()))
+    assert calls[0].headers["authorization"] == "Bearer other-provider"
+
+
+def test_adaption_works_with_only_adaption_api_key_set(monkeypatch):
+    set_env(monkeypatch, PASS1_BACKEND="adaption", PASS1_ADAPTION_MODEL_ID="pass1-ft",
+            ADAPTION_API_KEY="only-this", ADAPTION_BASE_URL="https://llm.test/v1")
+    calls = endpoint_counting(monkeypatch)
+    assert run(pass1.run(inp("x"), "s", store=MockStore())).summary == "from adaption"
+    assert calls[0].headers["authorization"] == "Bearer only-this"
+
+
+def test_eval_only_counts_adaption_as_configured_with_the_pass1_model_id(monkeypatch):
+    from training import eval as ev
+    set_env(monkeypatch, ADAPTION_MODEL_ID="step-tracker-ft", TOGETHER_API_KEY="tok")
+    assert ev.adaption_configured() is False
+    set_env(monkeypatch, PASS1_ADAPTION_MODEL_ID="pass1-ft")
+    assert ev.adaption_configured() is True

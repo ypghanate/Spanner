@@ -33,7 +33,7 @@ uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000
 cloudflared tunnel --url http://localhost:8000            # phone -> laptop (venue Wi-Fi blocks LAN)
 uv run pytest                                             # no keys needed; add -m live for real API tests
 uv run python scripts/run_pipeline.py fixtures/frames/placeholder.jpg fixtures/audio/question.mp3
-uv run python scripts/live_client.py --url http://127.0.0.1:8000   # fake phone for the live voice socket
+uv run python scripts/live_client.py --url http://127.0.0.1:8000 --frame fixtures/frames/placeholder.jpg   # fake phone; also --clip FILE, --wav WAV
 uv run python scripts/gen_types.py                        # P1: refresh app/types/contracts.ts
 ```
 
@@ -49,8 +49,10 @@ Switches (in `.env`): `PASS1_BACKEND=claude|adaption`, `FAL_ENABLED=0|1`, `USE_M
 
 ## Architecture in one screen
 
-- **Fast loop** (inline in `POST /frame`, under 0.5 s): preprocess -> detect -> boxes for the HUD.
-- **Slow loop** (background, per keyframe, under 5 s): understand -> Pass 1 -> safety -> Pass 2 -> TTS -> event queued for the next frame reply. One run per session at a time; the newest keyframe waits its turn.
-- **Voice**: live WebSocket (`WS /session/{id}/live`): mic PCM -> ElevenLabs realtime STT -> Pass 1 -> safety -> Pass 2 -> streamed TTS, with barge-in. `POST /audio` is the fallback.
-- **Pass 1** (`backend/brain/pass1.py`): camera observations + speech -> `SituationReport`. Claude Haiku by default; `pass1_adaption.py` serves the fine-tuned model and falls back to Claude on bad JSON or after 800 ms. Every call is logged to `pass1_calls` and `training/data/raw/pass1_calls.jsonl` (the fine-tune's training source).
-- **Fine-tune**: `training/` (see `training/ADAPTION_RUNBOOK.md`).
+- **One WebSocket per session** (`WS /session/{id}/live`, protocol in `CONTRACTS.md`) carries camera frames, voice, and every brain result **pushed the moment it is ready**. HTTP `POST /frame` and `POST /audio` stay as fallbacks (results then wait for the next frame reply).
+- **Fast loop** (per frame, under 0.5 s): preprocess -> detect -> `frame_result` with boxes for the HUD. Only the newest waiting frame is processed. `detect` is real (`backend/vision/detect.py`, YOLO + ByteTrack); the other vision stages are still mocks until P2 lands them.
+- **Slow loop** (background, per keyframe, under 5 s): understand -> step check + Pass 1 -> safety -> Pass 2 -> `event` pushed to the phone. One run per session at a time; the newest keyframe waits its turn.
+- **Voice**: Expo Go sends each utterance as an m4a clip (`utterance`); a dev build can stream PCM (`audio`, gives live captions). Replies carry a `tts_url` (streams while being generated) or, in `stream` mode, MP3 chunks on the socket. The phone mutes its mic during playback and reports it with `playback` messages; barge-in stops the reply.
+- **Knowledge layer** (`backend/knowledge.py`, `backend/parts_agent.py`, `training/`; Alberto): the orchestrator calls the **step tracker** alongside Pass 1 while guiding (result in `session.last_step_check`, read by Pass 2) and polls the **Linkup parts job** that Pass 2 leaves in `session.brain_state["parts_job"]`, pushing the finished card as `BrainResponse.parts_card`.
+- **Pass 1** (`backend/brain/pass1.py`): camera observations + speech -> `SituationReport`. Claude Haiku by default, and it stays on Claude. `pass1_adaption.py` can serve a Pass 1 fine-tune (`PASS1_BACKEND=adaption` + `PASS1_ADAPTION_MODEL_ID`) and falls back to Claude on bad JSON or after 800 ms. Every call is logged to `pass1_calls` and `training/data/raw/pass1_calls.jsonl`.
+- **Adaption**: the team's entry is the **step tracker** (`training/README.md`, model in `ADAPTION_MODEL_ID`). Do not spend the credits on Pass 1. `training/make_dataset.py`, `eval.py` and `ADAPTION_RUNBOOK.md` are an optional Pass 1 fine-tune kept for reference; they use a different variable (`PASS1_ADAPTION_MODEL_ID`) and a Pass 1 setting equal to the step tracker's id is refused at runtime.

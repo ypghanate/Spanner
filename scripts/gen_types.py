@@ -23,10 +23,12 @@ from backend import contracts  # noqa: E402
 
 DEFAULT_OUT = ROOT / "app" / "types" / "contracts.ts"
 # Sent by the phone: defaults may be left out.
-INPUT_MODELS = {"SessionCreate", "LiveStart", "LiveBargeIn", "LiveStop"}
+INPUT_MODELS = {"SessionCreate", "LiveStart", "LiveFrame", "LiveUtterance", "LiveAudio", "LivePlayback",
+                "LiveBargeIn", "LiveStop"}
 
-LIVE_CLIENT = ["LiveStart", "LiveBargeIn", "LiveStop"]
-LIVE_SERVER = ["LivePartial", "LiveFinal", "LiveResponse", "LiveTtsStart", "LiveTtsEnd", "LiveError"]
+LIVE_CLIENT = ["LiveStart", "LiveFrame", "LiveUtterance", "LiveAudio", "LivePlayback", "LiveBargeIn", "LiveStop"]
+LIVE_SERVER = ["LivePartial", "LiveFinal", "LiveResponse", "LiveFrameResult", "LiveEvent",
+               "LiveTtsStart", "LiveTtsEnd", "LiveError"]
 
 
 def _lit(value: Any) -> str:

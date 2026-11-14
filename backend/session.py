@@ -51,7 +51,12 @@ class Session:
 
     brain_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     voice_waiting: bool = False
-    live_conn: Any = None            # the one live-voice connection for this session, if any
+    live_conn: Any = None            # the one live socket for this session, if any (has .push(response) -> bool)
+    # Latest answer from the step tracker (backend.knowledge.track_step_async): {"step_status":
+    # "in_progress" | "done" | "mistake" | None, "mistake": str, "status": ..., "backend": ...}.
+    # Set by the orchestrator before Pass 2 runs, so Pass 2 can read it. None until first check.
+    last_step_check: dict | None = None
+    parts_jobs: set[str] = field(default_factory=set)   # Linkup job ids the orchestrator is already watching
 
     # slow-loop scheduling: one running, newest pending wins
     slow_handler: SlowHandler | None = None
@@ -96,13 +101,23 @@ class Session:
     # -- events ---------------------------------------------------------------
 
     def queue_event(self, r: BrainResponse) -> None:
+        """Deliver a brain result. With a live socket connected it is pushed at once; otherwise it
+        waits in the queue and rides the next HTTP frame reply (or the next socket connection)."""
         if self.pending_media:
             r.media = [*r.media, *self.pending_media]
             self.pending_media = []
+        conn = self.live_conn
+        if conn is not None and conn.push(r):
+            return
         self.events.append(r)
 
     def queue_media(self, m: MediaUpdate) -> None:
-        """Merged into the next event; if none comes, drain_events emits a media-only event."""
+        """Merged into the next event. With a live socket it is pushed straight away as a media-only
+        event (fal images and scans arrive on their own schedule); without one, drain_events emits
+        a media-only event on the next frame reply."""
+        if self.live_conn is not None:
+            self.queue_event(BrainResponse(phase=self.phase, media=[m]))
+            return
         self.pending_media.append(m)
 
     def drain_events(self) -> list[BrainResponse]:
@@ -193,6 +208,7 @@ class Session:
             "observations": [o.model_dump() for o in self.observations],
             "last_report": self.last_report.model_dump() if self.last_report else None,
             "last_response": self.last_response.model_dump() if self.last_response else None,
+            "last_step_check": self.last_step_check,
             "queued_events": len(self.events),
             "slow_busy": self._slow_running,
             "voice_waiting": self.voice_waiting,

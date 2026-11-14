@@ -37,12 +37,15 @@ State machine: `identifying -> diagnosing -> researching -> guiding (step 1..N) 
 | `RepairPlan` | object, fault, difficulty, time_min, tools_needed[], safety_notes[], steps[], sources[] | P4 -> app |
 | `MediaUpdate` | kind (illustration / scan3d / clip), step_index, url | P2 -> app |
 | `Alert` | severity (warn / danger), message | P4 -> app |
-| `BrainResponse` | phase, say, hud[], scene3d[], current_step, step_status (in_progress / done / mistake), alert, plan, media[], **tts_url** | P4 -> app |
+| `BrainResponse` | phase, say, hud[], scene3d[], current_step, step_status (in_progress / done / mistake), alert, plan, media[], **tts_url**, **parts_card** | P4 -> app |
 | `FrameResponse` | frame_id, quality, detections[], events[] (BrainResponses) | server -> app |
 | `AudioResponse` | transcript, response, tts_url | server -> app |
 | `SessionSummary` | session_id, object, fault, steps_total, steps_done, duration_s, sources[] | server -> app |
 
 ### Additions beyond the original plan (announce in chat)
+
+- **`BrainResponse.parts_card: dict | null`** (new). The Linkup replacement-part card, exactly as `backend.parts_agent.card_view()` builds it. The orchestrator sets it when the parts job finishes and pushes it as an `event`.
+- **One WebSocket for frames, voice and pushed events** (below), replacing push-to-talk and the 'no WebSocket' rule. Frames, `POST /audio` and the other HTTP routes remain as fallbacks.
 
 - **`BrainResponse.tts_url`** (new). Slow-loop replies travel inside `FrameResponse.events`, which has no other place for audio. P4 leaves it `null`; P3's orchestrator fills it with `/tts/<file>.mp3`.
 - **`step_status`** values `in_progress / done / mistake` are P3's proposal; P4 may change them at a checkpoint.
@@ -64,42 +67,53 @@ State machine: `identifying -> diagnosing -> researching -> guiding (step 1..N) 
 | `GET /health` | | `{"status": "ok", "stages": {...real or mock}, ...}` |
 
 - Unknown session -> `404`. Frames over 8 MB and audio over 25 MB -> `413`. Empty frame -> `400`.
-- Events from the slow loop come back **on the next frame upload** (`FrameResponse.events`), so a frame reply can carry zero, one or several `BrainResponse`s. Play them in order.
+- **HTTP fallback only:** with no live socket, slow-loop results wait in a queue and come back on the next frame upload (`FrameResponse.events`), so a frame reply can carry zero, one or several `BrainResponse`s. Play them in order. On the socket they are pushed instead.
 - For `/audio`, `AudioResponse.response.tts_url` is `null` and `AudioResponse.tts_url` carries the voice. If it is `null`, speak `response.say` locally.
-- Frame handling: the app uploads one JPEG per second, only when the previous upload has finished.
+- HTTP frame handling: one JPEG per second, only when the previous upload has finished.
 
-## Live voice: `WS /session/{id}/live`
+## Live socket: `WS /session/{id}/live`
 
-Unknown session -> the handshake is refused (close code 4404). One connection per session: a new one closes the old with code 4000.
+**This is the main channel.** One socket per session carries the camera frames, the voice, and every brain result, pushed to the phone the moment it is ready (no waiting for the next upload). The HTTP routes above still work as a fallback and for debugging.
 
-**Phone -> server**
+- All messages are JSON text. The only binary frames are two optional cases: raw PCM microphone audio from a dev build (phone -> server) and streamed MP3 in `stream` TTS mode (server -> phone).
+- Unknown session: the handshake is refused (close code 4404). One socket per session: a new one closes the old with code 4000.
+- Brain results queued while no socket was connected are delivered as `event` messages when one connects.
+- Keep-alive uses WebSocket protocol pings (uvicorn's default). There are no application-level ping messages.
 
-| Message | Meaning |
-|---|---|
-| binary frame | microphone audio: **16 kHz, mono, 16-bit little-endian PCM**. Any chunk size; about 100 ms (3200 bytes) is good. The first audio frame starts the speech stream if `start` wasn't sent. |
-| `{"type":"start","keyterms":["brake pad"]}` | optional: open the stream with extra vocabulary (the server adds the current step's parts itself) |
-| `{"type":"barge_in"}` | the phone heard the user talk over the reply: stop the speech now |
-| `{"type":"stop"}` | close the stream |
-
-**Server -> phone**
+### Phone -> server
 
 | Message | Meaning |
 |---|---|
-| `{"type":"partial","text"}` | live caption, may change |
-| `{"type":"final","text"}` | utterance committed (about 0.7 s of silence); the brain is now running |
-| `{"type":"response","response": BrainResponse}` | Pass 2 result: apply `hud`, `scene3d`, `alert`, `plan`, ... |
-| `{"type":"tts_start"}` then binary frames then `{"type":"tts_end"}` | the spoken reply, **MP3** (`mp3_44100_64`) chunks. Concatenate and play. |
-| `{"type":"error","code","message"}` | `stt_unavailable`, `stt_error`, `tts_error`, `bad_message`. On `stt_*` fall back to `POST /audio`. |
+| `{"type":"start","keyterms":["brake pad"],"tts":"url"}` | Optional settings, may be sent first or again later. `tts` is `"url"` (default: replies carry `tts_url`, the phone plays it) or `"stream"` (the server streams MP3 chunks on this socket). `keyterms` adds speech-recognition vocabulary (the current step's parts are added automatically). |
+| `{"type":"frame","jpeg_b64":"...","ts":1731600000.5}` | One camera frame, about one per second. Base64 JPEG exactly as `expo-camera` can output it. |
+| `{"type":"utterance","audio_b64":"...","format":"m4a","duration_s":2.1}` | **Voice, Expo Go path (main).** One finished clip. The phone records, detects the end of speech with the recorder's metering (about 0.7 s of silence) and sends the whole clip. |
+| `{"type":"audio","pcm_b64":"..."}` or a binary frame | **Voice, dev-build path.** Streaming microphone audio: 16 kHz, mono, 16-bit little-endian PCM, about 100 ms (3200 bytes) per chunk. Gives live captions. |
+| `{"type":"playback","state":"start"}` / `"end"` | The phone started / finished playing a spoken reply (it mutes its mic meanwhile). |
+| `{"type":"barge_in"}` | The user talked over the reply: stop playing now. |
+| `{"type":"stop"}` | Close. |
 
-Rules the phone must follow:
+### Server -> phone
 
-- **If a `response` arrives with a non-empty `say` and no `tts_start` follows, speak `say` yourself (expo-speech).** That is what happens when the server has no ElevenLabs key.
-- **Stop the mic from hearing the speaker** while audio plays: mute it, use echo cancellation, or recommend headphones. The server drops transcripts that mostly repeat the words it is currently speaking (and for 2 s after), but that is a safety net, not echo cancellation.
-- Send `barge_in` when the phone detects the user speaking over playback; stop playing and drop buffered audio. The server also cancels its own speech when it hears a non-echo transcript.
-- A reply is **not spoken** if the user started a new utterance while the brain was working; the `response` message still arrives.
-- Keep-alive uses WebSocket protocol pings (uvicorn's default). No application-level ping messages exist.
+| Message | Meaning |
+|---|---|
+| `{"type":"frame_result","result": FrameResponse}` | Fast-loop reply to a `frame`: quality and detections for the HUD boxes. `result.events` is always empty on the socket. |
+| `{"type":"event","response": BrainResponse}` | **A brain result pushed when ready:** the slow-loop reply, an alert, media, the plan, the parts card. Apply it like any `BrainResponse`. A non-empty `say` is meant to be spoken (see below). |
+| `{"type":"partial","text"}` / `{"type":"final","text"}` | Live caption (PCM path only) / the utterance was understood, the brain is now running. `final` is sent for clips too, with the recognised text. |
+| `{"type":"response","response": BrainResponse,"speak": true}` | The answer to what the user said. Apply `hud`, `scene3d`, `alert`, `plan` as usual. `speak=false` means the user started talking again while the brain worked: show the reply, **don't say it**. |
+| `{"type":"tts_start"}`, binary frames, `{"type":"tts_end"}` | `stream` mode only: the spoken reply as MP3 chunks (`mp3_44100_64`). |
+| `{"type":"error","code","message"}` | `bad_message` (unparseable or invalid message), `bad_frame` (frame not valid base64 or empty/oversized), `stt_unavailable` / `stt_error` (the *streaming* recogniser failed: switch to clips or `POST /audio`), `tts_error`. The socket stays open. A *clip* that can't be transcribed is not an error message: the phone gets an ordinary `response` saying "Sorry, I didn't catch that." |
 
-Open item for P1: **confirm Expo Go can stream raw microphone PCM.** If it cannot, the fallback is short m4a chunks (about 2 s, with silence detection on the phone) sent to `POST /audio`.
+### What the phone does (P1 checklist)
+
+1. **Frames:** send a `frame` about once a second. The server keeps one in flight and only the **newest** waiting frame, so a late phone never builds a backlog. Draw boxes from each `frame_result`.
+2. **Voice:** record each utterance as m4a, stop when the recorder's metering shows about 0.7 s of silence, send one `utterance`. (Expo Go cannot stream raw mic audio; an iOS dev build can, then use `audio` and get live `partial` captions and about 0.7 s lower latency.)
+3. **Speaking:** for a `response` with `speak=true`, and for an `event` with a non-empty `say`: play `response.tts_url` if it is set (`GET` it; it streams while it is still being generated). **If `tts_url` is `null`, speak `say` yourself with expo-speech.** Play replies in order and never overlap two. In `stream` mode, play the chunks between `tts_start` and `tts_end` instead.
+4. **Mute the mic while you play audio**, and send `playback` `start` / `end` around it. The server drops mic audio and clips that arrive while playback is on and for 0.7 s after `end`, and also discards transcripts that mostly repeat what it just said, but muting on the phone is the real fix for echo.
+5. **Barge-in:** if the user speaks over a reply, stop playback, drop buffered audio and send `barge_in`.
+6. **Parts card:** an `event` whose `response.parts_card` is set carries the Linkup replacement card (shape: `backend/parts_agent.py` `card_view`). Render it beside the 3D view.
+7. If the socket drops, reconnect to the same URL: queued results are delivered on connect. HTTP `POST /frame` and `POST /audio` keep working meanwhile.
+
+**Unverified on a device:** progressive playback of the chunked MP3 from `GET /tts/{file}.mp3`. If a player stalls on it, wait for the file to finish (about 1-2 s later it is a normal complete file with the same URL).
 
 ## Stages P2 and P4 must expose
 
@@ -109,7 +123,10 @@ Open item for P1: **confirm Expo Go can stream raw microphone PCM.** If it canno
 backend.vision.preprocess.preprocess(jpeg: bytes, session_id: str) -> tuple[bytes, FrameQuality]
     # rotated, 768 px JPEG out. Flag keyframes. Fast loop budget: ~50 ms. Timeout 3 s.
 backend.vision.detect.detect(jpeg: bytes, session_id: str) -> list[Detection]
-    # normalised boxes, smoothed across frames. Not called on blurry / too-dark frames. Timeout 2 s.
+    # REAL since 14 Nov: backend/vision/detect.py (YOLO + ByteTrack, the same call as Yash's compVisionModel.py).
+    # Normalised boxes, smoothed across frames. Not called on blurry / too-dark frames. Timeout 2 s.
+    # warm() loads the model at startup. Stock yolov8n only knows COCO classes ("bicycle", not "brake pad"):
+    # set YOLO_WEIGHTS to a part-level model. ~180 ms per frame on a laptop CPU.
 backend.vision.understand.understand(jpeg: bytes, frame_id: str, detections: list[Detection],
                                      expected_state: str | None) -> SceneObservation
     # keyframes only. expected_state = current step's expected_visual_state. Timeout 6 s.
@@ -117,6 +134,11 @@ backend.brain.safety.check(report: SituationReport, session: Session) -> BrainRe
     # mains / gas / high voltage. Return a response to short-circuit Pass 2. Timeout 2 s.
 backend.brain.pass2.respond(report: SituationReport, session: Session) -> BrainResponse
     # the Repair Brain. Runs the state machine. Timeout 10 s.
+backend.knowledge.track_step_async(step, observation, said, session_id, repair_id) -> dict
+    # Alberto's step tracker. Runs alongside Pass 1 while guiding (3 s budget). Result lands in
+    # session.last_step_check before Pass 2 runs: {"step_status": "in_progress"|"done"|"mistake"|None, "mistake": str, ...}
+backend.knowledge.get_parts_card_async(job) -> dict
+    # Polled every 2 s (up to 3 min) for the job id in session.brain_state["parts_job"].
 backend.store.get_store() -> Store
     # Store.write(table: str, row: dict) -> None   (non-blocking; batch internally)
     # Store.read(table: str, limit: int = 100) -> list[dict]
@@ -133,7 +155,10 @@ session.current_step() -> RepairStep | None
 session.observations          # deque, newest last, max 3
 session.last_report           # SituationReport | None
 session.last_response         # BrainResponse | None
-session.brain_state: dict     # P4's scratch space
+session.brain_state: dict     # P4's scratch space. Two keys the orchestrator reads (P4 sets them):
+                              #   "parts_job"  - job id from handle_parts_tool(...)["job"]; the card is pushed when ready
+                              #   "repair_id"  - the repair's id, passed to the step tracker's learning loop
+session.last_step_check       # dict | None. The step tracker's latest verdict (set before Pass 2 runs, None otherwise)
 session.apply(response)       # P3 calls this after Pass 2; updates phase, plan, step
 session.queue_event(r)        # delivered on the next frame reply
 session.queue_media(m)        # merged into the next event, or sent as a media-only event

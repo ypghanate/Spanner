@@ -24,7 +24,8 @@ class Settings:
     elevenlabs_api_key: str
     elevenlabs_voice_id: str
     together_api_key: str
-    adaption_model_id: str
+    adaption_api_key: str          # ADAPTION_API_KEY, else TOGETHER_API_KEY (same rule as the step tracker)
+    pass1_adaption_model_id: str   # Pass 1's OWN fine-tune. Never the step tracker's ADAPTION_MODEL_ID.
     adaption_base_url: str
     fal_key: str
     # switches
@@ -61,7 +62,8 @@ def get_settings() -> Settings:
         elevenlabs_api_key=os.getenv("ELEVENLABS_API_KEY", ""),
         elevenlabs_voice_id=os.getenv("ELEVENLABS_VOICE_ID", ""),
         together_api_key=os.getenv("TOGETHER_API_KEY", ""),
-        adaption_model_id=os.getenv("ADAPTION_MODEL_ID", ""),
+        adaption_api_key=os.getenv("ADAPTION_API_KEY") or os.getenv("TOGETHER_API_KEY", ""),
+        pass1_adaption_model_id=os.getenv("PASS1_ADAPTION_MODEL_ID", ""),
         adaption_base_url=os.getenv("ADAPTION_BASE_URL", "https://api.together.xyz/v1"),
         fal_key=os.getenv("FAL_KEY", ""),
         pass1_backend=os.getenv("PASS1_BACKEND", "claude").strip().lower(),

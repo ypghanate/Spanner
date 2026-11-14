@@ -153,3 +153,54 @@ def test_end_cancels_background_tasks():
         assert s.ended_at is not None and not s._tasks
 
     run(main())
+
+
+# --- push to a live socket ---------------------------------------------------
+
+class FakeConn:
+    def __init__(self, accept=True):
+        self.accept, self.pushed = accept, []
+
+    def push(self, r):
+        if self.accept:
+            self.pushed.append(r)
+        return self.accept
+
+
+def test_queue_event_is_pushed_to_a_connected_socket_and_not_queued():
+    s = Session(id="a")
+    s.live_conn = FakeConn()
+    s.queue_event(BrainResponse(phase="guiding", say="now"))
+    assert [r.say for r in s.live_conn.pushed] == ["now"]
+    assert s.drain_events() == []
+
+
+def test_queue_event_falls_back_to_the_queue_when_the_socket_refuses():
+    s = Session(id="a")
+    s.live_conn = FakeConn(accept=False)               # closed or not yet running
+    s.queue_event(BrainResponse(phase="guiding", say="later"))
+    assert [e.say for e in s.drain_events()] == ["later"]
+
+
+def test_pending_media_rides_a_pushed_event():
+    s = Session(id="a")
+    s.pending_media.append(MediaUpdate(kind="clip", step_index=1, url="/media/c.mp4"))
+    s.live_conn = FakeConn()
+    s.queue_event(BrainResponse(phase="guiding", say="hi"))
+    assert s.live_conn.pushed[0].media[0].url == "/media/c.mp4" and s.pending_media == []
+
+
+def test_queue_media_with_a_socket_is_pushed_at_once_as_a_media_only_event():
+    s = Session(id="a", phase="guiding")
+    s.live_conn = FakeConn()
+    s.queue_media(MediaUpdate(kind="scan3d", url="/media/scan.glb"))
+    (r,) = s.live_conn.pushed
+    assert r.phase == "guiding" and r.say == "" and r.media[0].kind == "scan3d"
+    assert s.pending_media == [] and s.drain_events() == []
+
+
+def test_step_check_starts_empty_and_shows_in_the_state_dump():
+    s = Session(id="a")
+    assert s.last_step_check is None and s.state_dict()["last_step_check"] is None
+    s.last_step_check = {"step_status": "done"}
+    assert s.state_dict()["last_step_check"] == {"step_status": "done"}

@@ -238,7 +238,7 @@ async def run_eval(rows: list[EvalRow], backends: dict[str, Backend], concurrenc
 
 def adaption_configured() -> bool:
     s = get_settings()
-    return bool(s.adaption_model_id and s.together_api_key)
+    return bool(s.pass1_adaption_model_id and s.adaption_api_key)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -275,7 +275,7 @@ async def main(argv: list[str] | None = None, backends: dict[str, Backend] | Non
             if adaption_configured():
                 backends["adaption"] = pass1_adaption.run_adaption
             else:
-                print("Adaption skipped: set ADAPTION_MODEL_ID and TOGETHER_API_KEY once the model is trained.")
+                print("Adaption skipped: set PASS1_ADAPTION_MODEL_ID and TOGETHER_API_KEY once the model is trained.")
     if not backends:
         print("no backend to evaluate", file=sys.stderr)
         return 2

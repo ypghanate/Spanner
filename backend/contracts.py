@@ -145,6 +145,10 @@ class BrainResponse(BaseModel):
     # Added by P3: slow-loop replies travel inside FrameResponse.events, which has
     # nowhere else to carry audio. P4 leaves this None; the orchestrator fills it.
     tts_url: str | None = None
+    # The Linkup replacement-part card, exactly as backend.parts_agent.card_view() builds it
+    # (offers, "fits your <model>" badge, repair-or-replace decision, manual spec, sources).
+    # Set by the orchestrator when the parts job finishes; the app renders it beside the 3D view.
+    parts_card: dict | None = None
 
 
 # --- HTTP responses ---------------------------------------------------------
@@ -180,13 +184,47 @@ class SessionSummary(BaseModel):
     sources: list[SourceRef] = Field(default_factory=list)
 
 
-# --- live voice WebSocket (WS /session/{id}/live) ---------------------------
-# Binary frames phone -> server: 16 kHz mono PCM16 microphone audio.
-# Binary frames server -> phone: spoken-reply audio, between tts_start and tts_end.
+# --- live session WebSocket (WS /session/{id}/live) -------------------------
+# One socket carries camera frames, voice, and everything the brain pushes back.
+# Every message is a JSON text message, except two optional binary cases:
+#   phone -> server binary frame: 16 kHz mono PCM16 microphone audio (dev build / live_client.py)
+#   server -> phone binary frame: spoken-reply MP3 audio, only in "stream" TTS mode,
+#                                  between tts_start and tts_end.
 
 class LiveStart(BaseModel):
     type: Literal["start"] = "start"
     keyterms: list[str] = Field(default_factory=list)
+    # "url" (default): replies carry tts_url and the phone plays it. "stream": the server
+    # streams MP3 chunks between tts_start and tts_end on this socket.
+    tts: Literal["url", "stream"] = "url"
+
+
+class LiveFrame(BaseModel):
+    """One camera frame (about one per second). Base64 JPEG, as expo-camera can output it."""
+    type: Literal["frame"] = "frame"
+    jpeg_b64: str
+    ts: float | None = None
+
+
+class LiveUtterance(BaseModel):
+    """One finished voice clip (Expo Go path): the phone records, detects silence with the
+    recorder's metering, and sends the whole clip."""
+    type: Literal["utterance"] = "utterance"
+    audio_b64: str
+    format: str = "m4a"
+    duration_s: float | None = None
+
+
+class LiveAudio(BaseModel):
+    """Streaming microphone audio (dev-build path): 16 kHz mono PCM16, base64."""
+    type: Literal["audio"] = "audio"
+    pcm_b64: str
+
+
+class LivePlayback(BaseModel):
+    """The phone started / finished playing a spoken reply (it mutes the mic meanwhile)."""
+    type: Literal["playback"] = "playback"
+    state: Literal["start", "end"]
 
 
 class LiveBargeIn(BaseModel):
@@ -208,7 +246,25 @@ class LiveFinal(BaseModel):
 
 
 class LiveResponse(BaseModel):
+    """The brain's answer to something the user said. Apply hud / scene3d / alert / plan as usual.
+
+    speak=True: say the reply (play response.tts_url, or speak response.say locally when
+    tts_url is null). speak=False: the user started talking again while the brain worked, so
+    show the reply but don't say it."""
     type: Literal["response"] = "response"
+    response: BrainResponse
+    speak: bool = True
+
+
+class LiveFrameResult(BaseModel):
+    """Fast-loop reply to a LiveFrame: quality and detections for the HUD boxes."""
+    type: Literal["frame_result"] = "frame_result"
+    result: FrameResponse
+
+
+class LiveEvent(BaseModel):
+    """A brain result pushed the moment it is ready (slow-loop reply, alert, media, parts card)."""
+    type: Literal["event"] = "event"
     response: BrainResponse
 
 
@@ -231,6 +287,7 @@ EXPORTED_MODELS: list[type[BaseModel]] = [
     Box, Detection, FrameQuality, SceneObservation, Transcript, SituationReport,
     SourceRef, SceneCommand, HudCommand, RepairStep, RepairPlan, MediaUpdate, Alert,
     BrainResponse, FrameResponse, AudioResponse, SessionCreate, SessionCreated,
-    SessionSummary, LiveStart, LiveBargeIn, LiveStop, LivePartial, LiveFinal,
-    LiveResponse, LiveTtsStart, LiveTtsEnd, LiveError,
+    SessionSummary, LiveStart, LiveFrame, LiveUtterance, LiveAudio, LivePlayback, LiveBargeIn,
+    LiveStop, LivePartial, LiveFinal, LiveResponse, LiveFrameResult, LiveEvent, LiveTtsStart,
+    LiveTtsEnd, LiveError,
 ]
