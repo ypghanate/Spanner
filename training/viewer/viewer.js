@@ -729,6 +729,7 @@ async function goStep(i, note = "", silent = false) {
   const id = ++runId;
   stepIdx = Math.max(0, Math.min(i, plan.steps.length - 1));
   const s = plan.steps[stepIdx];
+  $("card").style.display = "block";
   clearTags(); clearArrow(); pulseT0 = 0;
   setMode(`repair · step ${s.index}/${plan.steps.length}${note}`); blip(990);
   $("sn").textContent = `STEP ${s.index} / ${plan.steps.length}`; $("sk").textContent = `KEY ${pack.keys[brokenKey].label} · ${s.kind.toUpperCase().replace(/-/g, " ")}`;
@@ -764,7 +765,7 @@ async function rewind() {   // undo the repair step by step: the world goes back
     for (const c of s.scene3d || []) if (c.op === "rotate_to") await applyCommand(c);
     await applyState(stateBefore(i), 900); await sleep(500);
   }
-  stepIdx = -1; dots(); setMode("assembled"); $("sn").textContent = "READY";
+  stepIdx = -1; dots(); setMode("assembled"); $("card").style.display = "none";
 }
 async function tour() {
   touring = !touring; $("tour").classList.toggle("on", touring); $("tour").textContent = touring ? "■ STOP" : "▶ TOUR";
@@ -891,7 +892,12 @@ function heard(text, action) {
 async function command(raw) {
   const t = raw.toLowerCase().trim(); let said = "";
   const say = (s) => { said = s; narrate(s); };
-  if (/\b(next|continue|go on|proceed|forward)\b/.test(t)) { stopTour(); goStep(stepIdx + 1); said = "next step"; }
+  if (/\b(close|hide|dismiss|go away|that's enough|never ?mind)\b/.test(t)) { closePanels(); said = "closed"; }
+  else if (/(other|another|alternative|different|new|better) keyboards?|keyboards? (instead|to buy)|instead of (this|the rk|it)|upgrade|should i buy|what else could i buy/.test(t)) { openShop(raw); said = "searching other keyboards"; }
+  else if (/replace(ment)?s?|\bbuy\b|order|price|how much|where (can|do) i get|spare|new (key ?caps?|switch(es)?|stabili[sz]ers?|cable)/.test(t)) { openShop(raw); said = "searching replacements"; }
+  else if (/turn (the )?camera off|stop watching|camera off/.test(t)) { if (camOn) toggleCamera(); said = "camera off"; }
+  else if (/camera|watch me|look at me/.test(t)) { if (!camOn) toggleCamera(); said = "camera on"; }
+  else if (/\b(next|continue|go on|proceed|forward)\b/.test(t)) { stopTour(); goStep(stepIdx + 1); said = "next step"; }
   else if (/\b(back|previous)\b/.test(t) && !/back together|put .*back/.test(t)) { stopTour(); goStep(stepIdx - 1); said = "previous step"; }
   else if (/take .*apart|explode|open it up|blow it up|exploded/.test(t)) { stopTour(); takeApart(); say("Taking it apart."); }
   else if (/put .*(together|back)|assemble|close it/.test(t)) { stopTour(); reassemble(); say("Putting it back together."); }
@@ -908,7 +914,7 @@ async function command(raw) {
   else if (/zoom out|further|step back/.test(t)) { flyTo(camera.position.clone().sub(controls.target).multiplyScalar(1.5).add(controls.target), controls.target.clone(), 600); said = "zoom out"; }
   else if (/spec/.test(t)) { showSide("specs"); say("Specifications."); }
   else if (/source|where did|evidence|cite/.test(t)) { showSide("sources"); say("Sources."); }
-  else if (/\b(parts?|replacement|buy|order|price|how much)\b/.test(t)) { showSide("parts"); say(card?.decision ? card.decision.headline : "Here are the replacement parts."); }
+  else if (/\b(parts? card|repair or replace|worth (it|repairing))\b/.test(t)) { showSide("parts"); say(card?.decision ? card.decision.headline : "Here is the parts card."); }
   else if (/lights? on|rgb on|backlight on/.test(t)) { setRGB(true); said = "lights on"; }
   else if (/lights? off|rgb off|backlight off/.test(t)) { setRGB(false); said = "lights off"; }
   else if (/show me|look at|focus on|go to|select/.test(t)) {
@@ -921,21 +927,147 @@ async function command(raw) {
   else if (/step (\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven)/.test(t)) {
     const words = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven"], m = /step (\d+|\w+)/.exec(t);
     const n = parseInt(m[1]) || words.indexOf(m[1]) + 1; if (n > 0) { stopTour(); goStep(n - 1); said = `step ${n}`; }
-  } else said = "not understood";
+  } else if (t.split(/\s+/).length >= 3) { said = "asking Spanner"; askCoach(raw); }
+  else said = "not understood";
   heard(raw, said);
 }
 let rec = null;
+function setListen(on, txt) { const l = $("listen"); l.classList.toggle("on", on); l.textContent = txt || (on ? "LISTENING" : "MIC OFF"); }
 $("mic").onclick = () => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { heard("", "speech recognition needs Chrome or Edge"); return; }
-  micOn = !micOn; $("mic").classList.toggle("on", micOn);
+  if (!SR) { heard("", "speech recognition needs Chrome or Edge"); setListen(false, "VOICE NEEDS CHROME / EDGE"); return; }
+  micOn = !micOn; $("mic").classList.toggle("on", micOn); setListen(micOn);
   if (!micOn) { rec?.stop(); rec = null; return; }
   rec = new SR(); rec.continuous = true; rec.interimResults = false; rec.lang = "en-GB";
   rec.onresult = (e) => { const r = e.results[e.results.length - 1]; if (r.isFinal) command(r[0].transcript); };
   rec.onend = () => { if (micOn) try { rec.start(); } catch { /* already running */ } };
-  rec.onerror = (e) => heard("", "mic error: " + e.error);
-  rec.start(); if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); } narrate("Listening.");
+  rec.onerror = (e) => { if (e.error !== "no-speech" && e.error !== "aborted") heard("", "mic error: " + e.error); if (e.error === "not-allowed") { micOn = false; setListen(false, "MIC BLOCKED"); } };
+  rec.start(); if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); } 
 };
+
+// ------------------------------------------------------------------ live shopping on request (Linkup + Tavily via /coach/shop)
+const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const money = (p, c) => (p > 0 ? `${{ GBP: "£", USD: "$", EUR: "€" }[c] || (c ? c + " " : "")}${Number(p).toFixed(2)}` : "see price ↗");
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
+function closePanels() { for (const id of ["shop", "side", "insp"]) $(id).style.display = "none"; select(null); }
+let shopReq = 0;
+async function openShop(raw) {
+  const id = ++shopReq, el = $("shop");
+  $("side").style.display = "none"; $("insp").style.display = "none";
+  el.style.display = "block";
+  el.innerHTML = `<h3>SEARCHING THE WEB LIVE</h3><div class="searching">LINKUP · TAVILY · “${esc(raw)}”</div>`;
+  narrate("Searching live.");
+  try {
+    const r = await fetch(API + "/coach/shop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: raw }) });
+    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 120)}`);
+    const d = await r.json(); if (id !== shopReq) return;
+    const src = `LIVE · LINKUP + TAVILY · ${(d.latency_ms / 1000).toFixed(1)} s${d.cached ? " · CACHED" : ""}`;
+    const img = (u) => (u ? `<img src="${esc(u)}" referrerpolicy="no-referrer" onerror="this.remove()">` : "");
+    if (d.kind === "keyboard") {
+      el.innerHTML = `<h3>OTHER KEYBOARDS · VS YOUR RK61</h3><div class="sub">${src}</div><div class="grid">${d.items.map((k, i) => `
+        <div class="it" style="animation-delay:${i * 70}ms">${img(k.image_url)}
+          <div class="nm">${esc(k.name)}</div><div class="pr">${money(k.price, k.currency)}</div>
+          <ul>${(k.pros || []).map((x) => `<li class="p">${esc(x)}</li>`).join("")}${(k.cons || []).map((x) => `<li class="c">${esc(x)}</li>`).join("")}</ul>
+          <a href="${esc(k.url)}" target="_blank">${esc(hostOf(k.url))} ↗</a></div>`).join("")}</div>`;
+      const c = d.items.filter((k) => k.price > 0).sort((a, b) => a.price - b.price)[0];
+      narrate(`I found ${d.items.length} alternatives.${c ? ` The cheapest is the ${c.name} at ${money(c.price, c.currency)}.` : ""} Pros in green, cons in red.`);
+    } else {
+      const fit = d.items.filter((o) => o.compatible);
+      el.innerHTML = `<h3>REPLACEMENT ${esc(d.item.split(" (")[0]).toUpperCase()} · FOR YOUR RK61</h3><div class="sub">${src}</div><div class="grid">${d.items.map((o, i) => `
+        <div class="it" style="animation-delay:${i * 70}ms">${img(o.image_url)}
+          <div class="nm">${esc(o.name)}</div><div class="pr">${money(o.price, o.currency)}</div><div class="rt">${esc(o.retailer)}</div>
+          <span class="badge ${o.compatible ? "ok" : "no"}">${o.compatible ? "✓ FITS YOUR RK61" : "✗ WON'T FIT"}</span>
+          <div class="why">${esc(o.compatibility)}</div>
+          <a href="${esc(o.url)}" target="_blank">${esc(hostOf(o.url))} ↗</a></div>`).join("")}</div>`;
+      const c = fit.filter((o) => o.price > 0).sort((a, b) => a.price - b.price)[0];
+      narrate(`${fit.length} of ${d.items.length} fit your RK61.${c ? ` Cheapest that fits: ${c.name}, ${money(c.price, c.currency)}, from ${c.retailer}.` : ""}`);
+    }
+  } catch (e) {
+    if (id !== shopReq) return;
+    el.innerHTML = `<h3>SEARCH FAILED</h3><div class="searching bad">${esc(e.message)}</div>`; narrate("The live search failed. Ask me again.");
+  }
+}
+async function askCoach(q) {
+  try {
+    const r = await fetch(API + "/coach/ask", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ question: q, current_step: stepIdx + 1 }) });
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json(); heard(q, d.answer); narrate(d.answer);
+  } catch (e) { heard(q, "couldn't reach Spanner: " + e.message); }
+}
+
+// ------------------------------------------------------------------ live camera coach (laptop webcam -> /coach/frame)
+const API = QP.get("api") || "";            // same origin when served by the backend (uvicorn backend.main:app)
+const SESSION = "laptop-" + Math.random().toString(36).slice(2, 8);
+let camOn = false, camBusy = false, camStream = null, lastDetect = 0, agree = 0, lastMistakeAt = 0, lastDoneStep = -1;
+const grabCanvas = document.createElement("canvas");
+
+async function grabFrame() {
+  const v = $("video"), w = 768, h = Math.round(w * v.videoHeight / v.videoWidth);
+  grabCanvas.width = w; grabCanvas.height = h;
+  grabCanvas.getContext("2d").drawImage(v, 0, 0, w, h);
+  return new Promise((ok) => grabCanvas.toBlob(ok, "image/jpeg", 0.82));
+}
+function seen(html) { $("seen").innerHTML = html; }
+
+async function coachTick() {
+  if (!camOn) return;
+  const v = $("video");
+  if (!camBusy && v.readyState >= 2 && v.videoWidth) {
+    camBusy = true;
+    try {
+      const fd = new FormData();
+      fd.append("image", await grabFrame(), "frame.jpg");
+      fd.append("current_step", String(stepIdx + 1)); fd.append("session", SESSION);
+      const r = await fetch(API + "/coach/frame", { method: "POST", body: fd });
+      if (r.ok) onCoach(await r.json());
+      else seen(`<span class="bad">Coach error ${r.status}: ${(await r.text()).slice(0, 120)}</span>`);
+    } catch (e) { seen(`<span class="bad">Can't reach the coach (${e.message}). Run: uvicorn backend.main:app</span>`); }
+    camBusy = false;
+  }
+  setTimeout(coachTick, 1500);
+}
+
+function onCoach(c) {
+  $("camlat").textContent = `${(c.latency_ms / 1000).toFixed(1)} s`;
+  $("camconfbar").style.width = Math.round(c.confidence * 100) + "%";
+  const stepTxt = c.step_index > 0 ? ` · <b>STEP ${c.step_index}</b> ${c.step_status.replace("_", " ")}` : "";
+  seen(`<b>I SEE</b> ${c.what_i_see}${stepTxt}${c.mistake ? `<br><span class="bad">⚠ ${c.mistake}</span>` : ""}`);
+  if (!c.object_visible || c.step_index < 1) { agree = 0; return; }
+  // follow the user: jump to the step they're doing (two frames agree, or one very confident frame)
+  agree = c.step_index === lastDetect ? agree + 1 : 1; lastDetect = c.step_index;
+  const target = c.step_index - 1, sure = agree >= 2 || c.confidence >= 0.85;
+  if (sure && target !== stepIdx && c.confidence >= 0.5) {
+    stopTour(); goStep(target, " · detected");
+  } else if (sure && target === stepIdx && c.step_status === "done" && lastDoneStep !== target) {
+    lastDoneStep = target;                    // step finished: show the next one
+    showTag(`keycap_${brokenKey}`, `STEP ${c.step_index} DONE ✓`, "ok", 2.2);
+    narrate(c.say || "Done. Next step.");
+    if (stepIdx < plan.steps.length - 1) setTimeout(() => goStep(stepIdx + 1, " · auto"), 1400);
+  }
+  if (c.mistake && performance.now() - lastMistakeAt > 8000) {
+    lastMistakeAt = performance.now(); flash();
+    showTag(`keycap_${brokenKey}`, "⚠ " + c.mistake.toUpperCase().slice(0, 60), "red", 2.6);
+    narrate("Careful. " + c.mistake);
+  } else if (c.say && !c.mistake && sure && target === stepIdx && c.step_status !== "done") {
+    // light guidance only when nothing else is being said
+  }
+}
+
+async function toggleCamera() {
+  if (camOn) {
+    camOn = false; camStream?.getTracks().forEach((t) => t.stop()); camStream = null;
+    $("cam").style.display = "none"; $("keys").style.display = ""; $("camera").classList.remove("on"); setMode("assembled"); return;
+  }
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+  } catch (e) { heard("", "camera blocked: " + e.message); return; }
+  $("video").srcObject = camStream; $("cam").style.display = "block"; $("keys").style.display = "none";
+  $("camera").classList.add("on"); camOn = true; agree = 0; lastDetect = 0;
+  if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); }
+  setMode("live · watching"); narrate("I'm watching. Show me the keyboard.");
+  coachTick();
+}
+$("camera").onclick = toggleCamera;
 
 // ------------------------------------------------------------------ controls
 $("apart").onclick = () => { stopTour(); takeApart(); };
@@ -951,7 +1083,7 @@ $("mistake").onclick = showMistake; $("fixit").onclick = fixMistake;
 $("reset").onclick = async () => { stopTour(); stepIdx = -1; select(null); clearTags(); clearArrow(); setHighlight([]); mistakeOn = false; $("mistake").classList.remove("on"); $("fixit").style.display = "none";
   if (openSwitch) { await openSwitchAnim(openSwitch, false); openSwitch = null; }
   applyState({ ...INITIAL }, 600); explodeAll(0); rotateTo("iso"); setMode("assembled"); dots();
-  $("sn").textContent = "READY"; $("sk").textContent = ""; $("si").textContent = `${plan.steps.length}-step repair ready. Broken key: ${pack.keys[brokenKey].label}.`; $("sd").textContent = $("sm").textContent = ""; $("tools").innerHTML = ""; };
+  $("card").style.display = "none"; };
 $("ex").oninput = (e) => { stopTour(); const a = e.target.value / 100;
   for (const g of Object.keys(pack.groups)) if (!["case", "usb_c_port", "mode_switch"].includes(g)) amount[g] = a;
   setMode(a > 0 ? "exploded view" : "assembled"); };
@@ -962,20 +1094,20 @@ addEventListener("keydown", (e) => {
   else if (e.key === " ") { e.preventDefault(); tour(); } else if (e.key.toLowerCase() === "e") ($("ex").value > 50 ? $("together") : $("apart")).onclick();
   else if (e.key.toLowerCase() === "x") setXray(!xray); else if (e.key.toLowerCase() === "r") $("reset").onclick();
   else if (e.key.toLowerCase() === "f" && selected) focusPart(selected); else if (e.key.toLowerCase() === "m") showMistake();
-  else if (e.key === "Escape") { select(null); $("side").style.display = "none"; }
+  else if (e.key.toLowerCase() === "c") toggleCamera();
+  else if (e.key === "Escape") closePanels();
 });
 
 // ------------------------------------------------------------------ load + boot
-const FALLBACK = { sources: [], steps: [
-  { index: 1, instruction: "Pull the keycap off the broken key with a keycap puller.", parts: ["keycap"], expected_visual_state: "The switch is exposed.", common_mistakes: ["Pulling the keycap at an angle"], kind: "keycap-pull", scene3d: [{ op: "rotate_to", view: "detail" }, { op: "highlight", part: "keycap_F" }] },
-  { index: 2, instruction: "Squeeze the switch clips with the switch puller and pull it straight up.", parts: ["mechanical switch"], expected_visual_state: "The hot-swap socket is empty.", common_mistakes: ["Rocking the switch sideways"], kind: "switch-pull", scene3d: [{ op: "highlight", part: "switch_F" }] },
-  { index: 3, instruction: "Line the new switch's pins up and press straight down until it clicks.", parts: ["mechanical switch"], expected_visual_state: "The switch sits flush.", common_mistakes: ["Inserting it rotated"], kind: "switch-insert", scene3d: [{ op: "highlight", part: "switch_F" }] },
-  { index: 4, instruction: "Put the keycap back and test the key.", parts: ["keycap"], expected_visual_state: "The key types.", common_mistakes: [], kind: "keycap-place", scene3d: [{ op: "pulse", part: "keycap_F" }] },
-] };
+
 
 const [packJson, planJson] = await Promise.all([fetch(BASE + "pack.json").then((r) => r.json()),
   fetch(BASE + "demo_plan.json").then((r) => (r.ok ? r.json() : null)).catch(() => null)]);
-pack = packJson; plan = planJson?.plan || FALLBACK; card = planJson?.parts_card || null;
+if (!planJson?.plan) {   // no placeholder data: without the knowledge-base procedure there is nothing to show
+  $("bootmsg").textContent = "no repair procedure found: run python -m training.scene3d";
+  throw new Error("demo_plan.json missing");
+}
+pack = packJson; plan = planJson.plan; card = planJson.parts_card || null;
 brokenKey = QP.get("key") || planJson?.broken_key || "F"; K = pack.keys[brokenKey]; if (!K) { brokenKey = "F"; K = pack.keys.F; }
 for (const s of plan.steps) if (!s.kind) s.kind = "other";
 $("bootmsg").textContent = "building " + (pack.object || "model"); $("bootbar").style.width = "40%";
@@ -1014,8 +1146,6 @@ renderer.setAnimationLoop(() => {
 setXray(true); setMode("scanning");
 await flyTo(V3(...pack.views.iso), V3(0, 1.5, 0), 2200);
 setXray(false); setMode("assembled"); blip(880, 0.08);
-typeText($("si"), `${plan.steps.length}-step repair loaded${planJson ? " from Spanner's knowledge base" : " (demo steps)"}. Broken key: ${pack.keys[brokenKey].label}. Click any part, say "next", or press STEP ▶.`);
-$("sn").textContent = "READY";
 
 // deep links (pitch + screenshot tests)
 if (QP.get("xray") === "1") setXray(true);
@@ -1024,3 +1154,18 @@ if (QP.get("step")) await goStep(Number(QP.get("step")) - 1, "", true);
 if (QP.get("mistake") === "1") await showMistake();
 if (QP.get("select") && parts[QP.get("select")]) { select(QP.get("select")); if (QP.get("pull") === "1") await $("pull").onclick(); if (QP.get("open") === "1") await $("open").onclick(); }
 if (QP.get("panel")) showSide(QP.get("panel"));
+if (QP.get("camera") === "1") toggleCamera();
+if (QP.get("shop")) openShop(QP.get("shop"));
+
+// wake: browsers need one gesture before mic + speech; after that it's voice only
+if (!INSTANT && QP.get("wake") !== "0") {
+  const w = $("wake"); w.style.display = "flex";
+  const wake = async () => {
+    removeEventListener("keydown", wake, true); w.remove();
+    voiceOn = true; $("voice").classList.add("on");
+    if (!micOn) $("mic").onclick();
+    if (!camOn) await toggleCamera();
+    narrate("Hi, I'm Spanner. I'm watching. Show me the keyboard and I'll guide you step by step. You can also ask me for replacement parts or other keyboards.");
+  };
+  w.addEventListener("pointerdown", wake, { once: true }); addEventListener("keydown", wake, { capture: true, once: true });
+}

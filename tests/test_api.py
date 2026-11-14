@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from backend import main as main_mod
+from backend import mocks
 from backend.contracts import AudioResponse, FrameResponse, SessionSummary, Transcript
 from backend.vision import detect as vision_detect
 from backend.voice import tts
@@ -222,7 +223,10 @@ def test_real_mode_without_any_keys_degrades_instead_of_crashing(monkeypatch):
     with TestClient(main_mod.create_app()) as c:
         stages = c.get("/health").json()["stages"]
         assert stages["pass1"] == "real" and stages["transcribe"] == "real"
-        assert stages["pass2"] == "mock" and stages["preprocess"] == "mock", "P2/P4 modules don't exist yet"
+        assert all(v == "real" for v in stages.values()), stages              # zero mocks in real mode
+        # this test is about Pass 1 / STT without keys: feed it a keyframe observation (vision needs a key too)
+        c.app.state.orch.stages.preprocess = mocks.mock_preprocess
+        c.app.state.orch.stages.understand = mocks.mock_understand
         sid = new_session(c)
         post_frame(c, sid)                                       # keyframe -> slow loop -> real Pass 1 fails
         assert wait_until(lambda: c.get(f"/session/{sid}/state").json()["queued_events"] == 1)
@@ -1098,6 +1102,7 @@ def test_real_detect_is_warmed_at_startup_and_feeds_the_fast_loop(monkeypatch):
         with TestClient(main_mod.create_app()) as c:
             assert c.get("/health").json()["stages"]["detect"] == "real"
             assert wait_until(lambda: len(model.calls) == 1), "warm-up should run at startup, before any frame"
+            c.app.state.orch.stages.preprocess = mocks.mock_preprocess   # the flat placeholder reads as blurry
             sid = new_session(c)
             fr = FrameResponse.model_validate(post_frame(c, sid).json())
             assert [(d.label, d.track_id) for d in fr.detections] == [("bicycle", 5)]

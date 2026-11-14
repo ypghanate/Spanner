@@ -814,6 +814,8 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="Spanner", lifespan=lifespan)
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    from .coach import mount as mount_coach   # laptop camera coach + 3D hologram at /training/viewer/
+    mount_coach(app)
 
     def orch_of(request_or_ws) -> Orchestrator:
         return request_or_ws.app.state.orch
