@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Spanner",
+    "slug": "spanner",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ai.spanner.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Spanner uses the camera to see what you are repairing.",
+        "NSMicrophoneUsageDescription": "Spanner listens so you can talk to it while you repair."
+      }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Spanner uses the camera to see what you are repairing."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Spanner listens so you can talk to it while you repair."
+        }
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-status-bar",
+      "expo-video",
+      "expo-asset"
+    ]
+  }
+}
