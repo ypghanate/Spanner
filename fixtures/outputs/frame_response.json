@@ -1,0 +1,35 @@
+{
+  "frame_id": "fixture-00001",
+  "quality": {
+    "blurry": false,
+    "too_dark": false,
+    "is_keyframe": true,
+    "sharpness": 142.5,
+    "brightness": 118.0
+  },
+  "detections": [
+    {
+      "label": "brake_pad",
+      "score": 0.81,
+      "box": {
+        "x": 0.42,
+        "y": 0.36,
+        "w": 0.12,
+        "h": 0.1
+      },
+      "track_id": 1
+    },
+    {
+      "label": "rim",
+      "score": 0.9,
+      "box": {
+        "x": 0.3,
+        "y": 0.2,
+        "w": 0.45,
+        "h": 0.55
+      },
+      "track_id": 2
+    }
+  ],
+  "events": []
+}

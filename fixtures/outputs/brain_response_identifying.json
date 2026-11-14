@@ -1,0 +1,25 @@
+{
+  "phase": "identifying",
+  "say": "I can see a bicycle wheel with a rim brake. What's going wrong?",
+  "hud": [
+    {
+      "op": "label",
+      "target_label": "rim",
+      "box": {
+        "x": 0.3,
+        "y": 0.2,
+        "w": 0.45,
+        "h": 0.55
+      },
+      "text": "rim",
+      "color": "info"
+    }
+  ],
+  "scene3d": [],
+  "current_step": null,
+  "step_status": null,
+  "alert": null,
+  "plan": null,
+  "media": [],
+  "tts_url": null
+}

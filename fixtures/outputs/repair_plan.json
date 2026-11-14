@@ -1,0 +1,174 @@
+{
+  "object": "bicycle rim brake",
+  "fault": "brake pad off-centre, rubbing the rim",
+  "difficulty": "easy",
+  "time_min": 10,
+  "tools_needed": [
+    "4 mm or 5 mm hex key"
+  ],
+  "safety_notes": [
+    "Test the brakes before you ride."
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "instruction": "Loosen the brake pad bolt a half turn with a hex key. Do not remove it.",
+      "parts": [
+        "brake_pad",
+        "allen_bolt"
+      ],
+      "expected_visual_state": "A hex key sits in the pad bolt and the pad can slide slightly.",
+      "common_mistakes": [
+        "Removing the bolt completely",
+        "Using the wrong size key and rounding the bolt"
+      ],
+      "scene3d": [
+        {
+          "op": "highlight",
+          "part": "allen_bolt"
+        },
+        {
+          "op": "rotate_to",
+          "view": "side"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Park Tool: Caliper brake adjustment",
+          "url": "https://www.parktool.com/en-us/blog/repair-help/caliper-brake-adjustment",
+          "kind": "web"
+        }
+      ],
+      "illustration_prompt": "Blueprint-style line drawing: Loosen the brake pad bolt a half turn with a hex key. Do not remove it. No text.",
+      "illustration_url": null,
+      "clip_url": null
+    },
+    {
+      "index": 2,
+      "instruction": "Slide the pad so it sits flat on the metal braking surface, clear of the tyre.",
+      "parts": [
+        "brake_pad",
+        "rim",
+        "tyre"
+      ],
+      "expected_visual_state": "The whole pad face lines up with the braking surface of the rim.",
+      "common_mistakes": [
+        "Pad touching the tyre",
+        "Pad too low on the rim"
+      ],
+      "scene3d": [
+        {
+          "op": "highlight",
+          "part": "brake_pad"
+        },
+        {
+          "op": "arrow",
+          "part": "brake_pad",
+          "direction": "up"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Park Tool: Caliper brake adjustment",
+          "url": "https://www.parktool.com/en-us/blog/repair-help/caliper-brake-adjustment",
+          "kind": "web"
+        }
+      ],
+      "illustration_prompt": "Blueprint-style line drawing: Slide the pad so it sits flat on the metal braking surface, clear of the tyre. No text.",
+      "illustration_url": null,
+      "clip_url": null
+    },
+    {
+      "index": 3,
+      "instruction": "Squeeze the brake lever and hold it, then tighten the pad bolt.",
+      "parts": [
+        "brake_lever",
+        "brake_pad",
+        "allen_bolt"
+      ],
+      "expected_visual_state": "The lever is held in and the bolt is snug with the pad still flat.",
+      "common_mistakes": [
+        "Letting the pad twist while tightening",
+        "Over-tightening the bolt"
+      ],
+      "scene3d": [
+        {
+          "op": "pulse",
+          "part": "allen_bolt"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Park Tool: Caliper brake adjustment",
+          "url": "https://www.parktool.com/en-us/blog/repair-help/caliper-brake-adjustment",
+          "kind": "web"
+        }
+      ],
+      "illustration_prompt": "Blueprint-style line drawing: Squeeze the brake lever and hold it, then tighten the pad bolt. No text.",
+      "illustration_url": null,
+      "clip_url": null
+    },
+    {
+      "index": 4,
+      "instruction": "Spin the wheel and check the gap is even on both sides of the rim.",
+      "parts": [
+        "rim",
+        "brake_pad"
+      ],
+      "expected_visual_state": "The wheel spins freely with no rubbing sound.",
+      "common_mistakes": [
+        "Ignoring a wobbling wheel that needs truing"
+      ],
+      "scene3d": [
+        {
+          "op": "rotate_to",
+          "view": "front"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Park Tool: Caliper brake adjustment",
+          "url": "https://www.parktool.com/en-us/blog/repair-help/caliper-brake-adjustment",
+          "kind": "web"
+        }
+      ],
+      "illustration_prompt": "Blueprint-style line drawing: Spin the wheel and check the gap is even on both sides of the rim. No text.",
+      "illustration_url": null,
+      "clip_url": null
+    },
+    {
+      "index": 5,
+      "instruction": "Squeeze the lever hard and push the bike forward to test the brake.",
+      "parts": [
+        "brake_lever",
+        "brake_pad"
+      ],
+      "expected_visual_state": "The brake grips firmly and releases cleanly.",
+      "common_mistakes": [
+        "Riding before testing the brake"
+      ],
+      "scene3d": [
+        {
+          "op": "reset"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Park Tool: Caliper brake adjustment",
+          "url": "https://www.parktool.com/en-us/blog/repair-help/caliper-brake-adjustment",
+          "kind": "web"
+        }
+      ],
+      "illustration_prompt": "Blueprint-style line drawing: Squeeze the lever hard and push the bike forward to test the brake. No text.",
+      "illustration_url": null,
+      "clip_url": null
+    }
+  ],
+  "sources": [
+    {
+      "title": "Park Tool: Caliper brake adjustment",
+      "url": "https://www.parktool.com/en-us/blog/repair-help/caliper-brake-adjustment",
+      "kind": "web"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "camera_sees": "A bicycle wheel with a rim brake; the brake pad is off-centre and touching the rim.",
+  "change_since_last": "No change.",
+  "confidence": 0.8,
+  "summary": "The user asks which hex key size the pad bolt needs.",
+  "user_intent": "question",
+  "user_utterance": "Which size hex key do I need for the pad bolt?",
+  "suspected_fault": "brake pad off-centre, rubbing the rim"
+}

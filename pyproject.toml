@@ -1,0 +1,36 @@
+[project]
+name = "spanner"
+version = "0.1.0"
+description = "Live AI repair assistant for iPhone (Imperial AI Hackathon)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
+    "pydantic>=2",
+    "anthropic",
+    "python-dotenv",
+    "httpx",
+    "pillow",
+    "opencv-python-headless",
+    "numpy",
+    "imagehash",
+    "ultralytics",
+    "elevenlabs",
+    "youtube-transcript-api",
+    "databricks-sql-connector",
+    "databricks-sdk",
+    "fal-client",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = ["live: needs real API keys and network (deselect with -m 'not live')"]
+addopts = "-m 'not live'"

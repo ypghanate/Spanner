@@ -1,0 +1,20 @@
+{
+  "phase": "done",
+  "say": "All done. Test the brake before you ride.",
+  "hud": [
+    {
+      "op": "clear"
+    }
+  ],
+  "scene3d": [
+    {
+      "op": "reset"
+    }
+  ],
+  "current_step": 5,
+  "step_status": "done",
+  "alert": null,
+  "plan": null,
+  "media": [],
+  "tts_url": null
+}

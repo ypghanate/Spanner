@@ -1,0 +1,16 @@
+{
+  "phase": "researching",
+  "say": "Got it. Give me a moment while I pull up the fix.",
+  "hud": [
+    {
+      "op": "clear"
+    }
+  ],
+  "scene3d": [],
+  "current_step": null,
+  "step_status": null,
+  "alert": null,
+  "plan": null,
+  "media": [],
+  "tts_url": null
+}

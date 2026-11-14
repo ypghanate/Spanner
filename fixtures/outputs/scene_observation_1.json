@@ -1,0 +1,18 @@
+{
+  "frame_id": "fixture-00001",
+  "object": "bicycle wheel with rim brake",
+  "visible_parts": [
+    "rim",
+    "brake_pad",
+    "brake_arm",
+    "tyre",
+    "spoke"
+  ],
+  "state": "wheel installed, brake pad sits off-centre and touches the rim on one side",
+  "anomalies": [
+    "brake pad rubbing the rim"
+  ],
+  "hands_visible": false,
+  "tools_visible": [],
+  "confidence": 0.82
+}

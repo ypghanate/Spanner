@@ -1,0 +1,30 @@
+{
+  "phase": "diagnosing",
+  "say": "The brake pad looks off-centre and is rubbing the rim. Is that what you're hearing?",
+  "hud": [
+    {
+      "op": "circle",
+      "target_label": "brake_pad",
+      "box": {
+        "x": 0.42,
+        "y": 0.36,
+        "w": 0.12,
+        "h": 0.1
+      },
+      "text": "pad rubbing rim",
+      "color": "warn"
+    }
+  ],
+  "scene3d": [
+    {
+      "op": "highlight",
+      "part": "brake_pad"
+    }
+  ],
+  "current_step": null,
+  "step_status": null,
+  "alert": null,
+  "plan": null,
+  "media": [],
+  "tts_url": null
+}

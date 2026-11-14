@@ -1,0 +1,20 @@
+{
+  "transcript": {
+    "text": "Which size hex key do I need for the pad bolt?",
+    "language": "en",
+    "duration_s": 2.6
+  },
+  "response": {
+    "phase": "guiding",
+    "say": "A 4 or 5 millimetre hex key. Try the 5 first.",
+    "hud": [],
+    "scene3d": [],
+    "current_step": 1,
+    "step_status": "in_progress",
+    "alert": null,
+    "plan": null,
+    "media": [],
+    "tts_url": null
+  },
+  "tts_url": "/tts/0123456789abcdef.mp3"
+}

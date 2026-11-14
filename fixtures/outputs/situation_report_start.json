@@ -1,0 +1,9 @@
+{
+  "camera_sees": "A bicycle wheel with a rim brake; the brake pad is off-centre and touching the rim.",
+  "change_since_last": "No change.",
+  "confidence": 0.8,
+  "summary": "The user wants help with a rim brake that rubs on the wheel.",
+  "user_intent": "start",
+  "user_utterance": "My bike brake keeps rubbing on the wheel, can you help me fix it?",
+  "suspected_fault": "brake pad off-centre, rubbing the rim"
+}

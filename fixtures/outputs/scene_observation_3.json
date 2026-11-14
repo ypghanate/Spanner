@@ -1,0 +1,15 @@
+{
+  "frame_id": "fixture-00003",
+  "object": "bicycle wheel with rim brake",
+  "visible_parts": [
+    "rim",
+    "brake_pad",
+    "brake_arm",
+    "tyre"
+  ],
+  "state": "brake pad centred on the braking surface with a small even gap to the rim",
+  "anomalies": [],
+  "hands_visible": false,
+  "tools_visible": [],
+  "confidence": 0.86
+}

@@ -1,0 +1,28 @@
+{
+  "phase": "guiding",
+  "say": "Stop, the pad is touching the tyre. Move it up onto the metal.",
+  "hud": [
+    {
+      "op": "circle",
+      "target_label": "brake_pad",
+      "box": {
+        "x": 0.42,
+        "y": 0.36,
+        "w": 0.12,
+        "h": 0.1
+      },
+      "text": "touching tyre",
+      "color": "danger"
+    }
+  ],
+  "scene3d": [],
+  "current_step": 2,
+  "step_status": "mistake",
+  "alert": {
+    "severity": "danger",
+    "message": "Brake pad is touching the tyre."
+  },
+  "plan": null,
+  "media": [],
+  "tts_url": null
+}

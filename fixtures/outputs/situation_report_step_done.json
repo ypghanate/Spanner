@@ -1,0 +1,9 @@
+{
+  "camera_sees": "Hands holding a hex key in the brake pad bolt.",
+  "change_since_last": "A hex key and hands are now at the pad bolt.",
+  "confidence": 0.8,
+  "summary": "The user says the pad bolt is loosened and a hex key is in it.",
+  "user_intent": "step_done",
+  "user_utterance": "Okay, I've loosened the bolt. Done.",
+  "suspected_fault": "brake pad off-centre, rubbing the rim"
+}

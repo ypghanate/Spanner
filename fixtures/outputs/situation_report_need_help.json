@@ -1,0 +1,9 @@
+{
+  "camera_sees": "A bicycle wheel with a rim brake; the brake pad is off-centre and touching the rim.",
+  "change_since_last": "No change.",
+  "confidence": 0.6,
+  "summary": "The user is stuck and asks for help.",
+  "user_intent": "need_help",
+  "user_utterance": "I'm stuck, the pad won't move.",
+  "suspected_fault": null
+}

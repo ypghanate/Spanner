@@ -1,0 +1,18 @@
+{
+  "frame_id": "fixture-00002",
+  "object": "bicycle wheel with rim brake",
+  "visible_parts": [
+    "rim",
+    "brake_pad",
+    "brake_arm",
+    "allen_bolt",
+    "tyre"
+  ],
+  "state": "hex key inserted in the brake pad bolt, bolt looks loosened",
+  "anomalies": [],
+  "hands_visible": true,
+  "tools_visible": [
+    "hex_key"
+  ],
+  "confidence": 0.78
+}

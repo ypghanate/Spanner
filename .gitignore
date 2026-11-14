@@ -1,0 +1,10 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+backend/media_cache/
+training/data/raw/
+training/data/cache/
+node_modules/
+.pytest_cache/
+*.pt

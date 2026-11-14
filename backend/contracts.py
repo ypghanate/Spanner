@@ -1,0 +1,236 @@
+"""Single source of truth for every data shape that crosses a module or network boundary.
+
+Boxes are normalised 0-1, measured from the top-left of the frame that was sent
+(after rotation was fixed). Changes here go through P3, are announced in chat,
+and happen at checkpoints. TypeScript types are generated from this file by
+scripts/gen_types.py.
+"""
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+Phase = Literal[
+    "identifying", "diagnosing", "researching", "guiding", "verifying", "done", "safety_stop"
+]
+UserIntent = Literal["start", "question", "step_done", "need_help", "stop", "none"]
+
+
+# --- vision -----------------------------------------------------------------
+
+class Box(BaseModel):
+    x: float
+    y: float
+    w: float
+    h: float
+
+
+class Detection(BaseModel):
+    label: str
+    score: float
+    box: Box
+    track_id: int | None = None
+
+
+class FrameQuality(BaseModel):
+    blurry: bool
+    too_dark: bool
+    is_keyframe: bool
+    sharpness: float
+    brightness: float
+
+
+class SceneObservation(BaseModel):
+    frame_id: str
+    object: str
+    visible_parts: list[str] = Field(default_factory=list)
+    state: str
+    anomalies: list[str] = Field(default_factory=list)
+    hands_visible: bool
+    tools_visible: list[str] = Field(default_factory=list)
+    confidence: float
+
+
+# --- voice + pass 1 ---------------------------------------------------------
+
+class Transcript(BaseModel):
+    text: str
+    language: str
+    duration_s: float
+
+
+class SituationReport(BaseModel):
+    summary: str
+    user_intent: UserIntent
+    user_utterance: str | None = None
+    camera_sees: str
+    change_since_last: str
+    suspected_fault: str | None = None
+    confidence: float
+
+
+# --- repair plan ------------------------------------------------------------
+
+class SourceRef(BaseModel):
+    title: str
+    url: str
+    kind: Literal["ifixit", "youtube", "web"]
+
+
+class SceneCommand(BaseModel):
+    op: Literal["highlight", "pulse", "explode", "rotate_to", "arrow", "show_step", "reset"]
+    part: str | None = None
+    group: str | None = None
+    view: str | None = None
+    amount: float | None = None
+    direction: str | None = None
+
+
+class HudCommand(BaseModel):
+    op: Literal["label", "arrow", "circle", "clear"]
+    target_label: str | None = None
+    box: Box | None = None
+    text: str | None = None
+    color: Literal["info", "ok", "warn", "danger"] = "info"
+
+
+class RepairStep(BaseModel):
+    index: int
+    instruction: str
+    parts: list[str] = Field(default_factory=list)
+    expected_visual_state: str
+    common_mistakes: list[str] = Field(default_factory=list)
+    scene3d: list[SceneCommand] = Field(default_factory=list)
+    sources: list[SourceRef] = Field(default_factory=list)
+    illustration_prompt: str | None = None
+    illustration_url: str | None = None
+    clip_url: str | None = None
+
+
+class RepairPlan(BaseModel):
+    object: str
+    fault: str
+    difficulty: str
+    time_min: int
+    tools_needed: list[str] = Field(default_factory=list)
+    safety_notes: list[str] = Field(default_factory=list)
+    steps: list[RepairStep]
+    sources: list[SourceRef] = Field(default_factory=list)
+
+
+# --- brain output -----------------------------------------------------------
+
+class MediaUpdate(BaseModel):
+    kind: Literal["illustration", "scan3d", "clip"]
+    step_index: int | None = None
+    url: str
+
+
+class Alert(BaseModel):
+    severity: Literal["warn", "danger"]
+    message: str
+
+
+class BrainResponse(BaseModel):
+    phase: Phase
+    say: str = ""                      # max 2 sentences; empty = say nothing
+    hud: list[HudCommand] = Field(default_factory=list)       # empty = no change
+    scene3d: list[SceneCommand] = Field(default_factory=list)  # empty = no change
+    current_step: int | None = None
+    step_status: Literal["in_progress", "done", "mistake"] | None = None
+    alert: Alert | None = None
+    plan: RepairPlan | None = None
+    media: list[MediaUpdate] = Field(default_factory=list)
+    # Added by P3: slow-loop replies travel inside FrameResponse.events, which has
+    # nowhere else to carry audio. P4 leaves this None; the orchestrator fills it.
+    tts_url: str | None = None
+
+
+# --- HTTP responses ---------------------------------------------------------
+
+class FrameResponse(BaseModel):
+    frame_id: str
+    quality: FrameQuality
+    detections: list[Detection] = Field(default_factory=list)
+    events: list[BrainResponse] = Field(default_factory=list)
+
+
+class AudioResponse(BaseModel):
+    transcript: Transcript
+    response: BrainResponse
+    tts_url: str | None = None
+
+
+class SessionCreate(BaseModel):
+    device: str = "unknown"
+
+
+class SessionCreated(BaseModel):
+    session_id: str
+
+
+class SessionSummary(BaseModel):
+    session_id: str
+    object: str | None = None
+    fault: str | None = None
+    steps_total: int = 0
+    steps_done: int = 0
+    duration_s: float = 0.0
+    sources: list[SourceRef] = Field(default_factory=list)
+
+
+# --- live voice WebSocket (WS /session/{id}/live) ---------------------------
+# Binary frames phone -> server: 16 kHz mono PCM16 microphone audio.
+# Binary frames server -> phone: spoken-reply audio, between tts_start and tts_end.
+
+class LiveStart(BaseModel):
+    type: Literal["start"] = "start"
+    keyterms: list[str] = Field(default_factory=list)
+
+
+class LiveBargeIn(BaseModel):
+    type: Literal["barge_in"] = "barge_in"
+
+
+class LiveStop(BaseModel):
+    type: Literal["stop"] = "stop"
+
+
+class LivePartial(BaseModel):
+    type: Literal["partial"] = "partial"
+    text: str
+
+
+class LiveFinal(BaseModel):
+    type: Literal["final"] = "final"
+    text: str
+
+
+class LiveResponse(BaseModel):
+    type: Literal["response"] = "response"
+    response: BrainResponse
+
+
+class LiveTtsStart(BaseModel):
+    type: Literal["tts_start"] = "tts_start"
+
+
+class LiveTtsEnd(BaseModel):
+    type: Literal["tts_end"] = "tts_end"
+
+
+class LiveError(BaseModel):
+    type: Literal["error"] = "error"
+    code: str
+    message: str
+
+
+# Everything that is a top-level shape for the app. gen_types.py emits these.
+EXPORTED_MODELS: list[type[BaseModel]] = [
+    Box, Detection, FrameQuality, SceneObservation, Transcript, SituationReport,
+    SourceRef, SceneCommand, HudCommand, RepairStep, RepairPlan, MediaUpdate, Alert,
+    BrainResponse, FrameResponse, AudioResponse, SessionCreate, SessionCreated,
+    SessionSummary, LiveStart, LiveBargeIn, LiveStop, LivePartial, LiveFinal,
+    LiveResponse, LiveTtsStart, LiveTtsEnd, LiveError,
+]
