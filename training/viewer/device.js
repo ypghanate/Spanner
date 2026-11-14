@@ -241,7 +241,7 @@ function momentum4() {
   // along an in-plane path, the shape's x is radial (thickness) and y is sideways (width)
   const bandShape = new THREE.Shape(); bandShape.moveTo(-0.45, -1.5); bandShape.lineTo(0.45, -1.5); bandShape.quadraticCurveTo(0.5, 0, 0.45, 1.5); bandShape.lineTo(-0.45, 1.5); bandShape.quadraticCurveTo(-0.5, 0, -0.45, -1.5);
   const bandGeo = new THREE.ExtrudeGeometry(bandShape, { extrudePath: arc, steps: 64, bevelEnabled: false }); band.add(mesh(bandGeo, fabricMat));
-  const padArc = new THREE.QuadraticBezierCurve3(V3(-4.2, 9.9, 0), V3(0, 12.3, 0), V3(4.2, 9.9, 0));
+  const padArc = new THREE.QuadraticBezierCurve3(V3(-4.2, 5.6, 0), V3(0, 9.4, 0), V3(4.2, 5.6, 0));
   const padShape = new THREE.Shape(); padShape.absellipse(0, 0, 0.75, 1.7, 0, Math.PI * 2);
   band.add(mesh(new THREE.ExtrudeGeometry(padShape, { extrudePath: padArc, steps: 32, bevelEnabled: false }), M.leather));
   add("headband", "Headband", "Fabric-wrapped sprung steel band with the padded crown; the sliders ride inside it to adjust the size.", band, [0, 0, 0], [0, 4.5, 0], "body", true);
