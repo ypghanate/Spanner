@@ -174,42 +174,104 @@ function iphone15() {
     ["Cameras", [-1.7, -T / 2 - 0.4, -4.9]], ["Speaker + mic", [1.8, 0.1, H / 2 + 0.3]]];
   return { name: "iPhone 15", parts, spread: 1, hotspots, upright: true, views: { iso: [12, 16, 20] }, fact: "128 to 512 GB, Dynamic Island, USB-C. Battery and display are the two repairs people actually do; disconnect the battery first, always." };
 }
+TEX.ipad = () => canvasTex(1024, 768, (g, w, h) => {
+  const bg = g.createLinearGradient(0, 0, w, h); bg.addColorStop(0, "#102a4a"); bg.addColorStop(0.5, "#0a1a2e"); bg.addColorStop(1, "#2a0f3a"); g.fillStyle = bg; g.fillRect(0, 0, w, h);
+  const glow = g.createRadialGradient(w * 0.3, h * 0.7, 10, w * 0.3, h * 0.7, 520); glow.addColorStop(0, "#00e5ff33"); glow.addColorStop(1, "#00000000"); g.fillStyle = glow; g.fillRect(0, 0, w, h);
+  g.lineWidth = 46; g.strokeStyle = "#050607"; g.beginPath(); g.roundRect(23, 23, w - 46, h - 46, 40); g.stroke();   // bezel
+  g.fillStyle = "#e6fbff"; g.font = "600 110px system-ui,Segoe UI,Inter,sans-serif"; g.textAlign = "center"; g.fillText("9:41", w / 2, 300);
+  g.font = "500 30px system-ui,Segoe UI,Inter,sans-serif"; g.fillStyle = "#bfeef7"; g.fillText("Saturday 15 November", w / 2, 345);
+  g.fillStyle = "#ffffff22"; g.beginPath(); g.roundRect(w / 2 - 70, h - 42, 140, 8, 4); g.fill();
+});
+TEX.fabric = () => canvasTex(256, 256, (g, w, h) => { g.fillStyle = "#2b2c31"; g.fillRect(0, 0, w, h); for (let y = 0; y < h; y += 4) for (let x = 0; x < w; x += 4) { g.fillStyle = ((x + y) / 4) % 2 ? "#34363c" : "#232428"; g.fillRect(x, y, 3, 3); } });
+TEX.ipadBattery = () => canvasTex(512, 1024, (g, w, h) => { g.fillStyle = "#8d9299"; g.fillRect(0, 0, w, h); g.fillStyle = "#1a1c20"; g.font = "600 44px system-ui,sans-serif"; g.textAlign = "center"; g.fillText("Li-ion Polymer", w / 2, 120); g.font = "400 34px system-ui,sans-serif"; g.fillText("3.82 V · 7606 mAh · 28.93 Wh", w / 2, 180); g.fillText("Do not puncture · Recycle", w / 2, 230); g.strokeStyle = "#1a1c20"; g.lineWidth = 4; g.strokeRect(80, 300, w - 160, 500); });
+
 function ipad11() {
-  const W = 17.95, H = 24.86, T = 0.7, parts = [];
-  const add = (name, label, desc, obj, pos, dir, group = "body") => parts.push({ name, label, desc, obj, pos, dir, group });
-  add("shell", "Aluminium back shell", "One-piece aluminium housing; every component screws or glues into it.", mesh(box(W, T, H, 0.8, 4), M.alu), [0, 0, 0], [0, 0, 0]);
-  add("display", "Display assembly", "11-inch Liquid Retina LCD laminated to the cover glass; held by adhesive all around.", (() => { const g = new THREE.Group(); g.add(mesh(box(W - 0.4, 0.15, H - 0.4, 0.6, 4), M.oled)); const gl = mesh(box(W - 0.25, 0.08, H - 0.25, 0.7, 4), M.screen); gl.position.y = 0.12; g.add(gl); return g; })(), [0, T / 2 + 0.07, 0], [0, 1, 0], "front");
-  add("battery_left", "Battery cell (left)", "One of two lithium-polymer cells, about 28.9 Wh together; glued with stretch-release strips.", mesh(box(6.4, 0.35, 15.5, 0.3), M.battery), [-4.6, 0, 1.2], [-0.5, 1, 0], "inside");
-  add("battery_right", "Battery cell (right)", "The second cell, mirror of the left, joined by a flex to the board.", mesh(box(6.4, 0.35, 15.5, 0.3), M.battery), [4.6, 0, 1.2], [0.5, 1, 0], "inside");
-  add("logic_board", "Logic board", "A16 chip, memory and storage on a narrow board between the cells, shielded.", (() => { const g = new THREE.Group(); g.add(mesh(box(3.2, 0.2, 14, 0.08), M.pcb)); for (const z of [-4.5, -1, 2.5]) { const s = mesh(box(2.8, 0.22, 2.6, 0.06), M.shield); s.position.set(0, 0.2, z); g.add(s); } return g; })(), [0, 0, 0.8], [0, 1, 0], "inside");
-  add("speakers", "Stereo speakers", "Four speaker boxes, two per short edge, for landscape stereo.", (() => { const g = new THREE.Group(); for (const [x, z] of [[-6.5, -11], [6.5, -11], [-6.5, 11], [6.5, 11]]) { const s = mesh(box(3.0, 0.4, 1.2, 0.2), M.rubber); s.position.set(x, 0, z); g.add(s); } return g; })(), [0, 0, 0], [0, 1, 0], "inside");
-  add("camera", "Rear camera", "12 MP wide camera in the corner.", (() => { const g = new THREE.Group(); const l = mesh(cyl(0.7, 0.4), M.lens); g.add(l); const r = mesh(cyl(0.9, 0.3), M.alu); r.position.y = -0.1; g.add(r); return g; })(), [-7.2, -T / 2 - 0.1, -10.6], [-0.3, -1, -0.3], "back");
-  add("front_camera", "Front camera", "12 MP landscape front camera, centred on the long edge for video calls.", mesh(box(1.2, 0.2, 0.6, 0.1), M.black), [W / 2 - 1.2, T / 2 - 0.1, 0], [0.8, 1, 0], "front");
-  add("usb_c", "USB-C port", "Charging and data port on the bottom edge.", mesh(box(0.9, 0.32, 0.8, 0.12), M.silver), [0, 0, H / 2 - 0.3], [0, 1, 1], "inside");
-  add("smart_connector", "Smart Connector", "Three pogo pins on the edge for the keyboard case.", mesh(box(2.4, 0.1, 0.3, 0.05), M.gold), [W / 2 - 0.1, 0, 0], [1, 0, 0], "body");
-  add("buttons", "Top button + volume", "Power button with Touch ID, and the volume buttons.", (() => { const g = new THREE.Group(); const p = mesh(box(1.4, 0.25, 0.3, 0.08), M.alu); p.position.set(-6.5, 0, -H / 2 - 0.12); g.add(p); for (const z of [-10.0, -8.6]) { const b = mesh(box(0.25, 0.25, 1.0, 0.08), M.alu); b.position.set(-W / 2 - 0.12, 0, z); g.add(b); } return g; })(), [0, 0, 0], [-1, 0, -1], "body");
-  return { name: "iPad (11th gen)", parts, spread: 7, upright: true, views: { iso: [18, 24, 30] }, fact: "A16 chip, 11-inch Liquid Retina, landscape front camera, USB-C. Batteries and display are glued: a heat mat and patience." };
+  const W = 17.95, H = 24.86, T = 0.70, parts = [];
+  const add = (name, label, desc, obj, pos, dir, group = "body", callout = false) => parts.push({ name, label, desc, obj: edgesOn(obj), pos, dir, group, callout });
+  // shell: one-piece aluminium with the camera opening, antenna window, speaker grilles and the port
+  const shell = new THREE.Group(); shell.add(flatRing(W, H, 0.9, 0.14, T, M.alu));
+  const back = mesh(box(W - 0.2, 0.1, H - 0.2, 0.8, 4), M.alu); back.position.y = -T / 2 + 0.06; shell.add(back);
+  const ant = mesh(box(W - 0.6, 0.11, 0.9, 0.05, 1), M.black); ant.position.set(0, -T / 2 + 0.06, -H / 2 + 0.7); shell.add(ant);   // antenna window
+  for (const zEdge of [-H / 2, H / 2]) for (const x0 of [-7.5, 5.3]) for (let i = 0; i < 8; i++) { const hole = mesh(cyl(0.06, 0.2, 10), M.black); hole.rotation.x = Math.PI / 2; hole.position.set(x0 + i * 0.3, 0, zEdge); shell.add(hole); }
+  add("shell", "Aluminium back shell", "One-piece recycled aluminium housing with the antenna window, four speaker grilles and the port cutout; everything screws or glues into it.", shell, [0, 0, 0], [0, 0, 0]);
+  // display assembly: LCD + digitizer + cover glass, black bezel, with its two flexes
+  const disp = new THREE.Group(); const st = TEX.ipad();
+  const panel = mesh(box(W - 0.26, 0.14, H - 0.26, 0.85, 5), new THREE.MeshPhysicalMaterial({ map: st, roughness: 0.06, clearcoat: 1, clearcoatRoughness: 0.04, emissiveMap: st, emissive: 0xffffff, emissiveIntensity: 0.9 })); panel.position.y = 0.09; disp.add(panel);
+  const under = mesh(box(W - 0.2, 0.04, H - 0.2, 0.9, 5), M.bezel); disp.add(under);
+  for (const z of [-3.5, 3.5]) { const f = flex(2.2, 1.6); f.rotation.x = Math.PI / 2; f.position.set(W / 2 - 3.2, -0.9, z); disp.add(f); }
+  add("display", "Display assembly", "11-inch Liquid Retina LCD laminated to the cover glass and digitizer, with the two display flexes; held by adhesive all around, so it comes off first with heat.", disp, [0, T / 2 + 0.07, 0], [0, 7.5, 0], "front", true);
+  add("display_bracket", "Display cable bracket", "Steel bracket over the display and digitizer connectors; four screws.", (() => { const g = new THREE.Group(); g.add(mesh(box(2.4, 0.08, 7.6, 0.03, 1), M.shield)); for (const z of [-3.2, -1.1, 1.1, 3.2]) { const s = screw(0.07); s.position.set(0.9, 0.05, z); g.add(s); } return g; })(), [W / 2 - 3.2, T / 2 - 0.25, 0], [0.6, 5.0, 0], "inside");
+  // batteries: two cells, labelled, with the battery flex between them
+  const cell = (side) => { const g = new THREE.Group(); g.add(mesh(box(6.6, 0.36, 16.0, 0.3), M.battery)); const l = mesh(box(6.2, 0.01, 15.2, 0.02, 1), new THREE.MeshStandardMaterial({ map: TEX.ipadBattery(), roughness: 0.9 })); l.position.y = 0.19; g.add(l); for (const z of [-5, 0, 5]) { const tab = mesh(box(0.5, 0.02, 2.4, 0.01, 1), M.black); tab.position.set(side * 3.0, -0.17, z); g.add(tab); } return g; };
+  add("battery_left", "Battery cell (left)", "One of two lithium-polymer cells, 28.9 Wh together, glued with six stretch-release strips.", cell(-1), [-4.7, 0, 1.0], [-3.0, 4.2, 0], "inside", true);
+  add("battery_right", "Battery cell (right)", "The second cell, mirror of the left, joined to the board by the battery flex.", cell(1), [4.7, 0, 1.0], [3.0, 4.2, 0], "inside", true);
+  add("battery_flex", "Battery flex + connector", "Joins both cells to the logic board; disconnect this before anything else.", (() => { const g = new THREE.Group(); const f = flex(3.4, 1.0); f.rotation.y = Math.PI / 2; g.add(f); const c = mesh(box(0.9, 0.14, 0.6, 0.03, 1), M.black); c.position.set(0, 0.08, -0.6); g.add(c); return g; })(), [0, 0.2, 7.6], [0, 5.6, 0], "inside");
+  // logic board between the cells
+  const lb = new THREE.Group(); lb.add(mesh(box(3.6, 0.16, 15.0, 0.06, 1), new THREE.MeshStandardMaterial({ map: TEX.pcb(), roughness: 0.6, metalness: 0.2 })));
+  for (const [z, h] of [[-5.5, 3.2], [-1.5, 3.8], [2.6, 3.0], [6.0, 2.2]]) { const s = mesh(box(3.1, 0.24, h, 0.05, 1), M.shield); s.position.set(0, 0.2, z); lb.add(s); }
+  const die = mesh(box(1.6, 0.1, 1.6, 0.02, 1), M.black); die.position.set(0, 0.36, -1.5); lb.add(die);
+  for (const [x, z] of [[-1.3, -7.1], [1.3, -7.1], [-1.3, 7.1], [1.3, 7.1], [1.4, 0.4]]) { const c = mesh(box(0.5, 0.1, 0.32, 0.02, 1), M.gold); c.position.set(x, 0.14, z); lb.add(c); }
+  for (const [x, z] of [[-1.6, -7.3], [1.6, -7.3], [-1.6, 7.3], [1.6, 7.3], [-1.6, 0], [1.6, 0]]) { const s = screw(); s.position.set(x, 0.1, z); lb.add(s); }
+  add("logic_board", "Logic board", "A16 chip, memory and storage on the long narrow board between the cells, under four EMI shields; six screws and five connectors.", lb, [0, 0, 0.4], [0, 5.0, 0], "inside", true);
+  // speakers, cameras, ports, buttons
+  const spk = (x, z) => { const g = new THREE.Group(); const b = mesh(box(3.2, 0.42, 1.4, 0.2), M.rubber); b.position.set(x, 0, z); g.add(b); const p = mesh(box(2.9, 0.04, 1.1, 0.04, 1), M.black); p.position.set(x, 0.23, z); g.add(p); return g; };
+  add("speakers_top", "Speakers (top edge)", "Two of the four speaker boxes, behind the top grilles, for landscape stereo.", (() => { const g = new THREE.Group(); g.add(spk(-6.3, -11.2)); g.add(spk(6.3, -11.2)); return g; })(), [0, 0, 0], [0, 3.6, -2.6], "inside");
+  add("speakers_bottom", "Speakers (bottom edge)", "The other two speaker boxes, beside the USB-C port.", (() => { const g = new THREE.Group(); g.add(spk(-6.3, 11.2)); g.add(spk(6.3, 11.2)); return g; })(), [0, 0, 0], [0, 3.6, 2.6], "inside");
+  const cam = new THREE.Group(); cam.add(mesh(box(1.9, 0.5, 1.9, 0.3), M.black)); const ring = mesh(cyl(0.82, 0.22), M.alu); ring.position.y = -0.3; cam.add(ring); const l = mesh(cyl(0.6, 0.26), M.lens); l.position.y = -0.34; cam.add(l); const gl = mesh(cyl(0.34, 0.28), new THREE.MeshPhysicalMaterial({ color: 0x3b2a6b, roughness: 0.02, clearcoat: 1, metalness: 0.6 })); gl.position.y = -0.36; cam.add(gl);
+  const cf = flex(1.6, 0.7); cf.position.set(1.2, 0.1, 0); cam.add(cf);
+  add("rear_camera", "Rear camera", "12 MP wide camera in the top-left corner, with its flex.", cam, [-7.3, -0.05, -10.8], [-1.4, -3.2, -1.6], "back", true);
+  add("front_camera", "Front camera (landscape)", "12 MP ultra-wide front camera on the long edge, so you are centred in video calls; one flex to the board.", (() => { const g = new THREE.Group(); g.add(mesh(box(1.6, 0.26, 0.9, 0.2, 2), M.black)); const l = mesh(cyl(0.22, 0.1, 16), M.lens); l.position.y = 0.16; g.add(l); const f = flex(1.6, 0.5); f.rotation.y = Math.PI / 2; f.position.set(-1.2, 0, 0); g.add(f); return g; })(), [W / 2 - 1.1, T / 2 - 0.2, 0], [2.0, 4.0, 0], "front");
+  add("usb_c", "USB-C port + flex", "Charging and data, with the bottom microphone, on a flex along the bottom edge.", (() => { const g = new THREE.Group(); const p = mesh(box(0.92, 0.34, 0.75, 0.1, 2), M.silver); g.add(p); const hole = mesh(box(0.72, 0.22, 0.4, 0.08, 1), M.black); hole.position.z = 0.2; g.add(hole); const f = flex(4.0, 0.7); f.rotation.y = Math.PI / 2; f.position.set(-2.4, 0, -0.1); g.add(f); for (const x of [-0.9, 0.9]) { const s = screw(); s.position.set(x, -0.17, 0.3); g.add(s); } return g; })(), [0, 0, H / 2 - 0.45], [0, 2.4, 3.4], "inside");
+  add("smart_connector", "Smart Connector", "Three pogo pins on the side edge for the keyboard case, on their own flex.", (() => { const g = new THREE.Group(); const p = mesh(box(0.12, 0.08, 2.6, 0.03, 1), M.gold); g.add(p); for (const z of [-0.8, 0, 0.8]) { const pin = mesh(cyl(0.12, 0.1, 10), M.gold); pin.rotation.z = Math.PI / 2; pin.position.set(0.06, 0, z); g.add(pin); } const f = flex(2.0, 0.5); f.position.set(-1.1, 0, 0); f.rotation.y = Math.PI / 2; g.add(f); return g; })(), [W / 2 - 0.06, -0.1, 2.0], [2.6, 0, 0], "body");
+  add("top_button", "Top button (Touch ID)", "Power button with the Touch ID sensor built in, on the top edge; its flex runs down the inside of the shell.", (() => { const g = new THREE.Group(); g.add(mesh(box(1.5, 0.26, 0.26, 0.1, 2), M.alu)); const f = flex(2.2, 0.5); f.position.set(0, -0.3, 1.3); g.add(f); return g; })(), [-6.6, 0, -H / 2 - 0.1], [-1.5, 0, -2.6], "body");
+  add("volume", "Volume buttons", "Volume up and down on the left edge, near the top.", (() => { const g = new THREE.Group(); for (const z of [-10.0, -8.6]) { const b = mesh(box(0.26, 0.26, 1.1, 0.1, 2), M.alu); b.position.z = z; g.add(b); } return g; })(), [-W / 2 - 0.1, 0, 0], [-2.6, 0, 0], "body");
+  add("screws", "Shell screws", "Phillips screws holding the board, brackets and speakers to the shell.", (() => { const g = new THREE.Group(); for (const [x, z] of [[-8.2, -11.6], [8.2, -11.6], [-8.2, 11.6], [8.2, 11.6], [-2.4, -9.5], [2.4, -9.5], [-2.4, 9.5], [2.4, 9.5]]) { const s = screw(0.08); s.position.set(x, 0.26, z); g.add(s); } return g; })(), [0, 0, 0], [0, 6.4, 0], "inside");
+  const hotspots = [["Top button · Touch ID", [-6.6, 0.3, -H / 2 - 0.4]], ["Volume", [-W / 2 - 0.4, 0.2, -9.3]], ["USB-C", [0, 0.2, H / 2 + 0.4]], ["Smart Connector", [W / 2 + 0.4, 0, 2.0]], ["Front camera", [W / 2 - 1.1, T / 2 + 0.4, 0]], ["Rear camera", [-7.3, -T / 2 - 0.5, -10.8]], ["Speakers", [6.3, 0.2, -H / 2 - 0.4]]];
+  return { name: "iPad (11th gen)", parts, spread: 1, hotspots, upright: true, views: { iso: [18, 24, 30] }, fact: "A16 chip, 11-inch Liquid Retina, landscape front camera, USB-C. The batteries and display are glued: heat, patience, and disconnect the battery flex first." };
 }
+
 function momentum4() {
   const parts = [];
-  const add = (name, label, desc, obj, pos, dir, group = "body") => parts.push({ name, label, desc, obj, pos, dir, group });
+  const add = (name, label, desc, obj, pos, dir, group = "body", callout = false) => parts.push({ name, label, desc, obj: edgesOn(obj, 50), pos, dir, group, callout });
+  const fabricMat = new THREE.MeshStandardMaterial({ map: TEX.fabric(), roughness: 1, metalness: 0 });
+  // headband: fabric-wrapped steel band with the padded crown and the two metal sliders
   const band = new THREE.Group();
-  const curve = new THREE.QuadraticBezierCurve3(V3(-9, 4, 0), V3(0, 12.5, 0), V3(9, 4, 0));
-  band.add(mesh(new THREE.TubeGeometry(curve, 48, 0.75, 16, false), M.fabric));
-  const pad = mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(V3(-4, 8.6, 0), V3(0, 10.9, 0), V3(4, 8.6, 0)), 24, 0.95, 16, false), M.leather); band.add(pad);
-  add("headband", "Headband", "Fabric-wrapped sprung steel band with the padded crown; adjusts by sliding the yokes.", band, [0, 0, 0], [0, 1, 0]);
+  const arc = new THREE.QuadraticBezierCurve3(V3(-8.6, 3.6, 0), V3(0, 13.4, 0), V3(8.6, 3.6, 0));
+  const tube = mesh(new THREE.TubeGeometry(arc, 64, 0.0, 4, false), M.black); band.add(tube);
+  // along an in-plane path, the shape's x is radial (thickness) and y is sideways (width)
+  const bandShape = new THREE.Shape(); bandShape.moveTo(-0.45, -1.5); bandShape.lineTo(0.45, -1.5); bandShape.quadraticCurveTo(0.5, 0, 0.45, 1.5); bandShape.lineTo(-0.45, 1.5); bandShape.quadraticCurveTo(-0.5, 0, -0.45, -1.5);
+  const bandGeo = new THREE.ExtrudeGeometry(bandShape, { extrudePath: arc, steps: 64, bevelEnabled: false }); band.add(mesh(bandGeo, fabricMat));
+  const padArc = new THREE.QuadraticBezierCurve3(V3(-4.2, 9.9, 0), V3(0, 12.3, 0), V3(4.2, 9.9, 0));
+  const padShape = new THREE.Shape(); padShape.absellipse(0, 0, 0.75, 1.7, 0, Math.PI * 2);
+  band.add(mesh(new THREE.ExtrudeGeometry(padShape, { extrudePath: padArc, steps: 32, bevelEnabled: false }), M.leather));
+  add("headband", "Headband", "Fabric-wrapped sprung steel band with the padded crown; the sliders ride inside it to adjust the size.", band, [0, 0, 0], [0, 4.5, 0], "body", true);
   for (const side of [-1, 1]) {
     const s = side < 0 ? "left" : "right", L = side < 0 ? "Left" : "Right";
-    add(`yoke_${s}`, `${L} yoke`, "Slider and hinge that holds the ear cup and lets it fold flat.", (() => { const g = new THREE.Group(); const y = mesh(box(0.7, 4.2, 0.7, 0.3), M.alu); y.position.y = 2.2; g.add(y); const h = mesh(cyl(0.6, 1.2), M.black); h.rotation.z = Math.PI / 2; h.position.y = 0.2; g.add(h); return g; })(), [side * 9.2, 0.6, 0], [side * 1, 0.6, 0]);
-    add(`cup_${s}`, `${L} ear cup`, "Plastic shell with the touch surface on the right cup; the electronics live inside.", mesh(box(3.0, 8.4, 7.2, 1.2, 6), M.black), [side * 9.4, -3.2, 0], [side * 1, 0, 0], "cups");
-    add(`cushion_${s}`, `${L} ear cushion`, "Memory-foam pad with a protein-leather cover; clips on and off, the most replaced part.", (() => { const g = new THREE.Group(); const t = new THREE.Mesh(new THREE.TorusGeometry(3.2, 1.0, 20, 48), M.leather); t.rotation.y = Math.PI / 2; g.add(t); return g; })(), [side * 7.4, -3.2, 0], [side * -1, 0, 0], "cups");
-    add(`driver_${s}`, `${L} driver`, "42 mm dynamic driver, angled toward the ear.", (() => { const g = new THREE.Group(); const d = mesh(cyl(2.1, 0.5), M.silver); d.rotation.z = Math.PI / 2; g.add(d); const c = mesh(cyl(1.0, 0.6), M.copper); c.rotation.z = Math.PI / 2; c.position.x = side * -0.3; g.add(c); return g; })(), [side * 8.2, -3.2, 0], [side * -1, 0.3, 0], "inside");
+    const slider = new THREE.Group(); const rail = mesh(box(0.9, 4.6, 0.5, 0.2, 2), M.alu); rail.position.y = 1.4; slider.add(rail);
+    for (const y of [0.4, 1.2, 2.0, 2.8]) { const notch = mesh(box(0.95, 0.06, 0.52, 0.01, 1), M.black); notch.position.y = y; slider.add(notch); }
+    add(`slider_${s}`, `${L} slider`, "Metal slider that adjusts the headband length, with click stops.", slider, [side * 8.8, 1.6, 0], [side * 0.6, 3.2, 0], "body");
+    const yoke = new THREE.Group(); const hinge = mesh(cyl(0.55, 1.1, 24), M.black); hinge.rotation.z = Math.PI / 2; yoke.add(hinge);
+    const arm = mesh(new THREE.TorusGeometry(2.2, 0.28, 10, 32, Math.PI), M.black); arm.rotation.z = -Math.PI / 2; arm.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2; arm.position.set(side * 0.2, -2.2, 0); yoke.add(arm);
+    add(`yoke_${s}`, `${L} yoke`, "Hinge and half-ring that holds the ear cup, lets it swivel to your head and fold flat.", yoke, [side * 9.0, -0.6, 0], [side * 1.6, 1.4, 0], "body");
+    const cup = new THREE.Group(); const shellOuter = mesh(box(2.4, 8.6, 7.4, 1.3, 7), M.black); cup.add(shellOuter);
+    const plate = mesh(box(0.3, 7.4, 6.2, 0.9, 5), fabricMat); plate.position.x = side * 1.25; cup.add(plate);          // fabric outer plate (touch surface on the right)
+    for (const [y, z] of [[2.8, 2.4], [-3.0, -2.4], [3.2, -2.8]]) { const mic = mesh(cyl(0.12, 0.3, 10), M.silver); mic.rotation.z = Math.PI / 2; mic.position.set(side * 1.2, y, z); cup.add(mic); }   // ANC mic ports
+    if (side > 0) { const usb = mesh(box(0.5, 0.3, 0.9, 0.1, 2), M.silver); usb.position.set(0.3, -4.3, 1.4); cup.add(usb); const jack = mesh(cyl(0.22, 0.3, 16), M.silver); jack.position.set(0.3, -4.3, -0.6); cup.add(jack); const btn = mesh(box(0.35, 0.22, 1.1, 0.08, 2), M.silver); btn.position.set(0.3, -4.3, 0.3); cup.add(btn); const led = mesh(cyl(0.08, 0.1, 8), new THREE.MeshStandardMaterial({ color: 0x3dffa8, emissive: 0x3dffa8, emissiveIntensity: 1.2 })); led.position.set(0.3, -4.3, 2.2); cup.add(led); }
+    add(`cup_${s}`, `${L} ear cup`, side > 0 ? "Right cup: fabric touch surface on the outside; power/Bluetooth button, USB-C, 3.5 mm jack and the status LED on the bottom edge." : "Left cup: plastic shell with the fabric outer plate and three noise-cancelling mic ports.", cup, [side * 9.4, -3.2, 0], [side * 3.2, 0, 0], "cups", true);
+    const ring = new THREE.Group(); const r = mesh(new THREE.TorusGeometry(3.3, 0.18, 10, 48), M.black); r.rotation.y = Math.PI / 2; ring.add(r); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; const clip = mesh(box(0.3, 0.5, 0.5, 0.05, 1), M.black); clip.position.set(0, Math.cos(a) * 3.3, Math.sin(a) * 3.3); ring.add(clip); }
+    add(`cushion_ring_${s}`, `${L} cushion clip ring`, "The plate the cushion clips onto; the cushion twists off it for replacement.", ring, [side * 8.1, -3.2, 0], [side * -1.2, 0, 0], "cups");
+    const cushion = new THREE.Group(); const t = mesh(new THREE.TorusGeometry(3.2, 1.05, 22, 56), M.leather); t.rotation.y = Math.PI / 2; cushion.add(t); const inner = mesh(cyl(2.3, 0.2, 48), M.foam); inner.rotation.z = Math.PI / 2; inner.position.x = side * 0.4; cushion.add(inner);
+    add(`cushion_${s}`, `${L} ear cushion`, "Memory-foam pad with a protein-leather cover; it twists off the clip ring and is the part that wears out first.", cushion, [side * 7.3, -3.2, 0], [side * -3.6, 0, 0], "cups", true);
+    const drv = new THREE.Group(); const magnet = mesh(cyl(2.1, 0.5, 48), M.silver); magnet.rotation.z = Math.PI / 2; drv.add(magnet); const cone = mesh(new THREE.ConeGeometry(1.9, 0.5, 48, 1, true), M.black); cone.rotation.z = side * Math.PI / 2; cone.position.x = side * -0.3; drv.add(cone); const mesh2 = mesh(cyl(2.2, 0.06, 48), new THREE.MeshStandardMaterial({ color: 0x1a1b1f, roughness: 0.9, wireframe: true })); mesh2.rotation.z = Math.PI / 2; mesh2.position.x = side * -0.7; drv.add(mesh2);
+    add(`driver_${s}`, `${L} driver`, "42 mm dynamic driver, angled toward the ear, behind a protective mesh.", drv, [side * 8.6, -3.2, 0], [side * -2.2, 0.6, 0], "inside", true);
   }
-  add("battery", "Battery", "700 mAh pack in the right cup: about 60 hours with noise cancelling on.", mesh(box(1.2, 4.2, 2.6, 0.3), M.battery), [10.2, -2.6, 1.6], [1, 0, 0.4], "inside");
-  add("pcb", "Main board", "Bluetooth 5.2, DSP and the touch controller, under the right cup's shell.", mesh(box(0.5, 5.0, 4.4, 0.1), M.pcb), [10.5, -3.6, -1.0], [1, 0, -0.5], "inside");
-  add("anc_mics", "Noise-cancelling mics", "Four microphones per cup for adaptive noise cancelling and calls.", (() => { const g = new THREE.Group(); for (const [y, z] of [[-1, 2.6], [-5.4, -2.4]]) { const m = mesh(cyl(0.28, 0.2), M.silver); m.rotation.z = Math.PI / 2; m.position.set(0, y, z); g.add(m); } return g; })(), [-11.0, 0, 0], [-1, 0, 0], "cups");
-  add("usb_c", "USB-C + button", "Charging port and the power/pairing button on the right cup's bottom edge.", mesh(box(0.8, 0.3, 0.9, 0.1), M.silver), [9.4, -7.5, 1.6], [0, -1, 0.3], "body");
-  return { name: "Sennheiser Momentum 4", parts, spread: 5, views: { iso: [18, 14, 26] }, fact: "60-hour battery, adaptive noise cancelling, fabric headband. The ear cushions clip off and are the usual wear part." };
+  const bat = new THREE.Group(); bat.add(mesh(box(1.0, 4.4, 2.8, 0.3), M.battery)); const bl = mesh(box(0.02, 3.8, 2.3, 0.02, 1), new THREE.MeshStandardMaterial({ map: TEX.battery(), roughness: 0.9 })); bl.position.x = 0.51; bat.add(bl); const bf = flex(1.4, 0.5); bf.rotation.z = Math.PI / 2; bf.position.set(0, 2.6, -0.8); bat.add(bf);
+  add("battery", "Battery", "700 mAh pack in the right cup: about 60 hours with noise cancelling on. One flex to the board.", bat, [10.0, -2.4, 1.4], [5.2, 0.4, 1.2], "inside", true);
+  const pcb = new THREE.Group(); pcb.add(mesh(box(0.4, 5.4, 4.6, 0.1, 1), new THREE.MeshStandardMaterial({ map: TEX.pcb(), roughness: 0.6, metalness: 0.2 }))); for (const [y, z, h] of [[1.4, -1.2, 1.6], [-1.2, 0.8, 1.9]]) { const s = mesh(box(0.26, h, 1.8, 0.04, 1), M.shield); s.position.set(0.3, y, z); pcb.add(s); } for (const [y, z] of [[2.3, 1.8], [-2.3, -1.8], [2.3, -1.8]]) { const s = screw(0.07); s.rotation.z = -Math.PI / 2; s.position.set(0.25, y, z); pcb.add(s); }
+  add("pcb", "Main board", "Bluetooth 5.2 SoC, the ANC DSP and the touch controller, under the right cup's outer plate.", pcb, [10.3, -3.6, -1.0], [5.6, 0, -1.4], "inside", true);
+  add("anc_mics", "Noise-cancelling mic array", "Four microphones per cup: two outside for feed-forward, two inside for feedback cancelling.", (() => { const g = new THREE.Group(); for (const [y, z] of [[-1, 2.6], [-5.4, -2.4], [2.0, -2.0]]) { const m = mesh(cyl(0.3, 0.3, 12), M.silver); m.rotation.z = Math.PI / 2; m.position.set(0, y, z); g.add(m); } return g; })(), [-10.9, 0, 0], [-3.4, 0, 0], "cups");
+  const hotspots = [["Touch control (right cup)", [11.2, -1.0, 0]], ["Power · Bluetooth", [9.9, -8.0, 0.3]], ["USB-C", [9.9, -8.0, 1.6]], ["3.5 mm jack", [9.9, -8.0, -1.0]], ["Noise-cancelling mics", [-11.0, -0.4, 2.6]], ["Cushion: twists off", [-7.3, -7.2, 0]], ["Size slider", [-8.8, 4.6, 0]]];
+  return { name: "Sennheiser Momentum 4", parts, spread: 1, hotspots, views: { iso: [18, 14, 26] }, fact: "60-hour battery, adaptive noise cancelling, fabric headband and touch control on the right cup. The ear cushions twist off and are the usual wear part." };
 }
 const DEVICES = { iphone15: iphone15, ipad11: ipad11, momentum4: momentum4 };
 const d = (QP.get("d") || "iphone15").toLowerCase();
