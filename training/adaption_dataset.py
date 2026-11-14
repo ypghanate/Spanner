@@ -52,6 +52,8 @@ def from_videos(cfg: dict) -> list[dict]:
     rows = []
     for rec_path in sorted((DATA / "procedures" / "videos").glob("*.json")):
         rec = ProcedureRecord.model_validate_json(rec_path.read_text(encoding="utf-8"))
+        if rec.repair_id != cfg["repair_id"]:      # other repairs' videos stay out of this dataset
+            continue
         vid = rec.source_videos[0]
         seg_path = DATA / "work" / vid / "segments.json"
         if not seg_path.exists():
