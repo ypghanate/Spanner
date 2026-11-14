@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 COLUMNS = ["step_id", "procedure_id", "source_kind", "step_index", "title", "instruction",
-           "expected_visual_state", "common_mistakes", "learned_mistake_count", "safety_notes", "keyframe_path"]
+           "expected_visual_state", "common_mistakes", "learned_mistake_count", "safety_notes", "keyframe_path", "repair_id"]
 
 
 def _index_name() -> str:
@@ -25,19 +25,28 @@ def _index_name() -> str:
             f"{os.getenv('DATABRICKS_TRAINING_SCHEMA', 'training')}.kb_steps_index")
 
 
-def search_steps(query: str, k: int = 5, canonical_only: bool = False) -> list[dict]:
+def current_repair_id() -> str:
+    return json.loads((ROOT / "training" / "repair.json").read_text(encoding="utf-8"))["repair_id"]
+
+
+def search_steps(query: str, k: int = 5, canonical_only: bool = False,
+                 repair_id: str | None = "current") -> list[dict]:
+    """repair_id="current" (default) searches only the repair in training/repair.json; None searches all."""
+    rid = current_repair_id() if repair_id == "current" else repair_id
     if os.getenv("DATABRICKS_HOST"):
-        return _search_databricks(query, k, canonical_only)
-    return _search_local(query, k, canonical_only)
+        return _search_databricks(query, k, canonical_only, rid)
+    return _search_local(query, k, canonical_only, rid)
 
 
-def _search_databricks(query: str, k: int, canonical_only: bool) -> list[dict]:
+def _search_databricks(query: str, k: int, canonical_only: bool, repair_id: str | None) -> list[dict]:
     from databricks.sdk import WorkspaceClient
 
+    filters = {**({"source_kind": "canonical"} if canonical_only else {}),
+               **({"repair_id": repair_id} if repair_id else {})}
     w = WorkspaceClient()
     res = w.vector_search_indexes.query_index(
         index_name=_index_name(), columns=COLUMNS, query_text=query, num_results=k,
-        filters_json=json.dumps({"source_kind": "canonical"}) if canonical_only else None)
+        filters_json=json.dumps(filters) if filters else None)
     cols = [c.name for c in res.manifest.columns]
     return [dict(zip(cols, row)) for row in (res.result.data_array or [])]
 
@@ -46,7 +55,7 @@ def _tokens(text: str) -> set[str]:
     return set(re.findall(r"[a-z]{3,}", text.lower()))
 
 
-def _search_local(query: str, k: int, canonical_only: bool) -> list[dict]:
+def _search_local(query: str, k: int, canonical_only: bool, repair_id: str | None = None) -> list[dict]:
     q = _tokens(query)
     hits = []
     for p in (ROOT / "data" / "procedures").rglob("*.json"):
@@ -55,6 +64,8 @@ def _search_local(query: str, k: int, canonical_only: bool) -> list[dict]:
         rec = json.loads(p.read_text(encoding="utf-8"))
         kind = rec.get("source_kind", "video")
         if canonical_only and kind != "canonical":
+            continue
+        if repair_id and rec.get("repair_id") != repair_id:
             continue
         for st in rec["procedure"]["steps"]:
             text = " ".join([st["title"], st["instruction"], st["expected_visual_state"],

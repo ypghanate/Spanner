@@ -1,0 +1,178 @@
+{
+ "card_id": "8a75988b4b2a",
+ "identity": {
+  "brand": "Sony",
+  "model": "WH-1000XM4",
+  "model_number": "",
+  "year_or_revision": "",
+  "category": "",
+  "evidence": "typed: Sony WH-1000XM4",
+  "confidence": 1.0
+ },
+ "part_needed": "ear cushions",
+ "fault": "worn and flaking",
+ "options": [
+  {
+   "offer": {
+    "part_name": "Sony Cushion Aori, Sub Assy, Sv",
+    "part_number": "X-5001-839-1",
+    "retailer": "Encompass Supply Chain Solutions (Sony parts distributor)",
+    "price": 5.95,
+    "currency": "USD",
+    "in_stock": "yes",
+    "url": "https://sony.encompass.com/item/12582291/Sony/X-5001-839-1/",
+    "compatible_models_listed": [
+     "Sony WH1000XM4/B",
+     "Sony WH1000XM4/S"
+    ]
+   },
+   "verdict": {
+    "fits": "yes",
+    "reason": "The Sony Encompass part page for X-5001-839-1 (Cushion Aori, Sub Assy, Sv) lists WH1000XM4/B and WH1000XM4/S as compatible models, and Encompass's WH1000XM4/B model page and Parts Town's WH1000XM4/S and /B pages also list this part.",
+    "supporting_urls": [
+     "https://sony.encompass.com/item/12582291/Sony/X-5001-839-1/",
+     "https://encompass.com/model/SONWH1000XM4%7CB",
+     "https://www.partstown.com/m/sony/wh1000xm4-s",
+     "https://www.partstown.com/m/sony/wh1000xm4-b",
+     "https://rr.encompass.com/item/12582291/Sony/X-5001-839-1/"
+    ]
+   },
+   "verified": true,
+   "independent_sources": 4
+  },
+  {
+   "offer": {
+    "part_name": "Sony Earpad (left) assembly (silver)",
+    "part_number": "5-019-840-13 (listed as X-5001-119-1)",
+    "retailer": "Encompass Supply Chain Solutions (Sony parts distributor)",
+    "price": 20.95,
+    "currency": "USD",
+    "in_stock": "yes",
+    "url": "https://sony.encompass.com/item/12582299/Sony/X-5001-119-1/",
+    "compatible_models_listed": [
+     "Sony WH1000XM4"
+    ]
+   },
+   "verdict": {
+    "fits": "yes",
+    "reason": "The Encompass listing for part 5-019-840-13 (original X-5001-119-1, Earpad(L) Assy(silver)) names WH1000XM4 in its detailed description, and Parts Town lists X-5001-119-1 on its WH1000XM4/S parts page.",
+    "supporting_urls": [
+     "https://sony.encompass.com/item/12582299/Sony/X-5001-119-1/",
+     "https://pcrichard.encompass.com/item/12582299/Sony/X-5001-119-1/",
+     "https://partstore.encompass.com/item/12582299/Sony/X-5001-119-1/",
+     "https://www.partstown.com/sony/wh1000xm4-s/parts"
+    ]
+   },
+   "verified": true,
+   "independent_sources": 4
+  },
+  {
+   "offer": {
+    "part_name": "Replacement Ear Pads For Sony WH1000XM4 Over-Ear Headphones (Black)",
+    "part_number": "",
+    "retailer": "Wicked Cushions",
+    "price": 22.95,
+    "currency": "USD",
+    "in_stock": "no",
+    "url": "https://wickedcushions.com/products/replacement-ear-pads-for-sony-wh1000xm4-black",
+    "compatible_models_listed": [
+     "Sony WH1000XM4",
+     "Sony WH1000XM4C"
+    ]
+   },
+   "verdict": {
+    "fits": "yes",
+    "reason": "The Wicked Cushions product page states these pads are only compatible with Sony WH1000XM4 and WH1000XM4C headphones, and the Amazon listing for the same Wicked Cushions part confirms the same fitment.",
+    "supporting_urls": [
+     "https://wickedcushions.com/products/replacement-ear-pads-for-sony-wh1000xm4-black",
+     "https://www.amazon.com/WC-Cushions-Replacement-WH1000XM4-Headphones/dp/B08ZNT1TLX",
+     "https://apos.audio/products/replacement-ear-pads-for-sony-wh1000xm4-over-ear-headphones"
+    ]
+   },
+   "verified": true,
+   "independent_sources": 3
+  }
+ ],
+ "decision": {
+  "verdict": "repair",
+  "repair_cost": 4.5,
+  "new_price": 177.99,
+  "currency": "GBP",
+  "savings": 173.49,
+  "ewaste_kg_avoided": 0.254,
+  "reason": "The part costs 4.50 vs 177.99 for a new one (3% of the price).",
+  "sources": [
+   "https://sony.encompass.com/item/12582291/Sony/X-5001-839-1/",
+   "https://www.johnlewis.com/browse/special-offers/electrical-offers/headphone-offers/over-ear/next-day-delivery/_/N-n5zrZluh2Z1z0ktrf"
+  ]
+ },
+ "recall": {
+  "status": "none_found",
+  "summary": "None of the provided sources mention the Sony WH-1000XM4 or any recall or safety notice involving it; the sources are unrelated CPSC pages, calendar entries and reports.",
+  "urls": []
+ },
+ "manual_url": "",
+ "manual": null,
+ "tutorials": [
+  {
+   "title": "How to Change Sony WH-1000XM4 ear pads DIY - YouTube",
+   "url": "https://www.youtube.com/watch?v=hkIzwF-GLb4",
+   "chapter": "",
+   "start_s": 0
+  },
+  {
+   "title": "Sony WH-1000XM4 Wireless Bluetooth Headphones Cushion/Ear Pads Cleaning & Replacement - YouTube",
+   "url": "https://www.youtube.com/watch?v=WnFetuJajfI",
+   "chapter": "",
+   "start_s": 0
+  },
+  {
+   "title": "How to Replace Sony WH-1000XM4 Earpads Cushions 👍🏻 - YouTube",
+   "url": "https://www.youtube.com/watch?v=BY6tM4fZ1qU",
+   "chapter": "",
+   "start_s": 0
+  }
+ ],
+ "sources": [
+  "https://amazon.co.uk/s?k=Sony+Wh+1000xm4&linkCode=osi&rh=p_n_availability%3A-1&tag=fmcgbe-21",
+  "https://apos.audio/products/replacement-ear-pads-for-sony-wh1000xm4-over-ear-headphones",
+  "https://business.currys.co.uk/catalogue/tv-entertainment/headphones/sony-wh-1000xm4-wireless-bluetooth-noise-cancelling-headphones-blue/N776872W",
+  "https://business.currys.co.uk/catalogue/tv-entertainment/headphones/sony-wh-1000xm4-wireless-bluetooth-noise-cancelling-headphones-silver/N858320W",
+  "https://encompass.com/model/SONWH1000XM4%7CB",
+  "https://partstore.encompass.com/item/12582299/Sony/X-5001-119-1/",
+  "https://pcrichard.encompass.com/item/12582299/Sony/X-5001-119-1/",
+  "https://rr.encompass.com/item/12582291/Sony/X-5001-839-1/",
+  "https://sony.encompass.com/item/12582291/Sony/X-5001-839-1/",
+  "https://sony.encompass.com/item/12582299/Sony/X-5001-119-1/",
+  "https://wickedcushions.com/products/replacement-ear-pads-for-sony-wh1000xm4-black",
+  "https://www.amazon.co.uk/Sony-WH-1000XM4-Cancelling-Wireless-Headphones-Black/dp/B08C7KG5LP",
+  "https://www.amazon.co.uk/Sony-WH-1000XM4-Cancelling-Wireless-Headphones-Silver/dp/B08C7KCJF5",
+  "https://www.amazon.co.uk/WH-1000XM4-Replacement-WH1000XM4-Headphones-Gold-Champagne/dp/B0DHZHRBMS",
+  "https://www.amazon.co.uk/sony-wh-1000xm4-noise-cancelling/s?k=sony+wh-1000xm4+noise+cancelling",
+  "https://www.amazon.com/WC-Cushions-Replacement-WH1000XM4-Headphones/dp/B08ZNT1TLX",
+  "https://www.argos.co.uk/browse/technology/headphones-and-earphones/c:30128/brands:sony/opt/sort:price/",
+  "https://www.currys.co.uk/products/sony-wh1000xm4-wireless-bluetooth-noisecancelling-headphones-silver-10212573.html",
+  "https://www.ebay.co.uk/itm/204658266659",
+  "https://www.espares.co.uk/",
+  "https://www.johnlewis.com/browse/special-offers/electrical-offers/headphone-offers/over-ear/next-day-delivery/_/N-n5zrZluh2Z1z0ktrf",
+  "https://www.partstown.com/m/sony/wh1000xm4-b",
+  "https://www.partstown.com/m/sony/wh1000xm4-s",
+  "https://www.partstown.com/sony/wh1000xm4-s/parts",
+  "https://www.reddit.com/r/sony/comments/i5228t/xm4s_weight_is_omitted_from_its_full/",
+  "https://www.scparts.co.uk/en/ford/braking-system/",
+  "https://www.sony.co.uk/electronics/headband-headphones/wh-1000xm4/specifications",
+  "https://www.sony.co.uk/electronics/support/wireless-headphones-bluetooth-headphones/wh-1000xm4/specifications",
+  "https://www.sony.co.uk/electronics/support/wireless-headphones-bluetooth-headphones/wh-1000xm4c/specifications",
+  "https://www.sony.co.uk/store/?cid=eml-eu-2200015729",
+  "https://www.sony.co.uk/store/product/wh1000xm4b.ce7/WH-1000XM4-Wireless-Noise-Cancelling-Headphones",
+  "https://www.sony.co.uk/store/product/wh1000xm4b.ce7/WH-1000XM4-Wireless-Noise-Cancelling-Headphones?cid=sem-eu-38058",
+  "https://www.sony.co.uk/store/product/wh1000xm4s.ce7/WH-1000XM4-Wireless-Noise-Cancelling-Headphones?gad=1",
+  "https://www.sony.co.uk/store/search?query=%EF%BB%BFrdr2+best+way+to+make+money%5BURL%E2%98%86Funslot.win%E2%98%86%5Drdr2+best+way+to+make+money%5BURL%E2%98%86Funslot.win%E2%98%86%5Drdr2+best+way+to+make+moneynxsbu",
+  "https://www.sony.com/electronics/support/res/manuals/5013/167223a9cc055a7002af6664d4d476b8/50137294M.pdf",
+  "https://www.youtube.com/watch?v=BY6tM4fZ1qU",
+  "https://www.youtube.com/watch?v=WnFetuJajfI",
+  "https://www.youtube.com/watch?v=hkIzwF-GLb4"
+ ],
+ "searched_at": "2026-11-14T16:41:37.941957+00:00",
+ "mock": false
+}

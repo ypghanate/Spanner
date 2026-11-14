@@ -1,0 +1,74 @@
+{
+ "card_id": "1cae66eeded5",
+ "identity": {
+  "brand": "Royal",
+  "model": "Kludge RK61",
+  "model_number": "",
+  "year_or_revision": "",
+  "category": "",
+  "evidence": "typed: Royal Kludge RK61",
+  "confidence": 1.0
+ },
+ "part_needed": "replacement switches",
+ "fault": "one switch is dead: the key no longer registers",
+ "options": [],
+ "decision": null,
+ "recall": {
+  "status": "none_found",
+  "summary": "None of the provided sources names an official recall or safety notice for the Royal Kludge RK61; there are only user reports on Reddit of a unit catching fire, which are not recalls.",
+  "urls": [
+   "https://www.reddit.com/r/MechanicalKeyboards/comments/1o14ado/royal_kludge_safety_psa/",
+   "https://www.reddit.com/r/MechanicalKeyboards/comments/1iq7ild/anatomy_of_a_royal_kludge/"
+  ]
+ },
+ "manual_url": "",
+ "manual": null,
+ "tutorials": [
+  {
+   "title": "Royal Kludge RK61 Plus | Sound Test starring the Keyboard Kid - YouTube",
+   "url": "https://www.youtube.com/watch?v=8EQh3zWwbTQ",
+   "chapter": "",
+   "start_s": 0
+  },
+  {
+   "title": "TAPE MOD RK61 ROYAL KLUDGE - Mechanical Keyboard Red Switches RGB | Modding | Typing Sounds - YouTube",
+   "url": "https://www.youtube.com/watch?v=r84f_47qies",
+   "chapter": "",
+   "start_s": 0
+  },
+  {
+   "title": "Royal Kludge RK61 with Matcha Green Switches | Budget doesn't equal bad - YouTube",
+   "url": "https://www.youtube.com/watch?v=9vJODP6_s1g",
+   "chapter": "",
+   "start_s": 0
+  }
+ ],
+ "sources": [
+  "http://en.rkgaming.com/product/59/",
+  "https://en.rkgaming.com/product/48/",
+  "https://mechboards.co.uk/collections/cherry-switches",
+  "https://mechboards.co.uk/collections/royal-kludge",
+  "https://mechboards.co.uk/collections/switches",
+  "https://mechboards.co.uk/products/kailh-choc-low-profile-pro-v1-pink",
+  "https://rkgamingstore.com/collections/61-keys",
+  "https://rkgamingstore.com/products/panda-switches",
+  "https://rkgamingstore.com/products/rk-x-ltc-kailh-canary-switches",
+  "https://rkgamingstore.com/products/rk-x-ltc-kailh-switches-white",
+  "https://rkgamingstore.com/products/rk61-60-percent-keyboard",
+  "https://www.amazon.co.uk/Backlit-Keycaps-Switches-Mechanical-Keyboard/dp/B0999LDJ79",
+  "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-Mechanical-Ultra-Compact/dp/B089GN2KBT",
+  "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-Ultra-Compact-Multi-Device-Orange-Backlit-Brown-Switch/dp/B08613PF77",
+  "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-Wireless-Mechanical/dp/B0GQH2KNLB",
+  "https://www.amazon.co.uk/Wireless-Bluetooth-Multi-Device-Mechanical-Keyboard/dp/B085ZS1TDQ",
+  "https://www.amazon.co.uk/Wireless-Bluetooth-Multi-Device-Mechanical-Rechargeable-Black/dp/B0731H35J8",
+  "https://www.ebay.co.uk/itm/176819139871",
+  "https://www.keyboardco.com/keyboard/uk-keychron-k6-bluetooth-rgb-backlit-hot-swap-tactile-aluminium-macpc-65percent-keyboard.asp",
+  "https://www.reddit.com/r/MechanicalKeyboards/comments/1iq7ild/anatomy_of_a_royal_kludge/",
+  "https://www.reddit.com/r/MechanicalKeyboards/comments/1o14ado/royal_kludge_safety_psa/",
+  "https://www.youtube.com/watch?v=8EQh3zWwbTQ",
+  "https://www.youtube.com/watch?v=9vJODP6_s1g",
+  "https://www.youtube.com/watch?v=r84f_47qies"
+ ],
+ "searched_at": "2026-11-14T17:22:45.659617+00:00",
+ "mock": false
+}

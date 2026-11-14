@@ -280,6 +280,7 @@ def cmd_merge(args) -> None:
     test = set(cfg.get("test_videos") or [])
     records = [ProcedureRecord.model_validate_json(p.read_text(encoding="utf-8"))
                for d in (PER_VIDEO_DIR, PER_WEB_DIR) for p in sorted(d.glob("*.json"))]
+    records = [r for r in records if r.repair_id == cfg["repair_id"]]  # only this repair's sources
     train = [r for r in records if r.source_videos[0] not in test]
     if not train:
         sys.exit("No procedures yet. Run `python -m training.pipeline run` and/or `web` first.")

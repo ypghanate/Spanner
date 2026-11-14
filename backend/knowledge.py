@@ -95,7 +95,7 @@ async def track_step_async(*args, **kwargs) -> dict:
 
 
 async def search_steps_async(query: str, k: int = 3, canonical_only: bool = False) -> list[dict]:
-    return await asyncio.to_thread(search_steps, query, k, canonical_only)
+    return await asyncio.to_thread(search_steps, query, k, canonical_only)  # current repair only
 
 
 async def get_parts_card_async(job: str) -> dict:

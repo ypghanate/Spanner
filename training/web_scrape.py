@@ -15,6 +15,9 @@ from pathlib import Path
 MAX_PAGE_CHARS = 60_000   # very long pages are cut here (logged); guides are far shorter
 MIN_PAGE_CHARS = 400      # anything shorter is not a usable guide
 
+# YouTube is links-only (VISION.md): tutorials reach users as links via the Linkup card, never as data
+EXCLUDED_DOMAINS = ["youtube.com", "youtu.be"]
+
 QUERY_TEMPLATES = [
     "{object} {fault} how to fix step by step",
     "{object} {fault} repair guide",
@@ -44,7 +47,8 @@ def scrape(cfg: dict, out_dir: Path, max_results: int = 5, mock: bool = False) -
         found: dict[str, dict] = {}
         for q in queries(cfg):
             res = client.search(q, search_depth="advanced", max_results=max_results,
-                                include_raw_content=True)
+                                include_raw_content=True,
+                                exclude_domains=EXCLUDED_DOMAINS)
             for r in res.get("results", []):
                 found.setdefault(r["url"], {"url": r["url"], "title": r.get("title", ""), "query": q,
                                             "raw_content": r.get("raw_content") or ""})
@@ -59,6 +63,8 @@ def scrape(cfg: dict, out_dir: Path, max_results: int = 5, mock: bool = False) -
 
     saved = []
     for p in pages:
+        if any(d in p["url"] for d in EXCLUDED_DOMAINS):
+            continue
         text = p["raw_content"] or ""
         if len(text) < MIN_PAGE_CHARS:
             print(f"   skip (no usable text): {p['url']}")

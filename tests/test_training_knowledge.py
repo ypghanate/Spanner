@@ -113,7 +113,7 @@ def test_plan_from_knowledge_is_a_valid_contract_plan(canonical):
 
 def test_local_kb_search_finds_step(canonical, monkeypatch):
     monkeypatch.delenv("DATABRICKS_HOST", raising=False)
-    hits = kb.search_steps("bare speaker grille cushion", k=1)
+    hits = kb.search_steps("bare speaker grille cushion", k=1, repair_id="r1")
     assert hits and hits[0]["step_id"] == "r1#1"
 
 
@@ -134,3 +134,47 @@ def test_observation_text_matches_training_wording():
     obs = SceneObservation(frame_id="f", object="o", state="cushion half on", visible_parts=["cushion"],
                            anomalies=[], hands_visible=True, confidence=1)
     assert knowledge.observation_text(obs) == st.describe_observation("cushion half on", "hands working on it", ["cushion"])
+
+
+def test_decide_converts_foreign_part_prices():
+    d = pa.decide([_check(16.88, verified=False, currency="USD")], _new(179), fx=lambda s, t: 0.75)
+    assert d.verdict == "repair" and d.currency == "GBP" and d.repair_cost == 12.66 and d.savings == 166.34
+    # no exchange rate available -> honest "unclear", never a made-up comparison
+    assert pa.decide([_check(16.88, currency="USD")], _new(179), fx=lambda s, t: None).verdict == "unclear"
+
+
+def test_linkup_queries_follow_linkup_rules():
+    idt = pa.ModelIdentity(brand="Sony", model="WH-1000XM4", model_number="", year_or_revision="",
+                           category="headphones", evidence="", confidence=1)
+    assert pa._q(idt) == '"Sony WH-1000XM4" headphones'          # quoted + disambiguated
+    assert pa.PARTS_COUNTRY in pa._market() and pa.PARTS_CURRENCY in pa._market()
+
+
+# ---------------------------------------------------------------- 3D (training/scene3d.py)
+from training import scene3d  # noqa: E402
+
+
+def test_layout_is_a_real_rk61():
+    assert sum(len(r) for r in scene3d.LAYOUT) == 61
+    assert all(abs(sum(w for *_, w in row) - 15) < 1e-9 for row in scene3d.LAYOUT)  # every row is 15 units wide
+
+
+@pytest.mark.parametrize("text,kind,ops", [
+    ("Disconnect the cable from the keyboard's USB-C port so it is powered down", "cable-out", ["rotate_to", "highlight", "arrow"]),
+    ("Hook the keycap puller's wire loops under the keycap and pull straight up", "keycap-pull", ["rotate_to", "highlight", "arrow"]),
+    ("Place the switch puller's prongs on the top and bottom clips of the switch", "puller-place", ["rotate_to", "highlight"]),
+    ("Gently squeeze until the clips give, then pull the switch straight up out of the socket. If stuck, stop and check", "switch-pull", ["rotate_to", "highlight", "arrow"]),
+    ("Look into the empty hole and check the hot-swap socket is seated and free of dust", "socket-inspect", ["rotate_to", "highlight"]),
+    ("Take a spare compatible switch and check that both metal pins are straight and parallel", "new-switch-inspect", ["rotate_to", "highlight"]),
+    ("Hold the switch over the empty hole and line its pins up with the socket holes", "switch-align", ["rotate_to", "highlight", "arrow"]),
+    ("Press straight down evenly across the top of the switch until it clicks flush into the plate", "switch-insert", ["rotate_to", "highlight", "arrow"]),
+    ("Press the switch stem several times to confirm it springs back smoothly", "switch-test", ["rotate_to", "pulse"]),
+    ("Line up the keycap with the switch stem and press it straight down until fully seated", "keycap-place", ["rotate_to", "highlight", "arrow"]),
+    ("Plug the cable back into the USB-C port and press the repaired key in a keyboard tester", "cable-in-test", ["reset", "rotate_to", "pulse"]),
+])
+def test_steps_map_to_contract_scene_commands(text, kind, ops):
+    from backend.contracts import SceneCommand
+    assert scene3d.step_kind(text, []) == kind
+    cmds = scene3d.scene3d_for_step(text, [], key="F")
+    assert [c["op"] for c in cmds] == ops
+    [SceneCommand(**c) for c in cmds]  # valid contract commands

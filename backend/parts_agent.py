@@ -95,6 +95,9 @@ class ManualSpec(BaseModel):
 
 class ManualFacts(BaseModel):
     is_official_manual: bool = Field(description="True if this is the manufacturer's own manual for this model.")
+    language: str = Field(description="Language the document is written in, e.g. 'English', 'Chinese'.")
+    has_repair_procedure: bool = Field(description="True only if the manual actually describes how to do this "
+                                                   "repair (not just that a part exists or to contact a dealer).")
     title: str
     specs: list[ManualSpec] = Field(description="Specs relevant to this repair: sizes, torques, part numbers, fluids.")
     steps: list[str] = Field(description="The manual's steps for this repair, in order, with page numbers.")
@@ -156,10 +159,37 @@ class ReplacementCard(BaseModel):
 
 
 # ---------------------------------------------------------------- clients
+class _RetryingLinkup:
+    """LinkupClient with retries on dropped connections (venue Wi-Fi drops long deep searches)."""
+
+    def __init__(self, client, attempts: int = 3):
+        self._c, self._attempts = client, attempts
+
+    def _call(self, fn, *args, **kwargs):
+        import time
+
+        import httpx
+
+        for i in range(self._attempts):
+            try:
+                return fn(*args, **kwargs)
+            except (httpx.TransportError, httpx.TimeoutException) as e:
+                if i == self._attempts - 1:
+                    raise
+                print(f"   Linkup connection dropped ({type(e).__name__}); retrying...")
+                time.sleep(2 * (i + 1))
+
+    def search(self, *args, **kwargs):
+        return self._call(self._c.search, *args, **kwargs)
+
+    def fetch(self, *args, **kwargs):
+        return self._call(self._c.fetch, *args, **kwargs)
+
+
 def _linkup():
     from linkup import LinkupClient
 
-    return LinkupClient(api_key=os.environ["LINKUP_API_KEY"])
+    return _RetryingLinkup(LinkupClient(api_key=os.environ["LINKUP_API_KEY"]))
 
 
 def _claude(system: str, content, schema):
@@ -172,6 +202,31 @@ def _claude(system: str, content, schema):
     if resp.stop_reason == "refusal" or resp.parsed_output is None:
         raise RuntimeError(f"Claude returned no result (stop_reason={resp.stop_reason})")
     return resp.parsed_output
+
+
+PARTS_COUNTRY = os.getenv("PARTS_COUNTRY", "United Kingdom")
+PARTS_CURRENCY = os.getenv("PARTS_CURRENCY", "GBP")
+
+
+def _market() -> str:
+    """Where the user shops, so offers and new-unit prices are comparable (same currency)."""
+    return (f"Prefer shops that sell to customers in the {PARTS_COUNTRY}, with prices in {PARTS_CURRENCY}; "
+            "include others only if none are found.")
+
+
+def _q(identity: ModelIdentity) -> str:
+    """The model quoted and disambiguated, as Linkup's query rules recommend: '"Sony WH-1000XM4" headphones'."""
+    return f'"{identity.name()}"' + (f" {identity.category}" if identity.category else "")
+
+
+def _fetch_markdown(url: str) -> str:
+    """Linkup Fetch for a known URL: JavaScript rendering on by default, 'pro' mode if the page comes back empty."""
+    client = _linkup()
+    page = client.fetch(url=url, render_js=True)
+    text = page.markdown or ""
+    if len(text) < 200:
+        text = client.fetch(url=url, render_js=True, mode="pro").markdown or text
+    return text
 
 
 def _domain(url: str) -> str:
@@ -204,18 +259,36 @@ def find_offers(identity: ModelIdentity, part: str, mock: bool) -> tuple[list[Of
                         url=f"https://shop{i}.example/p/{i}", compatible_models_listed=[identity.name()])
                   for i in range(3)]
         return offers, [o.url for o in offers]
-    res = _linkup().search(
-        query=(f"Buy replacement {part} for {identity.name()}. For each product page give the part number, "
-               "retailer, price, currency, stock status, URL and the models it is listed as compatible with."),
-        depth="deep", output_type="structured", structured_output_schema=OfferSearch, include_sources=True)
-    data = res.data if hasattr(res, "data") else res
-    found = OfferSearch.model_validate(data if isinstance(data, dict) else json.loads(data))
-    sources = [s.url for s in (getattr(res, "sources", None) or [])]
-    seen, offers = set(), []
-    for o in found.offers:
-        if o.url and o.url not in seen:
-            seen.add(o.url)
-            offers.append(o)
+    # Deep search results vary run to run, so try three query shapes before giving up:
+    # 1. full retrieval plan (deep)  2. plain shopping query (deep)  3. plain query (standard)
+    queries = [
+        (f"Find online shops currently selling a replacement {part} for the {_q(identity)}. {_market()} "
+         "Run separate searches for: the manufacturer's official spare-parts store, major retailers, and "
+         "specialist spare-parts shops. Scrape each product page found and extract: part name, part number, "
+         "retailer, price, currency, stock status, product URL, and the models the page says it fits. "
+         "Return the source URL for each offer; return an empty list if none are found.", "deep"),
+        (f"Buy {part} compatible with the {_q(identity)}: find product pages (manufacturer store, Amazon, "
+         "specialist keyboard/parts shops, AliExpress) and extract part name, part number, retailer, price, "
+         "currency, stock status, product URL and listed compatible models. Include offers in any currency.", "deep"),
+        (f"{_q(identity)} replacement {part} buy price", "standard"),
+    ]
+    sources: list[str] = []
+    seen: set[str] = set()
+    offers: list[Offer] = []
+    for query, depth in queries:  # union of all three shapes: deep search results vary run to run
+        try:
+            res = _linkup().search(query=query, depth=depth, output_type="structured",
+                                   structured_output_schema=OfferSearch, include_sources=True)
+        except Exception as e:
+            print(f"   offers ({depth}) failed: {e}")
+            continue
+        data = res.data if hasattr(res, "data") else res
+        found = OfferSearch.model_validate(data if isinstance(data, dict) else json.loads(data))
+        sources += [s.url for s in (getattr(res, "sources", None) or [])]
+        for o in found.offers:
+            if o.url and o.url.startswith("http") and o.url not in seen:
+                seen.add(o.url)
+                offers.append(o)
     offers.sort(key=lambda o: (o.price <= 0, o.price))
     return offers, sources
 
@@ -225,12 +298,20 @@ def verify(identity: ModelIdentity, offer: Offer, mock: bool) -> OfferCheck:
         v = CompatibilityVerdict(fits="yes", reason="mock", supporting_urls=[offer.url, "https://forum.example/t/1"])
         return OfferCheck(offer=offer, verdict=v, verified=True, independent_sources=2)
     ref = offer.part_number or offer.part_name
-    ans = _linkup().search(query=f"Is {ref} compatible with {identity.name()}? Cite fitment lists or the manufacturer.",
-                           depth="standard", output_type="sourcedAnswer")
+    # standard: parallel facet searches + scraping the one URL we already know (the offer page)
+    ans = _linkup().search(
+        query=(f'Check whether the part "{ref}" ({offer.part_name}) fits the {_q(identity)}. Scrape {offer.url} '
+               "and report which models it lists. Run separate searches for: this part number together with the "
+               "model name, the manufacturer's compatibility or fitment list, and retailer or forum fitment notes. "
+               "Give the source URL for each piece of evidence; say none found if no source names both the part "
+               "and this model."),
+        depth="standard", output_type="sourcedAnswer")
     source_urls = [s.url for s in ans.sources]
     verdict = _claude(
         "You check whether a replacement part fits a specific model. Judge only from the evidence given. "
-        "'yes' needs explicit evidence for this exact model (or its model number); otherwise 'unclear'.",
+        "'yes' needs explicit evidence: either a source names this exact model (or its model number), or the part "
+        "is a standard interface (e.g. an MX-style 3-pin/5-pin mechanical switch, a USB-C cable) and a source says the "
+        "model uses that interface (e.g. 'hot-swappable, 3-pin/5-pin switches'). Otherwise 'unclear'.",
         f"Model: {identity.name()}\nPart: {ref} ({offer.part_name}) from {offer.url}\n"
         f"Product page lists compatible models: {offer.compatible_models_listed}\n\n"
         f"Web answer: {ans.answer}\n\nSources:\n" + "\n".join(f"- {s.url}: {s.snippet}" for s in ans.sources),
@@ -248,21 +329,31 @@ def verify(identity: ModelIdentity, offer: Offer, mock: bool) -> OfferCheck:
 def find_manual(identity: ModelIdentity, part: str, fault: str, mock: bool) -> tuple[str, ManualFacts | None]:
     if mock:
         return "https://manufacturer.example/manual.pdf", ManualFacts(
-            is_official_manual=True, title="Mock manual",
+            is_official_manual=True, language="English", has_repair_procedure=True, title="Mock manual",
             specs=[ManualSpec(name="Caliper bolt torque", value="25", unit="Nm", page="42")],
             steps=["Remove the pad pin (p. 42)", "Slide out the pads (p. 42)"], warnings=["Mock warning"])
-    res = _linkup().search(query=f"{identity.name()} official owner's manual OR workshop manual PDF",
-                           depth="standard", output_type="searchResults", max_results=8)
+    # search to discover the manual's URL, then fetch it (Linkup: fetch when the URL is known)
+    res = _linkup().search(
+        query=(f"Find the official English-language owner's manual, help guide or service manual for the "
+               f"{_q(identity)}, preferably the PDF published by {identity.brand} or its official support site "
+               f"for the {PARTS_COUNTRY}. Return the document URLs and titles; say none found if there is none."),
+        depth="standard", output_type="searchResults", max_results=8)
     results = [r for r in res.results if getattr(r, "url", None)]
     brand = identity.brand.lower().replace(" ", "")
     results.sort(key=lambda r: (brand not in _domain(r.url).replace("-", ""), not r.url.lower().endswith(".pdf")))
     question = (f"Repair: replace the {part} on a {identity.name()} (fault: {fault}). Extract the specs, steps "
                 "and warnings from this manual that matter for this repair, with page numbers.")
     system = ("You extract technical facts from product manuals. Quote values exactly as written; never "
-              "estimate. If the document isn't a manual for this model, set is_official_manual to false.")
-    for r in results[:3]:
+              "estimate. If the document isn't a manual for this model, set is_official_manual to false. "
+              "Leave steps empty unless the manual really describes this repair; never write a step saying "
+              "that there is no procedure.")
+    fallback: tuple[str, ManualFacts] | None = None
+    for r in results[:6]:  # some official sites block fetching; try a few copies
         try:
-            if r.url.lower().endswith(".pdf"):
+            text = _fetch_markdown(r.url)  # pages and PDFs, as Markdown
+            if len(text) >= 500:
+                content = f"{question}\n\nDOCUMENT ({r.url}):\n{text}"
+            elif r.url.lower().endswith(".pdf"):  # Fetch couldn't read it: give Claude the PDF itself
                 import httpx
 
                 pdf = httpx.get(r.url, follow_redirects=True, timeout=60).content
@@ -274,16 +365,16 @@ def find_manual(identity: ModelIdentity, part: str, fault: str, mock: bool) -> t
                                                            "data": base64.standard_b64encode(pdf).decode()}},
                            {"type": "text", "text": question}]
             else:
-                page = _linkup().fetch(url=r.url, render_js=True)
-                if not page.markdown or len(page.markdown) < 500:
-                    continue
-                content = f"{question}\n\nDOCUMENT ({r.url}):\n{page.markdown}"
+                continue
             facts = _claude(system, content, ManualFacts)
-            if facts.is_official_manual:
+            if not facts.is_official_manual:
+                continue
+            if facts.language.lower().startswith("english"):
                 return r.url, facts
+            fallback = fallback or (r.url, facts)  # keep a non-English manual only as a last resort
         except Exception as e:
             print(f"   manual candidate failed: {r.url} ({e})")
-    return "", None
+    return fallback or ("", None)
 
 
 REPAIR_THRESHOLD = float(os.getenv("REPAIR_THRESHOLD", "0.6"))  # repair if parts cost <= 60% of a new unit
@@ -294,21 +385,62 @@ def find_new_product(identity: ModelIdentity, mock: bool) -> tuple[NewProduct | 
     if mock:
         return NewProduct(product_name=identity.name(), price=249.0, currency="GBP", retailer="newshop.example",
                           url="https://newshop.example/item", weight_kg=0.25), ["https://newshop.example/item"]
+    # deep: prices live on product pages that must be found, then scraped (standard returned price 0)
     res = _linkup().search(
-        query=(f"Price of a brand-new {identity.name()} today: retailer, price, currency, product URL, "
-               "and the product weight from its official spec sheet."),
-        depth="standard", output_type="structured", structured_output_schema=NewProductSearch, include_sources=True)
+        query=(f"Find the current price of a brand-new {_q(identity)}. {_market()} Run separate searches for: "
+               f"the manufacturer's official store, major retailers, and the official {identity.brand} spec sheet "
+               "(for the product weight). Scrape each product page and the spec page, then return product name, "
+               "retailer, price, currency, product URL and weight in kg, with the source URL for each; use 0 for "
+               "anything not found."),
+        depth="deep", output_type="structured", structured_output_schema=NewProductSearch, include_sources=True)
     data = res.data if hasattr(res, "data") else res
     found = NewProductSearch.model_validate(data if isinstance(data, dict) else json.loads(data))
-    priced = sorted((p for p in found.products if p.price > 0 and p.url), key=lambda p: p.price)
-    return (priced[0] if priced else None), [s.url for s in (getattr(res, "sources", None) or [])]
+    priced = sorted((p for p in found.products if p.price > 0 and p.url),
+                    key=lambda p: (p.currency != PARTS_CURRENCY, p.price))  # home currency first
+    best = priced[0] if priced else None
+    weights = [p.weight_kg for p in found.products if p.weight_kg > 0]   # weight may come from the spec page row
+    if best and not best.weight_kg and weights:
+        best = best.model_copy(update={"weight_kg": weights[0]})
+    return best, [s.url for s in (getattr(res, "sources", None) or [])]
 
 
-def decide(checks: list[OfferCheck], new: NewProduct | None) -> RepairDecision | None:
-    """Repair or replace, from the cheapest verified offer (or cheapest offer, flagged) vs a new unit."""
+_FX_CACHE: dict[tuple[str, str], float] = {}
+
+
+def fx_rate(src: str, dst: str) -> float | None:
+    """Today's exchange rate (European Central Bank data via frankfurter.dev, no key). None if unavailable."""
+    if src == dst:
+        return 1.0
+    if (src, dst) not in _FX_CACHE:
+        try:
+            import httpx
+
+            r = httpx.get("https://api.frankfurter.dev/v1/latest", params={"base": src, "symbols": dst},
+                          timeout=5, follow_redirects=True)
+            _FX_CACHE[(src, dst)] = float(r.json()["rates"][dst])
+        except Exception:
+            return None
+    return _FX_CACHE[(src, dst)]
+
+
+def decide(checks: list[OfferCheck], new: NewProduct | None, fx=None) -> RepairDecision | None:
+    """Repair or replace, from the cheapest verified offer (or cheapest offer, flagged) vs a new unit.
+    `fx(src, dst) -> rate` converts part prices into the new unit's currency when they differ."""
     priced = [c for c in checks if c.offer.price > 0 and c.verdict.fits != "no"]
     if not priced or new is None:
         return None
+    # Bring every offer into the new unit's currency (today's rate) so a verified part priced in another
+    # currency still beats an unverified local one; offers that can't be converted are dropped.
+    comparable = []
+    for c in priced:
+        if c.offer.currency == new.currency:
+            comparable.append(c)
+        elif fx is not None and (rate := fx(c.offer.currency, new.currency)):
+            o = c.offer.model_copy(update={"price": round(c.offer.price * rate, 2), "currency": new.currency,
+                                           "part_name": f"{c.offer.part_name} (converted from "
+                                                        f"{c.offer.price:.2f} {c.offer.currency})"})
+            comparable.append(c.model_copy(update={"offer": o}))
+    priced = comparable or priced
     best = min((c for c in priced if c.verified), default=None, key=lambda c: c.offer.price) \
         or min(priced, key=lambda c: c.offer.price)
     if best.offer.currency != new.currency:
@@ -333,9 +465,13 @@ def check_recall(identity: ModelIdentity, mock: bool) -> RecallCheck | None:
         return RecallCheck(status="none_found", summary="No recalls found in the last 2 years (mock).", urls=[])
     from datetime import date, timedelta
 
-    ans = _linkup().search(query=f"Safety recall or safety notice for {identity.name()}",
-                           depth="standard", output_type="sourcedAnswer",
-                           from_date=date.today() - timedelta(days=730))
+    since = date.today() - timedelta(days=730)
+    ans = _linkup().search(  # a timeframe is genuinely implied here, so a date filter is appropriate
+        query=(f"Find official safety recalls or safety notices for the {_q(identity)} issued since "
+               f"{since:%B %Y}. Run separate searches for: the manufacturer's recall or safety notices page, "
+               "and government product-safety recall databases. Return each recall's title, date and source "
+               "URL; say none found if there are none."),
+        depth="standard", output_type="sourcedAnswer", from_date=since)
     rc = _claude(
         "You check product safety recalls. Report a recall only if a source explicitly names this model. "
         "If nothing relevant is in the sources, say none_found; if it's ambiguous, unclear.",
@@ -371,14 +507,15 @@ def find_tutorials(identity: ModelIdentity, part: str, mock: bool, fault: str = 
     if mock:
         return [{"title": "Mock tutorial", "url": "https://www.youtube.com/watch?v=mock&t=95",
                  "chapter": "Replacing the pads", "start_s": 95}]
-    res = _linkup().search(query=f"{identity.name()} {part} replacement tutorial", depth="standard",
-                           output_type="searchResults", include_domains=["youtube.com"], max_results=5)
+    res = _linkup().search(
+        query=(f"Find video tutorials showing step by step how to replace the {part} on the {_q(identity)}. "
+               "Return the video titles and URLs."),
+        depth="standard", output_type="searchResults", include_domains=["youtube.com"], max_results=5)
     videos = [{"title": r.name, "url": r.url, "chapter": "", "start_s": 0}
               for r in res.results if "youtube.com/watch" in r.url][:3]
     for v in videos[:2]:  # read the description for chapters; skip quietly if the page can't be fetched
         try:
-            page = _linkup().fetch(url=v["url"])
-            hit = best_chapter(page.markdown or "", part, fault)
+            hit = best_chapter(_fetch_markdown(v["url"]), part, fault)
             if hit:
                 v["start_s"], v["chapter"] = hit
                 v["url"] = f"{v['url']}{'&' if '?' in v['url'] else '?'}t={hit[0]}"
@@ -443,7 +580,7 @@ def research(part: str, fault: str, label_image: Path | None = None, model_text:
         recall = recall_f.result()
 
     checks.sort(key=lambda c: (not c.verified, c.verdict.fits != "yes", c.offer.price <= 0, c.offer.price))
-    decision = decide(checks, new_product)
+    decision = decide(checks, new_product, fx=fx_rate)
     sources = sorted({*offer_sources, *new_sources, *(u for c in checks for u in c.verdict.supporting_urls),
                       *([manual_url] if manual_url else []), *(t["url"] for t in tutorials),
                       *(decision.sources if decision else []), *(recall.urls if recall else [])})
@@ -453,7 +590,7 @@ def research(part: str, fault: str, label_image: Path | None = None, model_text:
                            searched_at=datetime.now(timezone.utc).isoformat(), mock=mock)
     PARTS_DIR.mkdir(parents=True, exist_ok=True)
     out.write_text(card.model_dump_json(indent=1), encoding="utf-8")
-    if manual and manual.steps:
+    if manual and manual.has_repair_procedure and manual.steps:
         _manual_to_knowledge_base(card, repair_id)
     return card
 

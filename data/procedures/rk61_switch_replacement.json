@@ -1,0 +1,305 @@
+{
+ "procedure_id": "rk61_switch_replacement",
+ "repair_id": "rk61_switch_replacement",
+ "source_kind": "canonical",
+ "source_videos": [
+  "yt_7OYqa5fSISA",
+  "yt_9vJODP6_s1g",
+  "yt_jTHXSx29eXE",
+  "0e834c2c6ee4",
+  "f494c966a993"
+ ],
+ "sources": [
+  {
+   "video_id": "yt_7OYqa5fSISA",
+   "url": "https://www.youtube.com/watch?v=7OYqa5fSISA",
+   "creator": "",
+   "licence": "YouTube - watched via Gemini by URL; not downloaded; derived labels only",
+   "repair_type": "rk61_switch_replacement",
+   "notes": "labelled by gemini-3.6-flash"
+  },
+  {
+   "video_id": "yt_9vJODP6_s1g",
+   "url": "https://www.youtube.com/watch?v=9vJODP6_s1g",
+   "creator": "",
+   "licence": "YouTube - watched via Gemini by URL; not downloaded; derived labels only",
+   "repair_type": "rk61_switch_replacement",
+   "notes": "labelled by gemini-3.6-flash"
+  },
+  {
+   "video_id": "yt_jTHXSx29eXE",
+   "url": "https://www.youtube.com/watch?v=jTHXSx29eXE",
+   "creator": "",
+   "licence": "YouTube - watched via Gemini by URL; not downloaded; derived labels only",
+   "repair_type": "rk61_switch_replacement",
+   "notes": "labelled by gemini-3.6-flash"
+  },
+  {
+   "url": "https://keebsforall.com/blogs/mechanical-keyboards-101/how-to-install-switches-on-hot-swap-keyboards",
+   "title": "How to Install Switches on Hot-Swap Keyboards – KeebsForAll",
+   "kind": "web"
+  },
+  {
+   "url": "https://world.taobao.com/lang/en-us/shopping-guide/2050292459950309376.htm",
+   "title": "How to Safely Replace RK61 Switches",
+   "kind": "web"
+  }
+ ],
+ "keyframes": {},
+ "procedure": {
+  "object": "Royal Kludge RK61 60% mechanical keyboard (hot-swappable)",
+  "fault": "One key no longer registers or double-types because its mechanical switch has failed; replace the switch.",
+  "tools_needed": [
+   "keycap puller",
+   "switch puller",
+   "tweezers"
+  ],
+  "parts": [
+   "keycap",
+   "mechanical switch",
+   "hot-swap socket",
+   "switch pins",
+   "plate",
+   "PCB",
+   "stabilizer",
+   "space bar",
+   "USB-C port"
+  ],
+  "steps": [
+   {
+    "index": 1,
+    "title": "Unplug the keyboard",
+    "instruction": "Disconnect the cable from the keyboard's USB-C port so the keyboard is powered down. If you have one, wear an anti-static wrist strap or touch grounded metal first.",
+    "parts": [
+     "USB-C port"
+    ],
+    "tools": [],
+    "expected_visual_state": "No cable is plugged into the keyboard's USB-C port and the keyboard backlight is off.",
+    "common_mistakes": [
+     "Leaving the cable plugged in while pulling switches.",
+     "Reaching for the board without grounding yourself first."
+    ],
+    "safety_notes": [
+     "Unplug the USB-C cable before pulling switches.",
+     "Static discharge can damage the controller chip on the PCB; an anti-static wrist strap is optional but recommended."
+    ],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 2,
+    "title": "Remove the keycap",
+    "instruction": "Hook the keycap puller's wire loops under opposite edges of the faulty key's keycap and pull straight up, then set the keycap somewhere safe. For the space bar, lift both ends evenly so the stabilizer ends release together.",
+    "parts": [
+     "keycap",
+     "mechanical switch",
+     "space bar",
+     "stabilizer"
+    ],
+    "tools": [
+     "keycap puller"
+    ],
+    "expected_visual_state": "The keycap is off and set aside; the bare mechanical switch with its cross-shaped stem sits in the plate at the faulty key position.",
+    "common_mistakes": [
+     "Pulling the wrong keycap; double-check it is the faulty key.",
+     "Pulling the keycap at an angle, which stresses the switch stem or scratches the keycap or case.",
+     "Yanking one end of the space bar so it catches on the stabilizer.",
+     "Losing the keycap."
+    ],
+    "safety_notes": [],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 3,
+    "title": "Grip the switch with the switch puller",
+    "instruction": "Place the switch puller's prongs on the top and bottom (north and south) clips of the switch, down where the switch meets the plate.",
+    "parts": [
+     "mechanical switch",
+     "plate"
+    ],
+    "tools": [
+     "switch puller"
+    ],
+    "expected_visual_state": "The switch puller's two prongs rest on the top and bottom edges of the switch at plate level, not on the left and right sides.",
+    "common_mistakes": [
+     "Gripping the left and right sides instead of the top and bottom clips, so the switch won't release.",
+     "Placing the prongs high on the switch housing instead of down at the plate where the clips are.",
+     "Gripping only one clip, so the switch stays locked in the plate."
+    ],
+    "safety_notes": [],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 4,
+    "title": "Pull out the failed switch",
+    "instruction": "Gently squeeze until the clips give, then pull the switch straight up in one steady motion out of the plate and hot-swap socket. If it is stuck, stop and recheck the grip rather than yanking or rocking it.",
+    "parts": [
+     "mechanical switch",
+     "hot-swap socket",
+     "plate",
+     "PCB"
+    ],
+    "tools": [
+     "switch puller"
+    ],
+    "expected_visual_state": "The old switch is held in the puller and an empty square hole in the plate shows the hot-swap socket on the PCB underneath.",
+    "common_mistakes": [
+     "Rocking or wiggling the switch sideways while pulling, which damages the hot-swap socket.",
+     "Pulling at an angle instead of vertically.",
+     "Squeezing so hard the switch housing cracks.",
+     "Prying the switch out with fingernails.",
+     "Yanking a stuck switch without the clips released."
+    ],
+    "safety_notes": [
+     "Do not force anything; sideways force can bend the socket's metal contacts, widen the socket, or damage the PCB.",
+     "Pull straight up to avoid bending the switch pins."
+    ],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 5,
+    "title": "Inspect and clean the hot-swap socket",
+    "instruction": "Look into the empty hole and check the hot-swap socket is seated, undamaged and free of dust; clear debris with compressed air if needed.",
+    "parts": [
+     "hot-swap socket",
+     "PCB",
+     "plate"
+    ],
+    "tools": [],
+    "expected_visual_state": "Through the empty plate hole, the hot-swap socket's two pin holes are clearly visible, with no debris and no lifted or damaged socket.",
+    "common_mistakes": [
+     "Not noticing a damaged or lifted socket, which would make a new switch fail too.",
+     "Inserting the new switch over debris."
+    ],
+    "safety_notes": [],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 6,
+    "title": "Check the new switch",
+    "instruction": "Take a spare compatible switch, press its stem a few times to confirm it springs back, and check that both metal pins are straight and parallel; gently straighten a bent pin with tweezers.",
+    "parts": [
+     "mechanical switch",
+     "switch pins"
+    ],
+    "tools": [
+     "tweezers"
+    ],
+    "expected_visual_state": "The underside of the new switch shows two straight metal pins pointing straight down, parallel to each other, with no bends.",
+    "common_mistakes": [
+     "Installing a switch with a bent pin.",
+     "Bending a pin back too hard and snapping it, or using a switch with a weak or broken pin.",
+     "Using a 5-pin switch in a board that only has holes for 3-pin switches."
+    ],
+    "safety_notes": [
+     "A bent pin can tear the socket's metal contact or get stuck inside it."
+    ],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 7,
+    "title": "Align the new switch",
+    "instruction": "Hold the switch over the empty hole, facing the same way as its neighbours, and line its pins up with the two socket holes, lowering it until the pins just touch the socket.",
+    "parts": [
+     "mechanical switch",
+     "switch pins",
+     "hot-swap socket",
+     "plate"
+    ],
+    "tools": [],
+    "expected_visual_state": "The new switch sits level in the plate opening, oriented the same as the neighbouring switches, not yet pressed in.",
+    "common_mistakes": [
+     "Inserting the switch rotated so the pins don't line up with the socket holes.",
+     "Holding the switch tilted so one pin goes in before the other."
+    ],
+    "safety_notes": [],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 8,
+    "title": "Press the switch in",
+    "instruction": "Press straight down evenly across the top of the switch until it clicks flush into the plate. If you feel gritty resistance or need much force, stop, remove it, and recheck the pins and socket.",
+    "parts": [
+     "mechanical switch",
+     "switch pins",
+     "hot-swap socket",
+     "plate"
+    ],
+    "tools": [],
+    "expected_visual_state": "The new switch sits flush in the plate at the same height as its neighbours, with no gap or tilt.",
+    "common_mistakes": [
+     "Forcing a misaligned switch or one with crooked pins, crushing a pin or damaging the socket.",
+     "Pressing on one side or corner only so it seats crooked.",
+     "Not pressing until it clicks, leaving the switch sitting high."
+    ],
+    "safety_notes": [
+     "Never push hard; a correctly aligned switch slides in with only slight smooth resistance."
+    ],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 9,
+    "title": "Check the switch action",
+    "instruction": "Press the switch stem several times and look from the side to confirm it springs back smoothly, doesn't wobble, and stays flush.",
+    "parts": [
+     "mechanical switch",
+     "plate"
+    ],
+    "tools": [],
+    "expected_visual_state": "The switch top is level with neighbouring switches and its stem returns to the same resting height after each press.",
+    "common_mistakes": [
+     "Skipping this check; a tilted switch usually signals a bent or misseated pin."
+    ],
+    "safety_notes": [],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 10,
+    "title": "Reinstall the keycap",
+    "instruction": "Line up the keycap with the switch stem and press it straight down until fully seated. For the space bar, hook the stabilizers first, then press both ends down evenly.",
+    "parts": [
+     "keycap",
+     "mechanical switch",
+     "space bar",
+     "stabilizer"
+    ],
+    "tools": [],
+    "expected_visual_state": "The keycap is back in its position, at the same height and angle as the surrounding keycaps.",
+    "common_mistakes": [
+     "Putting the keycap on rotated or on the wrong key position.",
+     "Not seating the keycap fully so it sits higher than the others."
+    ],
+    "safety_notes": [],
+    "start_s": 0.0,
+    "end_s": 0.0
+   },
+   {
+    "index": 11,
+    "title": "Reconnect and test",
+    "instruction": "Plug the cable back into the USB-C port and press the repaired key repeatedly in a text editor or online keyboard tester to confirm it registers exactly once per press.",
+    "parts": [
+     "USB-C port",
+     "keycap"
+    ],
+    "tools": [],
+    "expected_visual_state": "Cable plugged into the USB-C port, backlight on, and the screen shows the repaired key's character appearing once per press.",
+    "common_mistakes": [
+     "Not testing the specific repaired key.",
+     "Not checking for double-typing by pressing the key repeatedly."
+    ],
+    "safety_notes": [],
+    "start_s": 0.0,
+    "end_s": 0.0
+   }
+  ],
+  "notes": "On the hot-swappable RK61 a single switch is replaced from the top; no case opening is needed. One video opened the case (bottom screws, then unplugging the battery connector by its connector, not wires) to inspect sockets from the PCB back; if you do this, don't strain the battery wire and reconnect and rescrew afterward. The RK61 box typically includes spare switches and a keycap puller; buy replacements that match the board's 3-pin hot-swap sockets (count PCB holes: 3 = 3-pin only; a 5-pin switch needs its extra plastic legs clipped). Sources were mostly full mod builds or generic guides; lubing, foam and stabilizer mods are optional and not part of this repair. If the key still fails: reseat the switch, recheck pins, clean the socket; then try firmware update or debounce settings (also helps chatter/double-typing), factory reset as last resort. Hot-swap sockets wear with repeated swaps; a loose-feeling switch may indicate a worn socket."
+ }
+}

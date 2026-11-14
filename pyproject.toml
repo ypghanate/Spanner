@@ -33,6 +33,9 @@ training = [
     "tavily-python>=0.8",
     "linkup-sdk>=0.24",
     "mlflow-skinny>=3.18",
+    "google-genai",      # Gemini watches YouTube tutorials by URL (training/youtube_labels.py)
+    "trimesh",           # procedural 3D model of the demo object (training/scene3d.py)
+    "scipy",
 ]
 
 [tool.uv]
