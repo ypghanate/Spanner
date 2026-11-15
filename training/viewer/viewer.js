@@ -1515,7 +1515,7 @@ function startRemote() {
   if (camOn) toggleCamera();
   // the laptop keeps listening until the phone sends its first utterance (phone.html has no microphone; the Spanner app does)
   setMode("live · phone camera");
-  $("cam").style.display = "block"; $("video").style.display = "none"; $("remoteImg").style.display = "block";
+  $("cam").style.display = "block"; $("video").style.display = "none"; $("remoteImg").style.display = "none";   // the phone's view is not mirrored here: the panel is the status line only
   if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); }
   if (!remoteOn) { remoteOn = true; lastDataAt = 0; pollFails = 0; seen("Phone camera: waiting for frames."); setLink("waiting"); }
   if (linkState !== "live") showPair();
@@ -1537,7 +1537,7 @@ async function remoteTick() {
       if (d.alive && d.alive !== lastAlive) { lastAlive = d.alive; fresh = true; }   // a frame arrived, even if Claude is still reading it
       if (d.view && d.view.ts !== lastViewTs) {
         lastViewTs = d.view.ts; fresh = true; onCoach(d.view);
-        const img = $("remoteImg"); img.style.display = "block"; img.src = API + "/coach/preview.jpg?session=" + SESSION + "&t=" + d.view.ts;   // what the phone sees
+        // (the phone's picture is deliberately not shown on the laptop: nothing competes with the hologram)
       }
       // speech from the phone's microphone (transcribed on the laptop): the phone listens, this laptop speaks back
       if (d.utterance && d.utterance.id !== lastUtterId) {
