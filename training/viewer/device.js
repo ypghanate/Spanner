@@ -359,8 +359,31 @@ function needTap(text) {
 let healthKnown = false;
 const healthP = fetch(API + "/coach/health", { signal: AbortSignal.timeout(4000) }).then((r) => r.json()).then((j) => { elevenOK = !!j.tts; }).catch(() => {}).finally(() => { healthKnown = true; });
 function stopSpeaking() { reportSpeaking(0); if ("speechSynthesis" in window) speechSynthesis.cancel(); if (sayAudio) { sayAudio.pause(); sayAudio = null; } speakingUntil = 0; }
+// ---- smooth feedback: say a line without cutting off the one being spoken; react only to what two frames agree on
+let queuedSay = null, queueTimer = 0;
+/** Say a line when the current one has finished (only the newest waiting line is kept; too late to be useful after 12 s). */
+function narrateQueued(text) {
+  if (!text) return;
+  if (INSTANT || !voiceOn || performance.now() >= speakingUntil) { narrate(text); return; }
+  queuedSay = { text, show, t: performance.now() };
+  if (!queueTimer) queueTimer = setInterval(() => {
+    if (!queuedSay) { clearInterval(queueTimer); queueTimer = 0; return; }
+    if (performance.now() - queuedSay.t > 12000) { queuedSay = null; return; }
+    if (performance.now() >= speakingUntil) { const q = queuedSay; queuedSay = null; narrate(q.text); }
+  }, 120);
+}
+/** Run fn once nothing is being said or waiting to be said, after a short natural pause. */
+function afterSpeech(fn, pauseMs = 700) {
+  const t0 = performance.now();
+  const tick = () => {
+    if ((performance.now() >= speakingUntil && !queuedSay) || performance.now() - t0 > 9000) setTimeout(fn, pauseMs); else setTimeout(tick, 120);
+  };
+  tick();
+}
+let mistakeStreak = 0, doneStreak = 0, mistakeShown = false, advancing = false, cleanFrames = 2;
 function narrate(text, tries = 0) {
   if (!voiceOn || INSTANT || !text) return;
+  queuedSay = null;
   if (!healthKnown) { healthP.then(() => narrate(text, tries)); return; }
   stopSpeaking(); currentSpeech = text; speakingUntil = performance.now() + 60000;
   caption(text); reportSpeaking(Math.min(45000, 2500 + text.split(/\s+/).length * 450) + 1000);
@@ -483,6 +506,7 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const two = (t) => { const w = String(t || "").split(/\s+/); const k = Math.ceil(w.length / 2); return w.length < 3 ? [t || ""] : [w.slice(0, k).join(" "), w.slice(k).join(" ")]; };
 function caption(text) { $("captText").textContent = text || ""; }
 function renderCard() {
+  { const m = $("mid"); m.classList.remove("rise-in"); void m.offsetWidth; m.classList.add("rise-in"); }   // the new text fades in
   const n = plan?.steps?.length || 0, s = plan?.steps?.[stepIdx];
   $("tools").innerHTML = ""; $("sd").textContent = ""; $("sm").textContent = "";
   if (!plan) {
@@ -618,14 +642,21 @@ function onCoach(c) {
   noteSeen(c);
   $("tele").textContent = `${Object.keys(parts).length} PARTS · CAMERA ${(c.latency_ms / 1000).toFixed(1)} s`;
   if (!plan || !c.object_visible) { agree = 0; return; }
-  if (performance.now() < stepHoldUntil) return;                       // we just moved on: this picture was taken before that
+  if (performance.now() < stepHoldUntil || advancing) return;          // we just moved on (or are about to): this picture is stale
   const cur = stepIdx + 1;
-  if (cur >= 1 && c.mistake && c.confidence >= 0.4 && performance.now() - lastMistakeAt > 5000) {
-    lastMistakeAt = performance.now(); narrate("Careful. " + (c.say || c.mistake)); heard("camera", "⚠ " + c.mistake); return;
+  if (c.mistake && c.confidence >= 0.4) mistakeStreak++; else mistakeStreak = 0;
+  if (!c.mistake && mistakeShown && !--cleanFrames) { mistakeShown = false; select(null); }
+  if (cur >= 1 && c.mistake && (mistakeStreak >= 2 || c.confidence >= 0.8) && performance.now() - lastMistakeAt > 6000) {
+    lastMistakeAt = performance.now(); mistakeShown = true; cleanFrames = 2; narrateQueued("Careful. " + (c.say || c.mistake)); heard("camera", "⚠ " + c.mistake); return;
   }
-  if (cur >= 1 && c.step_status === "done" && c.step_index >= cur && c.confidence >= 0.55 && lastDoneStep !== stepIdx) {
-    lastDoneStep = stepIdx; agree = 0; stepHoldUntil = performance.now() + 2500; narrate(c.say || "Nice. On to the next step.");
-    setTimeout(() => { if (stepIdx < plan.steps.length - 1) goStep(stepIdx + 1, " · auto"); else if (!finishedDev) finishRepair(); }, 900);
+  if (cur >= 1 && c.step_status === "done" && c.step_index >= cur && c.confidence >= 0.55) doneStreak++; else doneStreak = 0;
+  if (cur >= 1 && lastDoneStep !== stepIdx && (doneStreak >= 2 || (doneStreak >= 1 && c.confidence >= 0.85))) {
+    lastDoneStep = stepIdx; agree = 0; doneStreak = 0; advancing = true; narrateQueued(c.say || "Nice. On to the next step.");
+    afterSpeech(() => {
+      advancing = false; stepHoldUntil = performance.now() + 2500;
+      if (stepIdx !== cur - 1) return;
+      if (stepIdx < plan.steps.length - 1) goStep(stepIdx + 1, " · auto"); else if (!finishedDev) finishRepair();
+    });
     return;
   }
   agree = c.step_index === lastDetect ? agree + 1 : 1; lastDetect = c.step_index;
@@ -668,6 +699,7 @@ async function remoteLoop() {
   }
 }
 
+if (QP.get("debug") === "1") window.__spanner = { onCoach, state: () => ({ stepIdx, advancing, speaking: performance.now() < speakingUntil, finishedDev, queued: !!queuedSay, mistakeStreak, lastMistakeAgo: Math.round(performance.now() - lastMistakeAt), hold: Math.round(stepHoldUntil - performance.now()), mistakeShown }), until: () => Math.round(speakingUntil - performance.now()) };   // for tests
 // ------------------------------------------------------------------ loop + boot
 renderer.setAnimationLoop(() => {
   const now = performance.now();

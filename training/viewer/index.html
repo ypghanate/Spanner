@@ -192,6 +192,13 @@
   #pick .hint { font:11px var(--mono); letter-spacing:.3em; color:var(--cyan); opacity:.75; text-transform:uppercase; }
   #pick .hint::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:#ff3d5a; margin-right:8px; box-shadow:0 0 8px #ff3d5a; animation:blink 1.2s infinite; }
   #pick .echo { font:13px var(--mono); color:#7fd6e6; min-height:18px; opacity:.85; }
+  /* smooth, not sudden: new step text fades in, the stage bar and tags ease, the warning glow is slow */
+  .rise-in { animation: rise .5s ease both; }
+  #stages .stage, #stages .stage * { transition: color .5s ease, background-color .5s ease, border-color .5s ease, opacity .5s ease; }
+  .stage::before, .stage::after { transition: background-color .5s ease, width .6s ease, opacity .5s ease; }
+  .tag { animation: tagIn .4s ease both; }
+  @keyframes tagIn { from { opacity:0; transform:translateY(4px) scale(.96); } }
+  #flash { transition: opacity .7s ease !important; }
 </style>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/build/three.module.js",

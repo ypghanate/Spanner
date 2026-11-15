@@ -736,7 +736,7 @@ const MISTAKE = {
     redden(n); showTag(n, "✗ " + m.slice(0, 48).toUpperCase(), "red", 1.2); flash();
   },
 };
-function flash() { $("flash").style.opacity = 0.18; blip(180, 0.2); setTimeout(() => ($("flash").style.opacity = 0), 260); }
+function flash() { $("flash").style.opacity = 0.07; setTimeout(() => ($("flash").style.opacity = 0), 700); }   // a soft glow: no beep, no jolt
 
 async function showMistake() {
   if (stepIdx < 0 || mistakeOn) return;
@@ -837,6 +837,7 @@ const pad2 = (n) => String(n).padStart(2, "0");
 function caption(text) { $("captText").textContent = text || ""; }
 /** The right-hand card for the step being shown: chapter headline, the real instruction, how to confirm it. */
 function setGuidance(i) {
+  { const m = $("mid"); m.classList.remove("rise-in"); void m.offsetWidth; m.classList.add("rise-in"); }   // the new step fades in
   const s = plan.steps[i], si = stageOf[i], g = STAGES[si];
   $("sn").textContent = `STEP ${pad2(si + 1)} OF ${pad2(STAGES.length)}`;
   $("head").innerHTML = g.head.map((l) => `<span>${esc(fillK(l))}</span>`).join("");
@@ -1106,8 +1107,31 @@ function browserSay(text) {
   u.onend = done; u.onerror = done;
   speakingUntil = performance.now() + speechMs(text); currentSpeech = text; reportSpeaking(speechMs(text)); speechSynthesis.speak(u);
 }
+// ---- smooth feedback: say a line without cutting off the one being spoken; react only to what two frames agree on
+let queuedSay = null, queueTimer = 0;
+/** Say a line when the current one has finished (only the newest waiting line is kept; too late to be useful after 12 s). */
+function narrateQueued(text, show = true) {
+  if (!text) return;
+  if (INSTANT || !voiceOn || performance.now() >= speakingUntil) { narrate(text, show); return; }
+  queuedSay = { text, show, t: performance.now() };
+  if (!queueTimer) queueTimer = setInterval(() => {
+    if (!queuedSay) { clearInterval(queueTimer); queueTimer = 0; return; }
+    if (performance.now() - queuedSay.t > 12000) { queuedSay = null; return; }
+    if (performance.now() >= speakingUntil) { const q = queuedSay; queuedSay = null; narrate(q.text, q.show); }
+  }, 120);
+}
+/** Run fn once nothing is being said or waiting to be said, after a short natural pause. */
+function afterSpeech(fn, pauseMs = 700) {
+  const t0 = performance.now();
+  const tick = () => {
+    if ((performance.now() >= speakingUntil && !queuedSay) || performance.now() - t0 > 9000) setTimeout(fn, pauseMs); else setTimeout(tick, 120);
+  };
+  tick();
+}
+let mistakeStreak = 0, doneStreak = 0, mistakeShown = false, advancing = false, cleanFrames = 2;
 function narrate(text, show = true, tries = 0) {
   if (!text) return;
+  queuedSay = null;
   if (show) caption(text);
   if (!voiceOn || INSTANT) return;
   stopSpeech();
@@ -1497,23 +1521,30 @@ function onCoach(c) {
   const stepTxt = c.step_index > 0 ? ` · <b>STEP ${c.step_index}</b> ${c.step_status.replace("_", " ")}` : "";
   seen(`<b>I SEE</b> ${c.what_i_see}${stepTxt}${c.mistake ? `<br><span class="bad">⚠ ${c.mistake}</span>` : ""}`);
   if (!c.object_visible) { agree = 0; return; }
-  if (performance.now() < stepHoldUntil) return;      // we just moved on: this frame was taken before that
+  if (performance.now() < stepHoldUntil || advancing) return;      // we just moved on (or are about to): this frame is stale
   if (c.confidence >= 0.6) maybeAutoShop(c);
   const cur = stepIdx + 1;
-  // something going wrong: say it straight away (camera reads are focused on the step on screen and its known mistakes)
-  if (c.mistake && c.confidence >= 0.4 && performance.now() - lastMistakeAt > 5000) {
-    lastMistakeAt = performance.now(); flash();
+  // something going wrong: needs two frames in a row (or a very sure one), then a gentle glow and a spoken heads-up that
+  // waits for Spanner to finish its sentence. When it clears, the warning fades out by itself.
+  if (c.mistake && c.confidence >= 0.4) mistakeStreak++; else mistakeStreak = 0;
+  if (!c.mistake && mistakeShown && !--cleanFrames) { mistakeShown = false; clearTags(); }
+  if (c.mistake && (mistakeStreak >= 2 || c.confidence >= 0.8) && performance.now() - lastMistakeAt > 6000) {
+    lastMistakeAt = performance.now(); mistakeShown = true; cleanFrames = 2; flash();
     showTag(`keycap_${brokenKey}`, "⚠ " + c.mistake.toUpperCase().slice(0, 60), "red", 2.6);
-    narrate("Careful. " + (c.say || c.mistake));
+    narrateQueued("Careful. " + (c.say || c.mistake));
     return;
   }
-  // the step on screen is done: praise it and move on by exactly one step (one confident frame is enough)
-  if (chosen && cur >= 1 && c.step_status === "done" && c.step_index >= cur && c.confidence >= 0.55 && lastDoneStep !== stepIdx) {
-    lastDoneStep = stepIdx; agree = 0; stepHoldUntil = performance.now() + 2500;
+  // the step on screen is done: two agreeing frames (or one very sure one); mark it, praise it, and move on after the praise
+  if (chosen && cur >= 1 && c.step_status === "done" && c.step_index >= cur && c.confidence >= 0.55) doneStreak++; else doneStreak = 0;
+  if (chosen && cur >= 1 && lastDoneStep !== stepIdx && (doneStreak >= 2 || (doneStreak >= 1 && c.confidence >= 0.85))) {
+    lastDoneStep = stepIdx; agree = 0; doneStreak = 0; advancing = true;
     showTag(`keycap_${brokenKey}`, `STEP ${cur} DONE ✓`, "ok", 2.2);
-    narrate(c.say || "Nice. On to the next step.");
-    if (stepIdx < plan.steps.length - 1) setTimeout(() => goStep(stepIdx + 1, " · auto"), 900);
-    else setTimeout(() => { if (!finished) finishRepair(); }, 900);
+    narrateQueued(c.say || "Nice. On to the next step.");
+    afterSpeech(() => {
+      advancing = false; stepHoldUntil = performance.now() + 2500;
+      if (stepIdx !== cur - 1) return;                                           // they moved on by themselves meanwhile
+      if (stepIdx < plan.steps.length - 1) goStep(stepIdx + 1, " · auto"); else if (!finished) finishRepair();
+    });
     return;
   }
   // they skipped ahead: only when two frames in a row agree on the same later step. Never jumps back on its own.
@@ -1523,6 +1554,7 @@ function onCoach(c) {
   }
 }
 
+if (QP.get("debug") === "1") window.__spanner = { onCoach, state: () => ({ stepIdx, advancing, mistakeStreak, mistakeShown, finished }) };   // for tests
 // ---------------------------------------------------------------- phone camera: the laptop follows the phone's frames
 let remoteOn = false, lastViewTs = 0, lastPoseTs = 0, lastSignalTs = 0, poseTrack = { on: QP.get("track") === "1", zero: 0, yaw: 0, baseAz: null, flip: QP.get("flip") === "1" ? 1 : -1 };   // say "calibrate"; if the hologram turns the wrong way, add ?flip=1
 // ---- connection state, shown top right ("Connected to your phone")
