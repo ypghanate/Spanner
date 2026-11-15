@@ -1,0 +1,152 @@
+{
+ "status": "ready",
+ "say": "",
+ "title": "iPad (11th generation) screen replacement",
+ "fault": "Cracked display glass",
+ "diagnosis": "It sounds like the cover glass and display assembly are cracked, so we'll replace the whole display assembly. This is a hard repair because the display is glued all around and the flex cables are fragile.",
+ "difficulty": "hard",
+ "time_min": 90,
+ "tools_needed": [
+  "Heat gun or iOpener",
+  "Suction handle",
+  "Plastic picks",
+  "Plastic spudger",
+  "Tweezers",
+  "Phillips #00 screwdriver",
+  "Clear packing tape",
+  "Replacement display assembly",
+  "Adhesive strips"
+ ],
+ "safety_notes": [
+  "Wear safety glasses and cover the cracked glass with clear tape to contain shards.",
+  "Never pierce or bend the battery; keep tools away from the battery cells.",
+  "Power off fully before opening."
+ ],
+ "steps": [
+  {
+   "title": "Power off and tape the glass",
+   "instruction": "Hold the top button and a volume button, then slide to power off. Cover the whole cracked screen with clear packing tape.",
+   "expected_visual_state": "The iPad is dark and the screen is covered in overlapping strips of clear tape.",
+   "common_mistakes": [
+    "Only sleeping the screen instead of powering off",
+    "Leaving glass uncovered so shards spread and cut fingers"
+   ],
+   "focus": [
+    "display"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Heat the display edges",
+   "instruction": "Warm the display edges with a heat gun on low or an iOpener for 1 to 2 minutes. The edge should be hot to touch but not painful.",
+   "expected_visual_state": "A heat source is held near the edge of the iPad, with the iPad lying flat face up.",
+   "common_mistakes": [
+    "Overheating one spot, which can damage the LCD or battery",
+    "Skipping heat and prying cold adhesive, which cracks the glass more"
+   ],
+   "focus": [
+    "display",
+    "shell"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Pry the display loose",
+   "instruction": "Attach the suction handle, lift slightly, and slide a plastic pick into the gap. Work around the edges slicing the adhesive, staying shallow.",
+   "expected_visual_state": "Several plastic picks sit in the gap around the edge, with the display lifting slightly from the shell.",
+   "common_mistakes": [
+    "Inserting the pick deeper than a few millimetres and cutting flex cables",
+    "Prying near the corners where the glass can shatter",
+    "Using metal tools that can puncture the battery"
+   ],
+   "focus": [
+    "display",
+    "shell"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Open the display like a book",
+   "instruction": "Lift the display gently and rest it beside the shell without stretching its flex cables. Keep it supported.",
+   "expected_visual_state": "The display is lifted and resting open next to the shell, with the battery cells and logic board visible.",
+   "common_mistakes": [
+    "Lifting too far and tearing the display flexes",
+    "Letting the display hang from its cables"
+   ],
+   "focus": [
+    "display",
+    "display_bracket"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Disconnect the battery",
+   "instruction": "Unscrew the display cable bracket, then use a plastic spudger to pop the battery connector straight up.",
+   "expected_visual_state": "The bracket and its screws are set aside, and the battery connector is lifted off the logic board.",
+   "common_mistakes": [
+    "Disconnecting the display cables before the battery",
+    "Losing the tiny screws",
+    "Prying the connector at an angle and bending its pins"
+   ],
+   "focus": [
+    "battery_flex",
+    "display_bracket",
+    "screws"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Disconnect and remove the old display",
+   "instruction": "Pop the display and digitizer connectors up with the spudger, then lift the old display away.",
+   "expected_visual_state": "The old display is fully separated and set aside, with the shell empty of display cables.",
+   "common_mistakes": [
+    "Pulling the cables instead of lifting the connectors straight up",
+    "Forgetting the digitizer cable"
+   ],
+   "focus": [
+    "display",
+    "logic_board"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Prepare the shell and fit the new display",
+   "instruction": "Clean off old adhesive with the plastic pick, apply new adhesive strips, and plug in the new display and digitizer connectors. Refit the bracket, then reconnect the battery.",
+   "expected_visual_state": "The new display lies near the shell with both connectors seated and the bracket screwed down.",
+   "common_mistakes": [
+    "Leaving old adhesive or glass fragments in the shell",
+    "Not fully seating connectors",
+    "Reconnecting the battery before the display cables"
+   ],
+   "focus": [
+    "display",
+    "display_bracket",
+    "battery_flex",
+    "screws"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Close and test",
+   "instruction": "Press the display into the shell evenly around the edges. Power on and test touch across the whole screen and the top button.",
+   "expected_visual_state": "The iPad is closed with the edges flush, and the new screen shows the home screen and responds to touch.",
+   "common_mistakes": [
+    "Closing it without testing first, so a bad connector means reopening it",
+    "Skipping testing the edges and corners for dead touch"
+   ],
+   "focus": [
+    "display",
+    "top_button"
+   ],
+   "view": "together",
+   "source_ids": []
+  }
+ ]
+}

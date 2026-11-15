@@ -1,5 +1,5 @@
 {
- "fault": "The {KEY} key on the RK61 does not register when pressed.",
+ "fault": "The {KEY} key on your keyboard does not register when pressed.",
  "diagnosis": "A dead key on a hot-swap board usually means a faulty switch or a dirty socket. I'll unplug the keyboard, swap the {KEY} switch for a spare, and test it.",
  "difficulty": "easy",
  "time_min": 15,

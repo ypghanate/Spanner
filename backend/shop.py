@@ -1,11 +1,11 @@
-"""Live shopping on voice request: replacement parts for the RK68, or other keyboards. No mocks.
+"""Live shopping on voice request: replacement parts for the RK61, or other keyboards. No mocks.
 
     POST /coach/shop  {"query": "show me replacement keycaps"}   (the user's spoken words)
 
 - A replaceable part (keycap, switch, stabilizer, cable...): Linkup (structured search) finds real offers
-  with price and whether they fit the RK68, and why.
+  with price and whether they fit the RK61, and why.
 - Another keyboard ("show me other keyboards", "what else could I buy"): Linkup finds real alternatives
-  with price, pros and cons compared with the RK68.
+  with price, pros and cons compared with the RK61.
 - Tavily finds a real product photo for every item, in parallel.
 Results are cached per request for 30 min (same question in the demo = instant answer).
 """
@@ -24,7 +24,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/coach", tags=["shop"])
-MODEL = "Royal Kludge RK68"
+MODEL = "Royal Kludge RK61"
 _pool = ThreadPoolExecutor(max_workers=8)
 _search_pool = ThreadPoolExecutor(max_workers=4)
 CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "shop_cache"
@@ -77,13 +77,13 @@ def prefetch(text: str) -> None:
 _cache: dict[str, tuple[float, dict]] = {}
 
 PARTS = [  # (spoken words, part to search for)
-    (r"key ?caps?|caps?\b", "keycaps (MX-compatible, 65% / 68-key set or single keycaps)"),
+    (r"key ?caps?|caps?\b", "keycaps (MX-compatible, 60% / 61-key set or single keycaps)"),
     (r"switch", "mechanical switches (MX-compatible, hot-swap, 3-pin)"),
-    (r"stabili[sz]er|space ?bar", "stabilizers (2u / 6.25u, plate-mounted, 65% keyboard)"),
+    (r"stabili[sz]er|space ?bar", "stabilizers (2u / 6.25u, plate-mounted, 60% keyboard)"),
     (r"cable|usb", "USB-C cable for a mechanical keyboard"),
     (r"puller|tool", "keycap and switch puller tool"),
     (r"battery", "replacement battery"),
-    (r"case|shell", "65% keyboard case"),
+    (r"case|shell", "60% keyboard case"),
 ]
 
 
@@ -94,64 +94,12 @@ class PartOffer(BaseModel):
     currency: str = Field(description="ISO code, e.g. GBP, USD, EUR")
     url: str = Field(description="Product page URL")
     image_url: str = Field(description="Direct URL of the product image if present on the page, else empty")
-    compatible: bool = Field(description=f"True if it fits the {MODEL} (hot-swap, MX-style, 65% layout)")
-    compatibility: str = Field(description="One short sentence: why it fits or doesn't fit the RK68")
+    compatible: bool = Field(description=f"True if it fits the {MODEL} (hot-swap, MX-style, 60% layout)")
+    compatibility: str = Field(description="One short sentence: why it fits or doesn't fit your keyboard (say \"your keyboard\", never a model name)")
 
 
 class PartSearch(BaseModel):
     offers: list[PartOffer]
-
-
-class GenericOffer(BaseModel):
-    name: str = Field(description="Product name as listed")
-    retailer: str
-    price: float = Field(description="Price as a number, 0 if not shown")
-    currency: str = Field(description="ISO code, e.g. GBP, USD, EUR")
-    url: str = Field(description="Product page URL")
-    image_url: str = Field(description="Direct URL of the product image if present on the page, else empty")
-    compatible: bool = Field(description="True if it fits the exact model asked about")
-    compatibility: str = Field(description="One short sentence: why it fits or doesn't fit that model")
-
-
-class GenericSearch(BaseModel):
-    offers: list[GenericOffer]
-
-
-class GenericAlternative(BaseModel):
-    name: str = Field(description="Product name")
-    price: float = Field(description="Typical price as a number, 0 if unknown")
-    currency: str
-    url: str = Field(description="The manufacturer's official product page URL")
-    image_url: str = Field(description="Direct URL of a product image if present, else empty")
-    pros: list[str] = Field(description="2-3 short pros compared with the model asked about")
-    cons: list[str] = Field(description="1-3 short cons compared with the model asked about")
-
-
-class GenericAlternatives(BaseModel):
-    products: list[GenericAlternative]
-
-
-_ALTERNATIVES = re.compile(r"\b(other|another|alternative|different|new|better|competitor)s?\b|instead of|upgrade|should i buy|what else", re.I)
-
-
-def _search_generic_alternatives(model: str) -> tuple[list[dict], list[dict]]:
-    """Competitors of an object learned live: what to buy instead, with pros and cons, from reviews."""
-    res, sources = _structured_deep(
-        (f"Best alternatives to the {model} to buy in 2026, from reviews on sites like RTINGS, The Verge, Wirecutter, "
-         f"TechRadar or What Hi-Fi. Give 4-6 real competing products with the official product page URL, a typical price with "
-         f"currency, a product image URL, and 2-3 pros and 1-3 cons compared with the {model}."), GenericAlternatives.model_json_schema())
-    items = [GenericAlternative.model_validate(o).model_dump() for o in (res or {}).get("products", []) if str(o.get("url", "")).startswith("http")]
-    return items, sources
-
-
-def _search_generic(part: str, model: str) -> tuple[list[dict], list[dict]]:
-    """Replacement parts or accessories for an object Spanner learned live: Linkup, sourced, no keyboard assumptions."""
-    res, sources = _structured(
-        (f"Buy {part} for the {model}. Find 4-6 real product pages whose price is shown on the page (the manufacturer's "
-         f"store, Amazon UK, eBay UK, iFixit, specialist shops). For each: name, retailer, the listed price and currency, URL, "
-         f"product image URL, and whether it fits the {model} exactly and why."), GenericSearch.model_json_schema())
-    offers = [GenericOffer.model_validate(o).model_dump() for o in (res or {}).get("offers", []) if str(o.get("url", "")).startswith("http")]
-    return offers, sources
 
 
 class KeyboardOption(BaseModel):
@@ -160,8 +108,8 @@ class KeyboardOption(BaseModel):
     currency: str
     url: str = Field(description="The manufacturer's official product page URL")
     image_url: str = Field(description="Direct URL of a product image if present, else empty")
-    pros: list[str] = Field(description="2-3 short pros of the keyboard itself compared with the RK68")
-    cons: list[str] = Field(description="1-3 short cons of the keyboard itself compared with the RK68")
+    pros: list[str] = Field(description="2-3 short pros of the keyboard itself compared with your keyboard")
+    cons: list[str] = Field(description="1-3 short cons of the keyboard itself compared with your keyboard")
 
 
 class KeyboardSearch(BaseModel):
@@ -170,7 +118,6 @@ class KeyboardSearch(BaseModel):
 
 class ShopRequest(BaseModel):
     query: str
-    model: str = ""       # the object learned live ("Apple AirPods Pro 2"); empty = the keyboard
 
 
 def classify(text: str) -> tuple[str, str]:
@@ -266,13 +213,12 @@ _META = re.compile(r"\b(no verified|not (provide|specif|list|includ|mention)|unk
 _MAJOR = {"GBP", "USD", "EUR"}
 
 
-def _clean_keyboard(k: dict, generic: bool = False) -> dict:
-    """Drop pros/cons that talk about missing data instead of the product, and prices that can't be right."""
+def _clean_keyboard(k: dict) -> dict:
+    """Drop pros/cons that talk about missing data instead of the keyboard, and prices that can't be right."""
     k["pros"] = [x for x in k.get("pros", []) if not _META.search(x)][:3]
     k["cons"] = [x for x in k.get("cons", []) if not _META.search(x)][:3]
     cur = (k.get("currency") or "").upper()
-    lo, hi = (1, 5000) if generic else (25, 600)                             # a real 65% board is £25-£600; other objects vary
-    if cur not in _MAJOR or not lo <= float(k.get("price") or 0) <= hi:
+    if cur not in _MAJOR or not 25 <= float(k.get("price") or 0) <= 600:   # a real 60% board is £25-£600
         k["price"], k["currency"] = 0.0, ""                                  # re-read from the store page below
     return k
 
@@ -328,10 +274,10 @@ def _structured(query: str, schema) -> tuple[dict, list[dict]]:
 
 def _search_parts(part: str) -> tuple[list[dict], list[dict]]:
     res, sources = _structured(
-        (f"Buy {part} that fit the {MODEL} 65% hot-swappable mechanical keyboard. Find 4-6 real product "
+        (f"Buy {part} that fit the {MODEL} 60% hot-swappable mechanical keyboard. Find 4-6 real product "
                "pages whose price is shown on the page: the Royal Kludge store, AliExpress, eBay UK, KBDfans, "
                "Keychron, Akko, Epomaker, Mechanical Keyboards UK, at most 2 from Amazon. For each: name, retailer, "
-               "the listed price and currency, URL, product image URL, and whether it fits the RK68 and why."),
+               "the listed price and currency, URL, product image URL, and whether it fits and why (call the keyboard \"your keyboard\", not by model)."),
         PartSearch)
     offers = PartSearch.model_validate(res or {"offers": []}).offers
     return [o.model_dump() for o in offers if o.url.startswith("http")][:6], sources
@@ -356,47 +302,36 @@ def _structured_deep(query: str, schema) -> tuple[dict, list[dict]]:
 
 def _search_keyboards() -> tuple[list[dict], list[dict]]:
     res, sources = _structured_deep(
-        (f"Best alternatives to the {MODEL} 65% mechanical keyboard to buy in 2026, from reviews on sites like "
+        (f"Best alternatives to the {MODEL} 60% mechanical keyboard to buy in 2026, from reviews on sites like "
                "RTINGS, The Verge, Tom's Hardware or PC Gamer: e.g. Keychron, Akko, Epomaker, Wooting, Royal Kludge. "
                "Find 4-5 real current models. For each: the price on the manufacturer's official store page (USD, "
                "GBP or EUR), that official product page URL, a product image URL, and 2-3 pros and 1-3 cons compared "
-               "with the RK68 about the keyboard itself (switches, build, connectivity, layout, software, price)."),
+               "with your keyboard about the keyboard itself (switches, build, connectivity, layout, software, price)."),
         KeyboardSearch)
     kbs = KeyboardSearch.model_validate(res or {"keyboards": []}).keyboards
     return [k.model_dump() for k in kbs if k.url.startswith("http")][:5], sources
 
 
-def shop(text: str, model: str = "") -> dict:
-    if model and model.lower() != MODEL.lower():          # an object learned live: parts or competitors for that model
-        if _ALTERNATIVES.search(text):
-            kind, item = "keyboard", f"alternatives to the {model}"       # "keyboard" = the viewer's pros/cons renderer
-        else:
-            kind, item = "part", re.sub(r"^(show me|find|buy|get|i need|where can i (buy|get))\s+", "", text.strip(), flags=re.I) or text
-        key = f"generic|{model}|{kind}|{item}"
-    else:
-        model = ""
-        kind, item = classify(text)
-        key = f"{kind}|{item}"
+def shop(text: str) -> dict:
+    kind, item = classify(text)
+    key = f"{kind}|{item}"
     hit = _cache_get(key)
     if hit and not hit.get("partial"):
-        if kind == "part" and not model:
+        if kind == "part":
             verified_status(item)
         return {**hit, "cached": True}
     _inflight.add(key)
     try:
-        return _shop_live(kind, item, key, model)
+        return _shop_live(kind, item, key)
     finally:
         _inflight.discard(key)
 
 
-def _shop_live(kind: str, item: str, key: str, model: str = "") -> dict:
+def _shop_live(kind: str, item: str, key: str) -> dict:
     t0 = time.perf_counter()
-    if kind == "part" and not model:
+    if kind == "part":
         verified_status(item)          # start the deep verification agent now; it runs while we search
-    if model:
-        found, sources = _search_generic_alternatives(model) if kind == "keyboard" else _search_generic(item, model)
-    else:
-        found, sources = _search_keyboards() if kind == "keyboard" else _search_parts(item)
+    found, sources = _search_keyboards() if kind == "keyboard" else _search_parts(item)
     names: set[str] = set()
     items = []
     for i in found:   # Linkup sometimes lists the same product twice
@@ -407,26 +342,26 @@ def _shop_live(kind: str, item: str, key: str, model: str = "") -> dict:
     if not items:
         raise HTTPException(502, "Linkup found nothing for that, try asking again")
     if kind == "keyboard":
-        items = [_clean_keyboard(i, generic=bool(model)) for i in items]
+        items = [_clean_keyboard(i) for i in items]
     # photo + price for each item, in parallel; answer after ENRICH_BUDGET_S and finish the rest in the background
     futs = [_pool.submit(_enrich, i) for i in items]
     done, pending = wait(futs, timeout=ENRICH_BUDGET_S)
-    out = _finish(kind, item, items, sources, t0, partial=bool(pending), model=model)
+    out = _finish(kind, item, items, sources, t0, partial=bool(pending))
     _cache_put(key, out)
     if pending:
         def complete():
             wait(pending)
-            _cache_put(key, _finish(kind, item, items, sources, t0, partial=False, model=model))
+            _cache_put(key, _finish(kind, item, items, sources, t0, partial=False))
         _pool.submit(complete)
     return out
 
 
-def _finish(kind: str, item: str, items: list[dict], sources: list[dict], t0: float, partial: bool, model: str = "") -> dict:
+def _finish(kind: str, item: str, items: list[dict], sources: list[dict], t0: float, partial: bool) -> dict:
     items = [dict(i) for i in items]
     for i in items:
         _to_gbp(i)
     items.sort(key=lambda i: (not i.get("compatible", True), i.get("price", 0) <= 0, i.get("price", 0)))
-    out = {"kind": kind, "item": item, "items": items, "model": model or MODEL, "generic": bool(model),
+    out = {"kind": kind, "item": item, "items": items, "model": MODEL,
            "latency_ms": round((time.perf_counter() - t0) * 1000), "engines": ["linkup", "tavily"],
            "sources": sources[:12], "sources_count": len(sources), "partial": partial}
     if kind == "keyboard":             # "acts": before you buy a new one, what would fixing yours cost?
@@ -500,7 +435,7 @@ async def verified_route(query: str):
 async def shop_route(req: ShopRequest):
     if not req.query.strip():
         raise HTTPException(400, "empty query")
-    return await asyncio.to_thread(shop, req.query, req.model.strip())
+    return await asyncio.to_thread(shop, req.query)
 
 
 WARM = ["show me replacement switches", "show me replacement keycaps", "show me replacement stabilizers",

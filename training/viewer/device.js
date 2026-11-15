@@ -15,13 +15,14 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
 
 const QP = new URLSearchParams(location.search), INSTANT = QP.get("instant") === "1", FX = QP.get("fx") !== "0";
-const CYAN = 0xcaf879 /* the accent, same as the laptop viewer */, $ = (id) => document.getElementById(id), V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const CYAN = 0x00e5ff, $ = (id) => document.getElementById(id), V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const API = QP.get("api") || "";
 
 // ------------------------------------------------------------------ scene (same look as the keyboard hologram)
 const renderer = new THREE.WebGLRenderer({ canvas: $("c"), antialias: true, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75)); renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0x131a15); scene.fog = new THREE.FogExp2(0x131a15, 0.011);
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const scene = new THREE.Scene(); scene.background = new THREE.Color(cssVar("--scene") || "#131a15"); scene.fog = new THREE.FogExp2(scene.background.getHex(), 0.006);
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 400); camera.position.set(0, 30, 40);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -40,13 +41,27 @@ for (const [r, w, o] of [[19, 0.08, 0.6], [20.4, 0.03, 0.35], [22.5, 0.05, 0.25]
   m.rotation.x = -Math.PI / 2; m.position.y = 0.02; m.userData.spin = (Math.random() - 0.5) * 0.25; rings.add(m);
 }
 const composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera));
-const outline = new OutlinePass(new THREE.Vector2(innerWidth, innerHeight), scene, camera); Object.assign(outline, { edgeStrength: 4, edgeGlow: 0.5, edgeThickness: 1.3, pulsePeriod: 0 });
-outline.visibleEdgeColor.set(CYAN); outline.hiddenEdgeColor.set(0x6f8a45); composer.addPass(outline);
+grid.visible = false; rings.visible = false;   // the calm look: just the device and its shadow
+const outline = new OutlinePass(new THREE.Vector2(1, 1), scene, camera); Object.assign(outline, { edgeStrength: 4, edgeGlow: 0.5, edgeThickness: 1.3, pulsePeriod: 0 });
+outline.visibleEdgeColor.set(CYAN); outline.hiddenEdgeColor.set(0x0a5566); composer.addPass(outline);
 composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } }, vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
   fragmentShader: "uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (c.r != c.r || c.g != c.g || c.b != c.b || c.a != c.a) c = vec4(0.0,0.0,0.0,1.0); gl_FragColor = vec4(min(c.rgb, vec3(16.0)), c.a); }" }));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.35, 0.4, 1.6)); composer.addPass(new OutputPass());
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.35, 0.4, 1.6)); composer.addPass(new OutputPass());
 const labelRenderer = new CSS2DRenderer({ element: $("labels") });
-function resize() { renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); labelRenderer.setSize(innerWidth, innerHeight); outline.resolution.set(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+function resize() {
+  const vp = $("viewport"), w = Math.max(1, vp.clientWidth), h = Math.max(1, vp.clientHeight);
+  renderer.setSize(w, h, false); composer.setSize(w, h); labelRenderer.setSize(w, h); outline.resolution.set(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+function applyTheme(t, persist = true) {
+  document.documentElement.dataset.theme = t;
+  if (persist) try { localStorage.setItem("spanner-theme", t); } catch { /* storage blocked */ }
+  $("btnTheme").textContent = t === "light" ? "Dark" : "Light";
+  scene.background = new THREE.Color(cssVar("--scene") || "#131a15"); scene.fog.color.copy(scene.background);
+  renderer.toneMappingExposure = t === "light" ? 1.05 : 1.0;
+}
+$("btnTheme").onclick = () => applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+applyTheme(document.documentElement.dataset.theme, false);
+new ResizeObserver(() => resize()).observe($("viewport"));
 addEventListener("resize", resize); resize();
 
 // ------------------------------------------------------------------ materials
@@ -78,7 +93,7 @@ function canvasTex(w, h, draw) { const c = document.createElement("canvas"); c.w
 const TEX = {
   screen: () => canvasTex(512, 1024, (g, w, h) => {
     const bg = g.createLinearGradient(0, 0, w, h); bg.addColorStop(0, "#0b2a4a"); bg.addColorStop(0.55, "#071424"); bg.addColorStop(1, "#1a0b2e"); g.fillStyle = bg; g.fillRect(0, 0, w, h);
-    const glow = g.createRadialGradient(w * 0.7, h * 0.3, 10, w * 0.7, h * 0.3, 420); glow.addColorStop(0, "#caf87933"); glow.addColorStop(1, "#00000000"); g.fillStyle = glow; g.fillRect(0, 0, w, h);
+    const glow = g.createRadialGradient(w * 0.7, h * 0.3, 10, w * 0.7, h * 0.3, 420); glow.addColorStop(0, "#00e5ff44"); glow.addColorStop(1, "#00000000"); g.fillStyle = glow; g.fillRect(0, 0, w, h);
     g.lineWidth = 22; g.strokeStyle = "#050607"; g.beginPath(); g.roundRect(11, 11, w - 22, h - 22, 70); g.stroke();   // bezel
     g.fillStyle = "#000"; g.beginPath(); g.roundRect(w / 2 - 70, 44, 140, 38, 19); g.fill();                     // Dynamic Island
     g.fillStyle = "#e6fbff"; g.font = "600 92px system-ui,Segoe UI,Inter,sans-serif"; g.textAlign = "center"; g.fillText("9:41", w / 2, 230);
@@ -176,7 +191,7 @@ function iphone15() {
 }
 TEX.ipad = () => canvasTex(1024, 768, (g, w, h) => {
   const bg = g.createLinearGradient(0, 0, w, h); bg.addColorStop(0, "#102a4a"); bg.addColorStop(0.5, "#0a1a2e"); bg.addColorStop(1, "#2a0f3a"); g.fillStyle = bg; g.fillRect(0, 0, w, h);
-  const glow = g.createRadialGradient(w * 0.3, h * 0.7, 10, w * 0.3, h * 0.7, 520); glow.addColorStop(0, "#caf87926"); glow.addColorStop(1, "#00000000"); g.fillStyle = glow; g.fillRect(0, 0, w, h);
+  const glow = g.createRadialGradient(w * 0.3, h * 0.7, 10, w * 0.3, h * 0.7, 520); glow.addColorStop(0, "#00e5ff33"); glow.addColorStop(1, "#00000000"); g.fillStyle = glow; g.fillRect(0, 0, w, h);
   g.lineWidth = 46; g.strokeStyle = "#050607"; g.beginPath(); g.roundRect(23, 23, w - 46, h - 46, 40); g.stroke();   // bezel
   g.fillStyle = "#e6fbff"; g.font = "600 110px system-ui,Segoe UI,Inter,sans-serif"; g.textAlign = "center"; g.fillText("9:41", w / 2, 300);
   g.font = "500 30px system-ui,Segoe UI,Inter,sans-serif"; g.fillStyle = "#bfeef7"; g.fillText("Saturday 15 November", w / 2, 345);
@@ -276,7 +291,7 @@ function momentum4() {
 const DEVICES = { iphone15: iphone15, ipad11: ipad11, momentum4: momentum4 };
 const d = (QP.get("d") || "iphone15").toLowerCase();
 const device = (DEVICES[d] || iphone15)();
-$("dev").textContent = device.name.toUpperCase(); document.title = `Spanner · ${device.name}`;
+document.title = `Spanner · ${device.name}`; $("sessTitle").textContent = device.name + " repair"; $("sessSub").textContent = device.name + " · guided repair"; $("sceneTitle").textContent = device.name;
 
 // ------------------------------------------------------------------ build + explode
 const parts = {}, group = new THREE.Group(); scene.add(group);
@@ -323,20 +338,63 @@ function select(name) {
 function focusPart(name) { const p = parts[name]; if (!p) return; const b = new THREE.Box3().setFromObject(p.obj), s = b.getSize(V3()), w = b.getCenter(V3()); const dist = Math.max(s.x, s.y, s.z) * 2.2 + 5; return flyTo(w.clone().add(V3(dist * 0.5, dist * 0.55, dist * 0.7)), w, 900); }
 const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
 renderer.domElement.addEventListener("click", (e) => {
-  ptr.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ptr, camera);
+  const rc = renderer.domElement.getBoundingClientRect(); ptr.set(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1); ray.setFromCamera(ptr, camera);
   const hit = ray.intersectObjects(group.children, true).find((h) => h.object.userData.part); select(hit ? hit.object.userData.part : null);
 });
 
 // ------------------------------------------------------------------ voice (ElevenLabs through the backend, browser as fallback) + commands
 let elevenOK = false, sayAudio = null, speakingUntil = 0, currentSpeech = "";
-fetch(API + "/coach/health").then((r) => r.json()).then((j) => { elevenOK = !!j.tts; }).catch(() => {});
-function stopSpeaking() { if ("speechSynthesis" in window) speechSynthesis.cancel(); if (sayAudio) { sayAudio.pause(); sayAudio = null; } speakingUntil = 0; }
-function narrate(text) {
-  if (!voiceOn || INSTANT || !text) return; stopSpeaking(); currentSpeech = text; speakingUntil = performance.now() + 60000;
-  if (elevenOK) { const a = new Audio(API + "/coach/say?text=" + encodeURIComponent(text)); sayAudio = a; a.onended = () => { speakingUntil = performance.now() + 300; }; a.play().catch(() => browserSay(text)); return; }
+// Spanner's voice is ElevenLabs (through the server). Wait for the server to say so before the first line is spoken,
+// or that line comes out in the browser's own voice.
+// A page opened by navigating from another page has had no click yet, so the browser will not play audio: ask for one tap
+// (and keep the pending line) rather than speaking in the browser's own voice.
+let pendingSay = "";
+function needTap(text) {
+  pendingSay = text; const w = $("wake"); if (!w) return;
+  w.querySelector(".big").textContent = "Tap to turn on Spanner’s voice"; w.querySelector("small").textContent = "Your browser needs one tap before it will play sound.";
+  w.style.display = "flex";
+  const go = () => { removeEventListener("keydown", go, true); w.style.display = "none"; const t = pendingSay; pendingSay = ""; if (t) narrate(t); };
+  w.addEventListener("pointerdown", go, { once: true }); addEventListener("keydown", go, { capture: true, once: true });
+}
+let healthKnown = false;
+const healthP = fetch(API + "/coach/health", { signal: AbortSignal.timeout(4000) }).then((r) => r.json()).then((j) => { elevenOK = !!j.tts; }).catch(() => {}).finally(() => { healthKnown = true; });
+function stopSpeaking() { reportSpeaking(0); if ("speechSynthesis" in window) speechSynthesis.cancel(); if (sayAudio) { sayAudio.pause(); sayAudio = null; } speakingUntil = 0; }
+// ---- smooth feedback: say a line without cutting off the one being spoken; react only to what two frames agree on
+let queuedSay = null, queueTimer = 0;
+/** Say a line when the current one has finished (only the newest waiting line is kept; too late to be useful after 12 s). */
+function narrateQueued(text) {
+  if (!text) return;
+  if (INSTANT || !voiceOn || performance.now() >= speakingUntil) { narrate(text); return; }
+  queuedSay = { text, show, t: performance.now() };
+  if (!queueTimer) queueTimer = setInterval(() => {
+    if (!queuedSay) { clearInterval(queueTimer); queueTimer = 0; return; }
+    if (performance.now() - queuedSay.t > 12000) { queuedSay = null; return; }
+    if (performance.now() >= speakingUntil) { const q = queuedSay; queuedSay = null; narrate(q.text); }
+  }, 120);
+}
+/** Run fn once nothing is being said or waiting to be said, after a short natural pause. */
+function afterSpeech(fn, pauseMs = 700) {
+  const t0 = performance.now();
+  const tick = () => {
+    if ((performance.now() >= speakingUntil && !queuedSay) || performance.now() - t0 > 9000) setTimeout(fn, pauseMs); else setTimeout(tick, 120);
+  };
+  tick();
+}
+let mistakeStreak = 0, doneStreak = 0, mistakeShown = false, advancing = false, cleanFrames = 2;
+function narrate(text, tries = 0) {
+  if (!voiceOn || INSTANT || !text) return;
+  queuedSay = null;
+  if (!healthKnown) { healthP.then(() => narrate(text, tries)); return; }
+  stopSpeaking(); currentSpeech = text; speakingUntil = performance.now() + 60000;
+  caption(text); reportSpeaking(Math.min(45000, 2500 + text.split(/\s+/).length * 450) + 1000);
+  if (elevenOK) { const a = new Audio(API + "/coach/say?text=" + encodeURIComponent(text)); sayAudio = a; a.onended = () => { speakingUntil = performance.now() + 300; reportSpeaking(0); };
+    // always Spanner's own (ElevenLabs) voice: one retry on a real failure, then silent (the caption still shows the line)
+    const retry = () => { if (sayAudio !== a) return; sayAudio = null; if (tries < 1) setTimeout(() => { if (!sayAudio) narrate(text, tries + 1); }, 400); else { speakingUntil = performance.now() + 300; reportSpeaking(0); } };
+    a.onerror = retry; setTimeout(() => { if (sayAudio === a && a.paused && a.currentTime === 0) retry(); }, 12000);
+    a.play().catch((e) => { if (e && e.name === "NotAllowedError") needTap(text); else retry(); }); return; }
   browserSay(text);
 }
-function browserSay(text) { if (!("speechSynthesis" in window)) return; const u = new SpeechSynthesisUtterance(text); u.rate = 1.03; u.pitch = 0.92; u.onend = () => { speakingUntil = performance.now() + 300; }; speechSynthesis.speak(u); }
+function browserSay(text) { if (!("speechSynthesis" in window)) return; const u = new SpeechSynthesisUtterance(text); u.rate = 1.03; u.pitch = 0.92; u.onend = () => { speakingUntil = performance.now() + 300; reportSpeaking(0); }; speechSynthesis.speak(u); }
 function heard(text, action) { const h = $("heard"); h.innerHTML = `🎤 <b>“${text}”</b> → ${action}`; h.style.display = "block"; clearTimeout(h._t); h._t = setTimeout(() => (h.style.display = "none"), 3500); }
 const PART_WORDS = Object.values(parts).map((p) => [new RegExp(p.label.toLowerCase().replace(/[()+]/g, "").split(/\s+/).filter((w) => w.length > 3).join("|")), p.name]);
 async function explodeAndFrame(v) { await setExplode(v); await frameAll(); }
@@ -397,6 +455,251 @@ function startMic() {
   rec.start();
 }
 
+
+// ------------------------------------------------------------------ the shared session: phone camera + microphone, Claude plans the repair
+// Same session as the keyboard page (it is passed on when a device is picked): the phone keeps listening and watching,
+// the server transcribes and answers (one Claude turn), this page plays the 3D, shows the step and speaks.
+const SESSION = QP.get("s") || (() => { try { return sessionStorage.getItem("spanner-session") || ""; } catch { return ""; } })();
+const REMOTE = !!SESSION && !INSTANT;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const jpost = (path, body, ms = 8000) => fetch(API + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(ms) });
+let plan = null, stepIdx = -1, finishedDev = false, linkLive = false, lastDataAt = 0, lastViewTs = 0, lastUtterId = "", lastReplyId = "", lastSignalTs = 0;
+let lastStateSent = "", planning = false, clarifying = null, agree = 0, lastDetect = 0, lastDoneStep = -1, lastMistakeAt = 0, stepHoldUntil = 0, runId = 0, lastSpeakReport = 0;
+
+if (REMOTE) jpost("/coach/device/parts", { session: SESSION, device: d, parts: device.parts.map((p) => ({ name: p.name, label: p.label, desc: p.desc, group: p.group })) }).catch(() => {});
+function reportSpeaking(ms) {
+  if (!REMOTE) return;
+  const now = performance.now(); if (ms > 0 && now - lastSpeakReport < 300) return; lastSpeakReport = now;
+  jpost("/coach/speaking", { session: SESSION, seconds: ms / 1000 }, 3000).catch(() => {});
+}
+
+// ---- Spanner hearing its own voice (the phone's microphone is next to the laptop's speaker)
+const echoWords = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter((w) => w.length > 2));
+const STOCK_DEV = /what('s| is) wrong with it|i'm spanner|scan the code|taking it apart|putting it back|let me work out|heads up|step \d|all done/i;
+function isEchoDev(text, graceMs = 6000) {
+  if (STOCK_DEV.test(text)) return true;
+  if (performance.now() > speakingUntil + graceMs || !currentSpeech) return false;
+  const a = echoWords(text), b = echoWords(currentSpeech); if (!a.size) return true;
+  if (a.size < 3) return false;          // "start", "next", "stop": a short command is you, even if Spanner just said the word
+  let n = 0; for (const w of a) if (b.has(w)) n++; return n / a.size >= 0.6;
+}
+
+// ---- pairing code (only while no phone is sending pictures)
+async function phoneOrigin() {
+  if (!/^(localhost|127\.|\[?::1\]?$)/.test(location.hostname)) return location.origin;
+  try { const n = await (await fetch(API + "/coach/net", { signal: AbortSignal.timeout(3000) })).json(); if (n.public_url) return n.public_url; if (n.lan_ip) return `${location.protocol}//${n.lan_ip}${location.port ? ":" + location.port : ""}`; } catch { /* older server */ }
+  return location.origin;
+}
+let pairRun = 0;
+async function showPair() {
+  const run = ++pairRun, el = $("pair"); el.style.display = "block";
+  el.innerHTML = `<div class="t">Pair your phone</div><div class="tr">Preparing the code…</div>`;
+  const url = `${await phoneOrigin()}/training/viewer/phone.html?s=${SESSION}`;
+  if (run !== pairRun || linkLive) return;
+  el.innerHTML = `<div class="t">Scan with the Spanner app</div><img src="${API}/coach/qr?url=${encodeURIComponent(url)}" alt="QR code to pair your phone"><div class="tr">Waiting for the first photo from your phone</div>`;
+}
+function hidePair() { pairRun++; $("pair").style.display = "none"; }
+
+// ---- the repair guide
+const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const pad2 = (n) => String(n).padStart(2, "0");
+const two = (t) => { const w = String(t || "").split(/\s+/); const k = Math.ceil(w.length / 2); return w.length < 3 ? [t || ""] : [w.slice(0, k).join(" "), w.slice(k).join(" ")]; };
+function caption(text) { $("captText").textContent = text || ""; }
+function renderCard() {
+  { const m = $("mid"); m.classList.remove("rise-in"); void m.offsetWidth; m.classList.add("rise-in"); }   // the new text fades in
+  const n = plan?.steps?.length || 0, s = plan?.steps?.[stepIdx];
+  $("tools").innerHTML = ""; $("sd").textContent = ""; $("sm").textContent = "";
+  if (!plan) {
+    $("sn").textContent = "READY"; $("head").innerHTML = "<span>What needs</span><span>fixing?</span>";
+    $("si").textContent = `Just tell me what’s wrong with your ${device.name}.`; $("helper").textContent = device.fact;
+    $("ctaLabel").textContent = "Say what’s wrong"; $("foot").textContent = "For example: “the screen is cracked”."; $("sceneTitle").textContent = device.name;
+  } else if (finishedDev) {
+    $("sn").textContent = "ALL DONE"; $("head").innerHTML = "<span>Repair</span><span>complete.</span>"; $("si").textContent = "Test it before you rely on it.";
+    $("helper").textContent = "Say “start over” to run the repair again."; $("ctaLabel").textContent = "Say “start over”"; $("foot").textContent = "The session stays open until you close it."; $("sceneTitle").textContent = `${plan.title || device.name} · done`;
+  } else if (!s) {
+    $("sn").textContent = `${n} STEPS · ${String(plan.difficulty || "").toUpperCase()}`; $("head").innerHTML = two(plan.title || "Your repair").map((l) => `<span>${esc(l)}</span>`).join("");
+    $("si").textContent = plan.diagnosis || plan.fault; $("helper").textContent = `About ${plan.time_min} min.${(plan.safety_notes || [])[0] ? "  ⚠ " + plan.safety_notes[0] : ""}`;
+    $("ctaLabel").textContent = "Say “start”"; $("foot").textContent = "The 3D view follows at your pace."; $("sceneTitle").textContent = plan.title || device.name;
+  } else {
+    $("sn").textContent = `STEP ${pad2(s.index)} OF ${pad2(n)}`; $("head").innerHTML = two(s.title || "").map((l) => `<span>${esc(l)}</span>`).join("");
+    $("si").textContent = s.instruction; $("helper").textContent = "";
+    $("sd").textContent = s.expected_visual_state ? "✓ Done when: " + s.expected_visual_state : ""; $("sm").textContent = s.common_mistakes?.[0] ? "⚠ " + s.common_mistakes[0] : "";
+    $("tools").innerHTML = (plan.tools_needed || []).slice(0, 4).map((t) => `<span class="chip">${esc(t)}</span>`).join("");
+    $("ctaLabel").textContent = stepIdx >= n - 1 ? "Say “done”" : "Say “next”"; $("foot").textContent = "“Repeat” · “what could go wrong” · “zoom in”"; $("sceneTitle").textContent = `${plan.title || device.name} · ${s.title || ""}`;
+  }
+  $("stages").style.gridTemplateColumns = `repeat(${Math.max(1, n)}, minmax(0, 1fr))`;
+  $("stages").innerHTML = (plan?.steps || []).map((st, i) => {
+    const cls = finishedDev || i < stepIdx ? "done" : i === stepIdx ? "cur" : "";
+    return `<button class="stage ${cls}" data-i="${i}" ${cls === "cur" ? 'aria-current="step"' : ""}><span class="sl">${pad2(i + 1)}  ${esc(st.title || "Step " + (i + 1))}</span><span class="ss">${cls === "done" ? "Complete" : cls === "cur" ? "Current step" : "Up next"}</span></button>`;
+  }).join("");
+}
+$("stages").addEventListener("click", (e) => { const b = e.target.closest(".stage"); if (b && plan) goStep(Number(b.dataset.i)); });
+$("cta").onclick = () => { if (plan) advance(); };
+setInterval(() => {   // the voice pill: who is talking right now
+  const sp = performance.now() < speakingUntil, st = sp ? "speaking" : (REMOTE ? linkLive : micOn) ? "listening" : "idle", pill = $("captPill");
+  if (pill.dataset.s === st + voiceOn) return; pill.dataset.s = st + voiceOn; pill.className = st;
+  $("captState").textContent = sp ? "Spanner is speaking" : st === "listening" ? "Listening to you" : voiceOn ? "Voice on" : "Voice off · tap to wake";
+}, 250);
+const LINK_TEXT = { idle: "Phone not connected", waiting: "Waiting for your phone…", live: "Connected to your phone", lost: "Phone connection lost · waiting for it to return" };
+function setLink(state) { $("link").dataset.state = state; $("linktext").textContent = LINK_TEXT[state]; $("btnPair").style.display = state === "live" ? "none" : ""; }
+$("btnPair").onclick = () => { if (REMOTE) showPair(); };
+function highlightParts(names) {
+  const ok = names.filter((n) => parts[n]); select(ok[0] || null);
+  if (ok.length > 1) outline.selectedObjects = ok.map((n) => parts[n].obj);   // a second and third part pulse along with the first
+  return ok;
+}
+async function runStep(s, id) {
+  for (const c of s.scene3d || []) {
+    if (id !== runId) return;
+    if (c.op === "explode") { setXray(false); select(null); await setExplode(c.amount ?? 1); await frameAll(); }
+    else if (c.op === "reset") { select(null); setXray(false); await setExplode(0); await frameAll(); }
+  }
+  if (id !== runId) return;
+  const names = (s.scene3d || []).filter((c) => (c.op === "highlight" || c.op === "pulse") && c.part).map((c) => c.part);
+  if (!names.length) return;
+  if (explode < 0.5 && !["frame", "display", "back_glass", "shell", "headband", "usb_c", "screws"].includes(names[0])) { setXray(false); await setExplode(1); }   // an inside part: open it up so it can be seen
+  const ok = highlightParts(names); if (ok[0]) await focusPart(ok[0]);
+}
+// The repair only moves forward while the camera can actually see the {WHAT}: it is seen when a recent picture shows it.
+let lastSeenAt = 0, pendingGo = null, lastSeenWarn = 0;
+const seenNow = () => INSTANT || QP.get("nocam") === "1" || performance.now() - lastSeenAt < 8000;   // ?nocam=1: no camera (demos, tests)
+function holdUntilSeen(i, note) {
+  if (i <= stepIdx || seenNow()) { pendingGo = null; return false; }             // going back, repeating, or it is in view
+  pendingGo = { i, note };                                                       // carry on by itself the moment it comes into view
+  if (performance.now() - lastSeenWarn > 6000) { lastSeenWarn = performance.now(); narrate(`I can’t see your ${device.name} yet. Point the camera at it and I’ll carry on.`); heard("camera", `waiting to see the ${device.name}`); }
+  return true;
+}
+function noteSeen(c) {
+  if (c.object_visible) lastSeenAt = performance.now();
+  if (pendingGo && seenNow()) { const g = pendingGo; pendingGo = null; goStep(g.i, g.note); }
+}
+async function goStep(i, note = "") {
+  if (!plan) { narrate("Tell me what’s wrong first, and I’ll plan the repair."); return; }
+  if (holdUntilSeen(i, note)) return;
+  const id = ++runId; stepIdx = Math.max(0, Math.min(i, plan.steps.length - 1)); finishedDev = false;
+  const s = plan.steps[stepIdx]; $("mode").textContent = `STEP ${s.index}/${plan.steps.length}${note}`;
+  renderCard(); narrate(`Step ${s.index}. ${s.instruction}`);
+  await runStep(s, id);
+}
+function finishRepair() { finishedDev = true; runId++; select(null); setXray(false); renderCard(); $("mode").textContent = "REPAIR COMPLETE"; narrate("All done. Test it before you rely on it."); }
+function advance() { if (finishedDev) return restart(); if (stepIdx < 0) return goStep(0); if (stepIdx >= plan.steps.length - 1) return finishRepair(); return goStep(stepIdx + 1); }
+function restart() { pendingGo = null; runId++; stepIdx = -1; finishedDev = false; lastDoneStep = -1; select(null); setXray(false); setExplode(0).then(frameAll); renderCard(); }
+function showMistake() {
+  const s = plan?.steps[stepIdx]; const m = s?.common_mistakes?.[0];
+  if (!m) { narrate("Nothing in particular to watch for here. Take it slowly."); return; }
+  narrate("Watch out. People often get this wrong: " + m);
+}
+
+// ---- Claude plans the repair from what was said
+async function requestRepair(raw) {
+  if (planning) return; planning = true; clarifying = null; runId++;
+  heard(raw, "planning the repair"); $("mode").textContent = "PLANNING THE REPAIR";
+  narrate("Okay. Let me work out the fix.");
+  try {
+    const r = await jpost("/coach/plan/generate", { session: SESSION, complaint: raw, device: d }, 120000);
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    if (j.status === "ready") {
+      plan = j.plan; stepIdx = -1; finishedDev = false; lastDoneStep = -1; agree = 0; select(null); setXray(false); await setExplode(0); frameAll();
+      $("mode").textContent = "PLAN READY"; renderCard(); heard(raw, `${plan.steps.length}-step plan`); narrate((j.say || plan.diagnosis) + " Say start when you’re ready.");
+    } else {
+      if (j.status === "clarify") clarifying = raw;
+      $("mode").textContent = "ASSEMBLED"; heard(raw, j.status); narrate(j.say);
+    }
+  } catch (e) { $("mode").textContent = "ASSEMBLED"; heard(raw, "couldn’t plan: " + e.message); narrate("Sorry, I couldn’t plan that. Try again."); }
+  finally { planning = false; }
+}
+
+// ---- what the server decided for something said into the phone: do it
+async function onReply(r) {
+  if (!r.addressed || isEchoDev(r.text)) { heard(r.text, "not for me"); return; }
+  if (clarifying && r.action !== "plan_repair" && r.action !== "stop") { const c = clarifying + ". " + r.text; clarifying = null; return requestRepair(c); }
+  heard(r.text, r.action === "none" ? "talking" : r.action.replace(/_/g, " "));
+  if (r.action !== "stop" && performance.now() < speakingUntil) stopSpeaking();
+  switch (r.action) {
+    case "pick_device": if (r.device && r.device !== d) { location.href = r.device === "keyboard" ? "./" : `./device.html?d=${r.device}&s=${encodeURIComponent(SESSION)}`; return; } break;
+    case "plan_repair": return requestRepair(r.complaint || r.text);
+    case "start": return goStep(0);
+    case "next": return advance();
+    case "back": return goStep(stepIdx - 1);
+    case "repeat": return plan?.steps[stepIdx] ? narrate(`Step ${plan.steps[stepIdx].index}. ${plan.steps[stepIdx].instruction}`) : undefined;
+    case "stop": stopSpeaking(); heard(r.text, "ok, quiet"); return;
+    case "show_part": { const n = Object.keys(parts).find((k) => k === r.part) || (PART_WORDS.find(([re]) => re.test(r.part || ""))?.[1]); if (n) { if (explode < 0.5) await setExplode(1); select(n); await focusPart(n); narrate(parts[n].desc); return; } break; }
+    case "take_apart": setXray(false); return explodeAndFrame(1);
+    case "reassemble": return explodeAndFrame(0);
+    case "xray": return setXray(!xray);
+    case "zoom_in": return flyTo(camera.position.clone().lerp(controls.target, 0.35), controls.target.clone(), 600);
+    case "zoom_out": return flyTo(camera.position.clone().sub(controls.target).multiplyScalar(1.5).add(controls.target), controls.target.clone(), 600);
+    case "show_mistake": return showMistake();
+    case "shop_parts": case "shop_keyboards": narrate("I can only look up replacement parts for the keyboard so far."); return;
+    case "specs": case "sources": break;
+  }
+  if (r.say) narrate(r.say);
+}
+
+// ---- what the phone's camera shows (the server checks each picture against the step on screen)
+function onCoach(c) {
+  noteSeen(c);
+  $("tele").textContent = `${Object.keys(parts).length} PARTS · CAMERA ${(c.latency_ms / 1000).toFixed(1)} s`;
+  if (!plan || !c.object_visible) { agree = 0; return; }
+  if (performance.now() < stepHoldUntil || advancing) return;          // we just moved on (or are about to): this picture is stale
+  const cur = stepIdx + 1;
+  if (c.mistake && c.confidence >= 0.4) mistakeStreak++; else mistakeStreak = 0;
+  if (!c.mistake && mistakeShown && !--cleanFrames) { mistakeShown = false; select(null); }
+  if (cur >= 1 && c.mistake && (mistakeStreak >= 2 || c.confidence >= 0.8) && performance.now() - lastMistakeAt > 6000) {
+    lastMistakeAt = performance.now(); mistakeShown = true; cleanFrames = 2; narrateQueued("Careful. " + (c.say || c.mistake)); heard("camera", "⚠ " + c.mistake); return;
+  }
+  if (cur >= 1 && c.step_status === "done" && c.step_index >= cur && c.confidence >= 0.55) doneStreak++; else doneStreak = 0;
+  if (cur >= 1 && lastDoneStep !== stepIdx && (doneStreak >= 2 || (doneStreak >= 1 && c.confidence >= 0.85))) {
+    lastDoneStep = stepIdx; agree = 0; doneStreak = 0; advancing = true; narrateQueued(c.say || "Nice. On to the next step.");
+    afterSpeech(() => {
+      advancing = false; stepHoldUntil = performance.now() + 2500;
+      if (stepIdx !== cur - 1) return;
+      if (stepIdx < plan.steps.length - 1) goStep(stepIdx + 1, " · auto"); else if (!finishedDev) finishRepair();
+    });
+    return;
+  }
+  agree = c.step_index === lastDetect ? agree + 1 : 1; lastDetect = c.step_index;
+  if (cur >= 1 && c.step_index > cur && agree >= 2 && c.confidence >= 0.6) { stepHoldUntil = performance.now() + 2500; goStep(c.step_index - 1, " · detected"); }
+}
+
+// ---- the loop: pictures, speech, signals from the phone; what is on screen back to the server
+function reportState() {
+  const st = { session: SESSION, screen: !linkLive ? "pairing" : finishedDev ? "done" : stepIdx >= 0 ? "step" : "ready", step: stepIdx + 1, total: plan?.steps?.length || 0, title: plan?.title || "" };
+  const key = JSON.stringify(st); if (key === lastStateSent) return; lastStateSent = key;
+  jpost("/coach/state", st, 4000).catch(() => { lastStateSent = ""; });
+}
+const ACKS_DEV = ["Mm-hm.", "Okay.", "Let me see.", "Right."];
+async function remoteLoop() {
+  showPair();
+  for (;;) {
+    try {
+      const d2 = await (await fetch(API + "/coach/latest?session=" + SESSION, { signal: AbortSignal.timeout(2500) })).json();
+      let fresh = false;
+      if (d2.view && d2.view.ts !== lastViewTs) { lastViewTs = d2.view.ts; fresh = true; onCoach(d2.view); }
+      if (d2.utterance && d2.utterance.id !== lastUtterId) {
+        lastUtterId = d2.utterance.id; heard(d2.utterance.text, "…");
+        const id = d2.utterance.id;   // a reply usually lands within a second or two: if it hasn't after 0.7 s, say a short "mm-hm"
+        if (d2.utterance.text.trim().split(/\s+/).length >= 3 && linkLive && !isEchoDev(d2.utterance.text))
+          setTimeout(() => { if (lastReplyId !== id && performance.now() > speakingUntil) narrate(ACKS_DEV[Math.floor(Math.random() * ACKS_DEV.length)]); }, 700);
+      }
+      if (d2.reply && d2.reply.id !== lastReplyId) { lastReplyId = d2.reply.id; onReply(d2.reply); }
+      if (d2.signal && d2.signal.ts !== lastSignalTs) {
+        lastSignalTs = d2.signal.ts;
+        if (d2.signal.signal === "stop") { stopSpeaking(); heard("✋", "ok, quiet"); }
+        else if (d2.signal.signal === "end") { try { sessionStorage.removeItem("spanner-session"); } catch { /* private window */ } location.href = "./"; return; }
+      }
+      if (fresh) lastDataAt = performance.now();
+      const live = !!lastDataAt && performance.now() - lastDataAt < 6000;
+      if (live !== linkLive) { linkLive = live; if (live) hidePair(); else if (lastDataAt) showPair(); }
+      setLink(live ? "live" : lastDataAt ? "lost" : "waiting");
+      reportState();
+    } catch { /* keep polling */ }
+    await sleep(300);
+  }
+}
+
+if (QP.get("debug") === "1") window.__spanner = { onCoach, state: () => ({ stepIdx, advancing, speaking: performance.now() < speakingUntil, finishedDev, queued: !!queuedSay, mistakeStreak, lastMistakeAgo: Math.round(performance.now() - lastMistakeAt), hold: Math.round(stepHoldUntil - performance.now()), mistakeShown }), until: () => Math.round(speakingUntil - performance.now()) };   // for tests
 // ------------------------------------------------------------------ loop + boot
 renderer.setAnimationLoop(() => {
   const now = performance.now();
@@ -404,11 +707,13 @@ renderer.setAnimationLoop(() => {
   for (const r of rings.children) r.rotation.z += r.userData.spin * 0.01;
   controls.update(); if (FX) composer.render(); else renderer.render(scene, camera); labelRenderer.render(scene, camera);
 });
-$("nb").textContent = device.name.toUpperCase(); $("nt").textContent = device.fact + " Say “take it apart”, “show me the battery”, “x-ray”, or “keyboard” to go back to the repair.";
+renderCard(); setLink(REMOTE ? "waiting" : "idle");
 $("tele").textContent = `${Object.keys(parts).length} PARTS · ASSEMBLED`; $("mode").textContent = "ASSEMBLED";
 setXray(true); await frameAll(); setXray(false);
 if (QP.get("explode") === "1") { await setExplode(1); await frameAll(); }
 if (QP.get("xray") === "1") setXray(true);
 if (QP.get("select") && parts[QP.get("select")]) { select(QP.get("select")); await focusPart(QP.get("select")); }
-if (INSTANT || QP.get("wake") === "0") $("wake").remove();
-else { const w = $("wake"); const wake = () => { w.remove(); voiceOn = true; startMic(); narrate(`${device.name}. ${device.fact} Say take it apart.`); }; w.addEventListener("pointerdown", wake, { once: true }); }
+if (INSTANT || QP.get("wake") === "0" || REMOTE) {
+  if (!REMOTE) $("wake").remove();
+  if (REMOTE) { voiceOn = true; $("listen").textContent = "PHONE MIC"; narrate(`${device.name}. What's wrong with it?`); remoteLoop(); }
+} else { const w = $("wake"); const wake = () => { w.remove(); voiceOn = true; startMic(); narrate(`${device.name}. ${device.fact} Say take it apart.`); }; w.addEventListener("pointerdown", wake, { once: true }); }

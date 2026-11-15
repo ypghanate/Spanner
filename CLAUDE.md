@@ -27,6 +27,7 @@ Read these first, every session: `VISION.md`, `PLAN.md`, `CONTRACTS.md`, this fi
 ## Run it
 
 ```bash
+./start.sh                                                # one-command demo launcher: backend, Cloudflare, viewer and Expo
 uv sync                                                   # once; torch is ~2 GB
 cp .env.example .env                                      # then fill in keys
 uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000

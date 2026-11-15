@@ -13,19 +13,12 @@ import { CallView, useSpanner } from "../state/SpannerProvider";
 import { absUrl } from "../lib/config";
 import { Icon, icons, images, Txt } from "../components/ui";
 import {
-  CallHeader, CameraBackdrop, CameraBox, DurationPillStandalone, FindingCard, HudBoxes, PhaseBar, SafetyBanner, SpokenCaption, StepProgressCard,
-  UserCard, VoiceFooter,
+  CallHeader, CameraBackdrop, CameraBox, DurationPillStandalone, FindingCard, HudBoxes, SafetyBanner, StepProgressCard, Transcript, VoiceFooter,
 } from "../components/call";
 import { ControlsSheet, SheetVariant } from "../components/controls";
 import { Diagram2D } from "../components/diagram";
 
 const CAPTURE_GAP_MS = 400; // pause between photos; the provider throttles the upload to about one coach frame per 1.2 s
-
-const PHASE_TEXT = {
-  identifying: "Looking · point the camera at the problem",
-  diagnosing: "01 / Diagnose · show me what’s wrong",
-  researching: "02 / Research · finding the fix",
-} as const;
 
 /** Everything on the live call: diagnose, guided repair, mistake intercept and the diagram views. The phone is the laptop's camera. */
 export default function CallScreen() {
@@ -34,8 +27,6 @@ export default function CallScreen() {
   const st = useSpanner();
   const [perm, requestPerm] = useCameraPermissions();
   const cam = useRef<CameraView>(null);
-  const cameraOn = useRef(st.cameraOn);
-  cameraOn.current = st.cameraOn;
   const send = useRef(st.sendCapture);
   send.current = st.sendCapture;
   const [sheet, setSheet] = useState(false);
@@ -54,7 +45,7 @@ export default function CallScreen() {
     const loop = async () => {
       if (stop) return;
       let gap = CAPTURE_GAP_MS;
-      if (cameraOn.current && cam.current) {
+      if (cam.current) {
         try {
           // a camera call that never settles (app backgrounded, view swapped) must not stall the loop for good
           const shoot = (opts: { quality: number; shutterSound?: boolean; skipProcessing?: boolean }) =>
@@ -73,7 +64,7 @@ export default function CallScreen() {
           gap = Math.min(3000, 300 * 2 ** Math.min(fails++, 4)); // back off instead of retrying every 120 ms
         }
       }
-      else if (cameraOn.current && !cam.current) setCapErr("camera view not mounted");
+      else if (!cam.current) setCapErr("camera view not mounted");
       if (!stop) timer = setTimeout(loop, gap);
     };
     timer = setTimeout(loop, 500); // let the camera warm up
@@ -103,32 +94,30 @@ export default function CallScreen() {
     return (
       <View style={{ flex: 1, backgroundColor: c.base }}>
         {view === "split" || view === "demo" ? null : <CameraBackdrop ref={cam} permitted={permitted} mode="hidden" />}
-        <Explainer view={view} cam={cam} permitted={permitted} clipUrl={clipUrl} onMore={openMore} />
+        {/* a tap anywhere cuts Spanner off and listens */}
+        <Pressable style={{ flex: 1 }} onPress={st.tapScreen} accessible={false}>
+          <Explainer view={view} cam={cam} permitted={permitted} clipUrl={clipUrl} onMore={openMore} />
+        </Pressable>
         {controls}
       </View>
     );
   }
 
-  const caption = st.caption || (guiding ? "" : "Show me what’s going wrong.\nYou can just talk to me.");
+  // the bottom line: what to do next, or STOP when something is wrong
   const footer = warn
-    ? { action: "Say “my hand is clear”", hint: "Tap only once the area is clear" }
+    ? { action: "STOP", hint: st.alert?.message ?? "Tap only once the area is clear" }
     : guiding
-      ? { action: "Say “done”", hint: "“Repeat” · “show a diagram”" }
+      ? { action: "Show me what’s going on", hint: "Say “done” · “repeat” · “show a diagram”" }
       : understood
-        ? { action: "Say “show me how”", hint: "Tap to continue · or ask a question" }
-        : { action: "Say what’s going wrong", hint: "Tap once you’ve explained it" };
-  const phaseText = understood ? "01 / Diagnose · the problem is understood" : PHASE_TEXT[st.phase as keyof typeof PHASE_TEXT] ?? PHASE_TEXT.diagnosing;
+        ? { action: "Show me what’s going on", hint: "Say “show me how” · or ask a question" }
+        : { action: "Show me what’s going on", hint: "Tap once you’ve explained it" };
 
   return (
     <View style={{ flex: 1, backgroundColor: camera.surface }}>
       <CameraBackdrop ref={cam} permitted={permitted}>
-        {!st.cameraOn ? (
-          <View style={[StyleSheet.absoluteFill, styles.cameraOff]}>
-            <Txt weight="medium" size={12} color={camera.text}>Camera off · Spanner can’t see</Txt>
-          </View>
-        ) : guiding || st.hud.length ? (
-          <HudBoxes warn={warn} />
-        ) : null}
+        {guiding || st.hud.length ? <HudBoxes warn={warn} /> : null}
+        {/* a tap anywhere cuts Spanner off and listens; if Spanner is quiet it sends what was said */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={st.tapScreen} accessible={false} />
       </CameraBackdrop>
       <SafeAreaView style={styles.fill} edges={["top"]} pointerEvents="box-none">
         <View style={styles.column} pointerEvents="box-none">
@@ -140,18 +129,7 @@ export default function CallScreen() {
             {guiding ? (
               <StepProgressCard />
             ) : (
-              <>
-                <PhaseBar text={phaseText} />
-                {understood && st.finding ? (
-                  <View style={styles.belowPhase}>
-                    <FindingCard title={st.finding.title} detail={st.finding.detail} />
-                  </View>
-                ) : st.userText ? (
-                  <View style={styles.belowPhase}>
-                    <UserCard text={st.userText} />
-                  </View>
-                ) : null}
-              </>
+              understood && st.finding ? <FindingCard title={st.finding.title} detail={st.finding.detail} /> : null
             )}
           </View>
           {!permitted && perm && !perm.canAskAgain ? (
@@ -168,7 +146,7 @@ export default function CallScreen() {
               <SafetyBanner severity="warn" message={st.alert?.message ?? "Pause — check the area is clear."} />
             </View>
           ) : null}
-          {caption ? <SpokenCaption text={caption} speaking={st.speaking} listening={st.level > 0.15} /> : null}
+          <Transcript />
         </View>
       </SafeAreaView>
       <SafeAreaView edges={["bottom"]} style={{ backgroundColor: c.base }}>
@@ -217,8 +195,7 @@ function Explainer({
   return (
     <SafeAreaView style={styles.fill} edges={["top"]}>
       <View style={styles.column}>
-        <View style={styles.exHeader}>
-          <Image source={images.logo} style={{ width: 126, height: 22, marginLeft: 10 }} contentFit="contain" />
+        <View style={[styles.exHeader, { justifyContent: "flex-end" }]}>
           <DurationPillStandalone />
         </View>
         <Txt size={11} color={c.textSecondary} style={{ marginTop: 19 }}>{copy.label}</Txt>
@@ -266,7 +243,7 @@ function Explainer({
           ) : null}
         </View>
 
-        {st.caption ? <SpokenCaption text={st.caption} speaking={st.speaking} listening={st.level > 0.15} /> : null}
+        <Transcript />
       </View>
       <SafeAreaView edges={["bottom"]} style={{ backgroundColor: c.base }}>
         <VoiceFooter action={"Say “let’s try it”"} hint={"“Show 3D” · “pause” · “repeat”"} onMore={onMore} />
@@ -357,8 +334,6 @@ function ClipPlayer({ url }: { url: string }) {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   column: { flex: 1, paddingHorizontal: 24, paddingTop: 18, paddingBottom: 12 },
-  belowPhase: { marginTop: 59 }, // 14 (gap) + 59 = the design's 73 below the phase bar
-  cameraOff: { backgroundColor: camera.surface, alignItems: "center", justifyContent: "center" },
   exHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", height: 36 },
   stage: { flex: 1, marginHorizontal: -24, marginTop: 7, marginBottom: 12 },
   pip: { position: "absolute", right: 24, top: 16, width: 120, height: 160 },

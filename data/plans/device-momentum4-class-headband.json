@@ -1,0 +1,117 @@
+{
+ "status": "ready",
+ "say": "",
+ "title": "Sennheiser Momentum 4 cracked headband assessment and replacement",
+ "fault": "Cracked headband",
+ "diagnosis": "A cracked headband means the sprung steel band or its fabric cover has split, most often near a slider or yoke. I'll help you find the crack, decide if it's just the cover or the band, and swap or reinforce it. This is a hard repair because Sennheiser doesn't publish a guide, so I'm using general knowledge.",
+ "difficulty": "hard",
+ "time_min": 45,
+ "tools_needed": [
+  "plastic spudger",
+  "T5 Torx screwdriver",
+  "replacement headband",
+  "microfiber cloth"
+ ],
+ "safety_notes": [
+  "Power the headphones off before handling.",
+  "Cracked metal or plastic can have sharp edges, so handle the band carefully.",
+  "Do not flex a cracked band, it can snap back."
+ ],
+ "steps": [
+  {
+   "title": "Power off and rest the headphones",
+   "instruction": "Hold the power button until the LED goes out, then unplug any cable. Lay the headphones on a soft cloth.",
+   "expected_visual_state": "The status LED is off, no cable is attached, and the headphones lie on a cloth.",
+   "common_mistakes": [
+    "Leaving them on while handling the band",
+    "Working on a hard surface that scratches the cups"
+   ],
+   "focus": [
+    "cup_right"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Locate and inspect the crack",
+   "instruction": "Run your fingers and eyes along the headband, the fabric cover and the points where it meets the sliders. Note whether the crack is in the cover, the steel band or a plastic joint.",
+   "expected_visual_state": "The cracked area is clearly visible and held up to the camera.",
+   "common_mistakes": [
+    "Flexing the band to see the crack, which widens it",
+    "Mistaking a cover seam for a crack"
+   ],
+   "focus": [
+    "headband",
+    "slider_left",
+    "slider_right"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Extend the sliders fully",
+   "instruction": "Pull both sliders out evenly until they reach their last click stop. This exposes the band ends and the joints.",
+   "expected_visual_state": "Both metal sliders are extended and the band ends are visible.",
+   "common_mistakes": [
+    "Pulling one side only and twisting the band",
+    "Forcing the slider past its end stop"
+   ],
+   "focus": [
+    "slider_left",
+    "slider_right"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Separate the band from the yokes",
+   "instruction": "Gently release the headband from the sliders and yokes, using a plastic spudger on any trim covers and a T5 Torx screwdriver on any screws. Keep every screw in a tray.",
+   "expected_visual_state": "The headband is detached from at least one slider, with screws in a tray.",
+   "common_mistakes": [
+    "Losing the tiny screws",
+    "Prying with a metal tool that scars the finish",
+    "Tugging on any cable running through the band"
+   ],
+   "focus": [
+    "headband",
+    "yoke_left",
+    "yoke_right",
+    "slider_left"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Fit the replacement headband",
+   "instruction": "Slide the new headband onto the sliders in the same orientation as the old one. Refit the screws and trim covers snugly.",
+   "expected_visual_state": "The new uncracked headband sits in line with both sliders and the screws are in.",
+   "common_mistakes": [
+    "Fitting the band backwards",
+    "Overtightening screws and cracking the plastic"
+   ],
+   "focus": [
+    "headband",
+    "slider_left",
+    "slider_right"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Test the fit and fold",
+   "instruction": "Slide both sliders through their click stops, then fold the cups flat and open them again. Put the headphones on and power them up to check that audio works.",
+   "expected_visual_state": "The sliders click smoothly, the cups swivel and fold, and the headband shows no crack or gap.",
+   "common_mistakes": [
+    "Skipping the fold test",
+    "Not checking that both sides are the same length"
+   ],
+   "focus": [
+    "headband",
+    "yoke_left",
+    "yoke_right"
+   ],
+   "view": "together",
+   "source_ids": []
+  }
+ ]
+}

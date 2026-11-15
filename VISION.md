@@ -7,46 +7,6 @@ _Agreed with the team on 2026-11-14 (Imperial AI Hackathon, 14–15 Nov 2026)._
 
 ---
 
-## Update 2026-11-15 04:30: Spanner for any object, live (agreed with Alberto)
-
-**Goal.** The first screen asks what to fix: the object and its exact model ("AirPods Pro 2") and what is wrong. From
-that moment Spanner works live for whatever was named: it finds the best product photo and the specs with Linkup,
-builds a 3D twin of the object with fal (one solid mesh first; detailed twins like the keyboard come later), and learns
-the repair from the web (Tavily guides, fast) and from YouTube (Gemini watches public videos, Claude writes the
-procedure, slower, merged in when it lands). While it builds, Spanner asks real diagnostic questions, one at a time,
-and the answers sharpen the fault. Then it guides the repair with the camera watching, as for the keyboard.
-
-**Who it's for.** The judge who names an object Spanner has never seen; the person with that object in hand.
-
-**End result.** Say "AirPods Pro 2, the right earbud is quiet": the product photo and specs appear in seconds; Spanner
-asks "since when?", "did you try cleaning the mesh?"; a sourced step plan is ready in about two minutes and read out;
-the twin replaces the photo when fal finishes; each step shows a card with a fal-made picture of that action on the
-object, the voice narrates, the camera follows progress and flags mistakes; "show me replacements" shops for that model.
-The keyboard keeps its hand-built, part-level hologram and animations.
-
-**Key decisions.** Live for any object, nothing pre-built (a test run on AirPods Pro 2 is a real run whose results
-stay as a real cache). Steps on generated twins = twin + step picture + voice (no part animations: fal's mesh has no
-parts). Web guides give the first plan fast; YouTube refines it when ready. No mocks anywhere; an honest "still reading
-two guides" when the person's questions run out before the plan.
-
-**Defaults chosen.** Haiku for the intake and the questions; Sonnet for the plan; Trellis on fal for the twin with a
-4-minute cap and explicit queue polling; the photo stands in for the twin until then; every stage timed into Databricks.
-
-**Out of scope.** Part-level animation on generated twins; fine-tuning for other objects; the F-row keyboard model
-(still unknown: RK84?).
-
-**Build steps.** 1 object job (intake, photo+specs, web plan, status) → 2 viewer object mode → 3 fal twin + GLB →
-4 question loop → 5 YouTube deep path → 6 step pictures → 7 live run on a second object. Cut in that reverse order if
-time runs out. Plan: `C:\Users\alber\.claude\plans\frolicking-dreaming-wind.md`.
-
----
-
-## Update 2026-11-15: track switch (agreed with Alberto)
-- **Main track is now Voice, Vision & Generative Media** (team decision; bounties are gated, so the Databricks / Linkup / Tavily bounties are no longer contested; those layers stay in the product, not in the pitch's lead). Adaption and Figma are open to all and stay.
-- **fal:** the first use (redrawing the user's camera frame with the step done, then animating it) was built, tested and **dropped by Alberto on 15 Nov**. A different use of fal is to be decided.
-
----
-
 ## Goal
 Build **Spanner**, an iPhone app that lets anyone fix simple broken things by pointing their camera at them. Spanner sees what's wrong, researches how to fix it, then guides the user through the repair in real time, Jarvis-style: overlays on the live camera, 3D animations of the parts, generated step illustrations, and a voice that talks them through it, listens to their questions, knows how far they've got, and warns them when they make a mistake.
 When a part has to be replaced, a **Linkup research agent** finds the exact replacement for the user's model, checks that it fits, compares prices, pulls the official manual's specs and finds tutorials, **citing a source for every claim**. All the knowledge and data behind Spanner lives on **Databricks**.

@@ -1,0 +1,125 @@
+{
+ "status": "ready",
+ "say": "",
+ "title": "Sennheiser Momentum 4 won't charge: troubleshooting",
+ "fault": "Headphones do not charge when plugged in",
+ "diagnosis": "Most often a bad cable, charger or dirty USB-C port is the cause, so I'll check those first, then look at a reset. If none of that works, the battery or main board may be at fault, which is a hard repair I'd send to Sennheiser service.",
+ "difficulty": "easy",
+ "time_min": 20,
+ "tools_needed": [
+  "Known-good USB-C cable",
+  "Different USB power adapter (5V)",
+  "Wooden toothpick or plastic spudger",
+  "Dry microfiber cloth",
+  "Flashlight or phone torch"
+ ],
+ "safety_notes": [
+  "Unplug the cable before cleaning the port.",
+  "Never use metal tools inside the USB-C port.",
+  "Stop and do not charge if the cup is swollen, hot or smells odd."
+ ],
+ "steps": [
+  {
+   "title": "Unplug and power off",
+   "instruction": "Unplug any cable from the headphones and slide the power switch to off. Set them on a table with the right cup's bottom edge facing you.",
+   "expected_visual_state": "Headphones rest on a table with no cable attached and the status LED off.",
+   "common_mistakes": [
+    "Cleaning the port while a cable is still connected",
+    "Leaving the headphones switched on"
+   ],
+   "focus": [
+    "cup_right"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Swap cable and charger",
+   "instruction": "Connect a different USB-C cable that you know works to a different wall adapter. Avoid laptop ports and wireless chargers for this test.",
+   "expected_visual_state": "A different cable is connected from a wall adapter to the headphones' USB-C port.",
+   "common_mistakes": [
+    "Using a charge-only-damaged or frayed cable",
+    "Using a fast charger that outputs more than 5V without checking compatibility",
+    "Testing only from a weak laptop USB port"
+   ],
+   "focus": [
+    "cup_right"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Check the charging LED",
+   "instruction": "Watch the status LED for about a minute after plugging in. A pulsing LED means it is charging.",
+   "expected_visual_state": "The status LED on the right cup's bottom edge is lit or pulsing while the cable is connected.",
+   "common_mistakes": [
+    "Giving up after only a few seconds",
+    "Expecting the LED to stay on a deeply drained battery right away"
+   ],
+   "focus": [
+    "cup_right"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Inspect the USB-C port",
+   "instruction": "Unplug the cable and shine a torch into the USB-C port on the right cup. Look for lint, dust or bent contacts.",
+   "expected_visual_state": "The USB-C port is visible in torchlight, showing whether lint or debris is packed inside.",
+   "common_mistakes": [
+    "Not using enough light to see inside the port",
+    "Pressing on the port with a tool while looking"
+   ],
+   "focus": [
+    "cup_right"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Clean the port gently",
+   "instruction": "Use a wooden toothpick or plastic spudger to scrape out lint, moving along the port's flat side. Never use metal.",
+   "expected_visual_state": "The USB-C port is clear of lint and the center tongue is straight and undamaged.",
+   "common_mistakes": [
+    "Using a metal pin that shorts or bends contacts",
+    "Digging hard and bending the center tongue",
+    "Blowing in the port with your mouth, adding moisture"
+   ],
+   "focus": [
+    "cup_right"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Reset the headphones",
+   "instruction": "Connect the cable, then hold the power switch toward Bluetooth for about 10 seconds to reset. Leave it charging for 15 minutes.",
+   "expected_visual_state": "Headphones sit connected to the cable with the LED showing charging activity.",
+   "common_mistakes": [
+    "Releasing the switch too early",
+    "Unplugging during the charging wait"
+   ],
+   "focus": [
+    "cup_right",
+    "pcb"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Test the charge",
+   "instruction": "After 15 minutes, switch the headphones on and check the battery level in the Sennheiser Smart Control app. If it has risen, the fault is fixed.",
+   "expected_visual_state": "The headphones are on with the LED lit and the phone app shows a battery level higher than before.",
+   "common_mistakes": [
+    "Judging only from the LED color",
+    "Still using a bad cable for the final test"
+   ],
+   "focus": [
+    "battery",
+    "cup_right"
+   ],
+   "view": "together",
+   "source_ids": []
+  }
+ ]
+}

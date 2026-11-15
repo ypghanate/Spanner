@@ -44,6 +44,7 @@ export interface SpannerState {
   stepStatus: "in_progress" | "done" | "mistake" | null;
   caption: string; // what Spanner last said (the laptop speaks it)
   userText: string;
+  transcriptWho: "you" | "spanner"; // whose words the transcript card shows
   speaking: boolean;
   level: number;
   hud: HudCommand[];
@@ -57,6 +58,7 @@ export interface SpannerState {
   view: CallView; // diagram view picked from the controls sheet
   finding: Finding | null; // what the coach sees right now
   micMuted: boolean; // Mute switch in the controls sheet (the laptop owns the real microphone for now)
+  botMuted: boolean; // speaker button: Spanner is silenced and the conversation is paused
   speakerOn: boolean; // also play Spanner's voice on this phone (the laptop already speaks)
   cameraOn: boolean; // false = stop sending frames
   lastFrameUri: string | null; // last photo sent to the laptop, shown on the summary
@@ -75,6 +77,7 @@ const initial: SpannerState = {
   stepStatus: null,
   caption: "",
   userText: "",
+  transcriptWho: "spanner",
   speaking: false,
   level: 0,
   hud: [],
@@ -91,6 +94,7 @@ const initial: SpannerState = {
   view: "camera",
   finding: null,
   micMuted: false,
+  botMuted: false,
   speakerOn: false,
   cameraOn: true,
   lastFrameUri: null,
@@ -105,8 +109,11 @@ interface Actions {
   endCall(): Promise<void>;
   /** A photo from the camera: goes to the laptop's /coach/pose (often) and /coach/frame (about every 1.5 s). */
   sendCapture(uri: string): boolean;
-  /** The laptop owns the microphone, so tapping the footer does nothing here. */
+  /** Tap on the voice footer: send what has been said so far. */
   sendNow(): void;
+  /** Tap anywhere on the call: cut Spanner off and listen at once; if Spanner is quiet, send what was said so far. */
+  tapScreen(): void;
+  setBotMuted(on: boolean): void;
   /** Tap on "Spanner is speaking": stop the phone's own playback. */
   interrupt(): void;
   setView(view: CallView): void;
@@ -138,7 +145,12 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
   const laptopLeads = useRef(false); // true once the laptop reports its screen: it owns the current step
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
   const polling = useRef(false);
-  const last = useRef({ view: null as CoachView | null, viewTs: 0, poseTs: 0, planId: "", say: "", poseAt: 0, frameAt: 0, poseBusy: false, frameBusy: false, uri: null as string | null });
+  const last = useRef({ view: null as CoachView | null, viewTs: 0, poseTs: 0, planId: "", say: "", poseAt: 0, frameAt: 0, poseBusy: false, frameBusy: false, uri: null as string | null, replyId: "" });
+  const laptopSpeaking = useRef(false); // the laptop's own voice, from /coach/latest
+  const phonePlaying = useRef(false);
+  const bargeHold = useRef(0); // after a tap: ignore the old "laptop is speaking" until it clears (or this time passes)
+  const lastStop = useRef(0);
+  const lastBotAt = useRef(0); // when Spanner last had something to say (its flags can lag behind the real audio)
   const speakingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Turn the laptop's latest coach view + step tracker into the screen state the Figma UI reads. */
@@ -197,7 +209,8 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
       project(v);
       if (v.say && v.say !== l.say) {
         l.say = v.say;
-        patch({ caption: v.say, speaking: true });
+        lastBotAt.current = Date.now();
+        patch({ caption: v.say, transcriptWho: "spanner", speaking: true });
         if (speakingTimer.current) clearTimeout(speakingTimer.current);
         speakingTimer.current = setTimeout(() => patch({ speaking: false }), 4000);
         if (stateRef.current.speakerOn) speech.current?.enqueue(v.say, c.sayUrl(v.say));
@@ -248,8 +261,28 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
             tracker.current.tick(Date.now());
             if (tracker.current.step !== before) project(l.view);
           }
+          // what Spanner answered to the last thing said (shown in the transcript; the laptop speaks it)
+          if (d.reply && d.reply.id !== l.replyId) {
+            l.replyId = d.reply.id;
+            if (d.reply.say?.trim()) lastBotAt.current = Date.now();
+            if (d.reply.say?.trim()) patch({ caption: d.reply.say.trim(), transcriptWho: "spanner" });
+          }
           // the laptop is talking: pause the phone's mic (it would only hear Spanner), resume when it stops
-          void listener.current?.setMuted(!!d.speaking || stateRef.current.micMuted);
+          let talking = !!d.speaking;
+          if (bargeHold.current) {   // the person tapped to cut Spanner off: the old speech is over even if the flag lingers
+            if (!talking || Date.now() > bargeHold.current) bargeHold.current = 0;
+            else talking = false;
+          }
+          if (talking !== laptopSpeaking.current) {
+            laptopSpeaking.current = talking;
+            if (!phonePlaying.current) patch({ speaking: talking });
+          }
+          const s0 = stateRef.current;
+          if (s0.botMuted && d.speaking && Date.now() - lastStop.current > 1000) {   // paused: keep Spanner quiet
+            lastStop.current = Date.now();
+            void c.signal("stop").catch(() => {});
+          }
+          void listener.current?.setMuted(talking || s0.micMuted);
           if (!stateRef.current.connected) patch({ connected: true });
         } catch {
           if (stateRef.current.connected) patch({ connected: false });
@@ -267,10 +300,13 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
       void listener.current?.stop();
       const l = new VoiceListener(
         (u) => {
-          c.utterance(u.audioB64).catch((e) => patch({ error: "Voice failed: " + (e instanceof Error ? e.message : String(e)) }));
+          if (stateRef.current.botMuted) return;   // conversation paused: nothing is sent
+          c.utterance(u.audioB64)
+            .then((r) => { if (r?.text) patch({ userText: r.text, transcriptWho: "you" }); })
+            .catch((e) => patch({ error: "Voice failed: " + (e instanceof Error ? e.message : String(e)) }));
         },
         (level) => patch({ level }),
-        () => {},
+        () => patch({ userText: "", transcriptWho: "you" }),
       );
       listener.current = l;
       l.start().then((ok) => {
@@ -308,9 +344,10 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
         teardown();
         client.current = c;
         tracker.current = new StepTracker();
-        last.current = { view: null, viewTs: 0, poseTs: 0, planId: "", say: "", poseAt: 0, frameAt: 0, poseBusy: false, frameBusy: false, uri: null };
+        last.current = { view: null, viewTs: 0, poseTs: 0, planId: "", say: "", poseAt: 0, frameAt: 0, poseBusy: false, frameBusy: false, uri: null, replyId: "" };
         speech.current = new SpeechPlayer((playing) => {
-          patch({ speaking: playing });
+          phonePlaying.current = playing;
+          patch({ speaking: playing || laptopSpeaking.current });
         });
         patch({
           ...initial,
@@ -404,8 +441,29 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
         }
         return used;
       },
-      sendNow: () => {},
+      sendNow: () => listener.current?.flush(),
       interrupt: () => speech.current?.stop(),
+      tapScreen: () => {
+        const s1 = stateRef.current;
+        if (s1.speaking || laptopSpeaking.current || Date.now() - lastBotAt.current < 8000) {
+          // cut Spanner off (phone playback and the laptop's voice) and open the microphone right now
+          speech.current?.stop();
+          void client.current?.signal("stop").catch(() => {});
+          bargeHold.current = Date.now() + 6000;
+          laptopSpeaking.current = false;
+          patch({ speaking: false, transcriptWho: "you", userText: "" });
+          if (!s1.micMuted) void listener.current?.setMuted(false);
+        } else {
+          listener.current?.flush();   // "tap once you've explained it"
+        }
+      },
+      setBotMuted: (on) => {
+        patch({ botMuted: on });
+        if (on) {
+          speech.current?.stop();
+          void client.current?.signal("stop").catch(() => {});
+        }
+      },
       setView: (view) => patch({ view }),
       setMicMuted: (on) => {
         patch({ micMuted: on });

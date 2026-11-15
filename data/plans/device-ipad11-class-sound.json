@@ -1,0 +1,155 @@
+{
+ "status": "ready",
+ "say": "",
+ "title": "iPad (11th gen) speaker replacement",
+ "fault": "No sound from the speakers",
+ "diagnosis": "No sound is most likely a failed speaker box or a loose connection, though a software mute can look the same. We'll rule out the simple causes first, then open the iPad and check or replace the speakers. This is a hard repair because the display is glued on and has to be heated off.",
+ "difficulty": "hard",
+ "time_min": 90,
+ "tools_needed": [
+  "hair dryer or heat gun",
+  "suction handle",
+  "plastic spudger",
+  "opening picks",
+  "P2 Phillips screwdriver",
+  "tweezers",
+  "replacement speaker set"
+ ],
+ "safety_notes": [
+  "Power off the iPad and unplug the charger before opening it.",
+  "Do not puncture or bend the battery cells; keep the spudger away from them.",
+  "Disconnect the battery flex before touching any other connector.",
+  "Never use a metal tool to pry near the battery."
+ ],
+ "steps": [
+  {
+   "title": "Power off and rule out software",
+   "instruction": "Unplug all cables and remove any case. Check the mute switch or Control Center, test with headphones, then hold the top button and slide to power off.",
+   "expected_visual_state": "The iPad screen is black, with no cables attached and no case on it.",
+   "common_mistakes": [
+    "Skipping the software check and opening the iPad when the sound was just muted",
+    "Leaving the charger plugged in"
+   ],
+   "focus": [
+    "top_button"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Heat and lift the display",
+   "instruction": "Warm the edges of the screen with a hair dryer until it is hot to the touch. Attach the suction handle and slide an opening pick into the small gap.",
+   "expected_visual_state": "A thin gap is visible along one edge of the display, with an opening pick inserted in it.",
+   "common_mistakes": [
+    "Not heating long enough, so the glass cracks when pulled",
+    "Inserting the pick deeper than a few millimetres and damaging the flexes",
+    "Overheating one spot"
+   ],
+   "focus": [
+    "display"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Release the display adhesive",
+   "instruction": "Slide picks around all the edges to cut the adhesive. Lift the display slowly like a book, resting it on its side.",
+   "expected_visual_state": "The display is lifted and propped open, with the display flexes still attached and the inside of the iPad visible.",
+   "common_mistakes": [
+    "Yanking the display open and tearing the flexes",
+    "Cutting too deeply near the battery cells"
+   ],
+   "focus": [
+    "display",
+    "shell"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Disconnect the battery",
+   "instruction": "Unscrew the display cable bracket with the P2 Phillips screwdriver. Then pry the battery flex connector straight up with a plastic spudger.",
+   "expected_visual_state": "The bracket is removed with its screws set aside in a row, and the battery connector is lifted clear of its socket.",
+   "common_mistakes": [
+    "Losing the tiny screws",
+    "Prying the connector at an angle and bending its pins",
+    "Skipping this step and working on a live board"
+   ],
+   "focus": [
+    "battery_flex",
+    "display_bracket",
+    "screws"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Inspect the speakers and connections",
+   "instruction": "Look at the four speaker boxes along the top and bottom edges for loose, damaged or dirty contacts. Press each speaker connection gently to reseat it.",
+   "expected_visual_state": "The speaker boxes are visible, with their contacts clean and seated against the board.",
+   "common_mistakes": [
+    "Pulling on the speaker flexes",
+    "Touching the speaker cones with a tool"
+   ],
+   "focus": [
+    "speakers_bottom",
+    "speakers_top",
+    "logic_board"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Swap the faulty speaker",
+   "instruction": "Remove the speaker screws and lift the dead speaker out with tweezers. Fit the new speaker in the same spot and tighten the screws.",
+   "expected_visual_state": "The new speaker sits flush in its recess, fixed with all screws, with the old speaker removed.",
+   "common_mistakes": [
+    "Mixing up top and bottom speakers",
+    "Over-tightening the small screws",
+    "Leaving the foam or gasket out"
+   ],
+   "focus": [
+    "speakers_bottom",
+    "speakers_top",
+    "screws"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Reconnect and test before closing",
+   "instruction": "Reconnect the battery flex and refit the display bracket. Rest the display on the iPad, power on and play a sound.",
+   "expected_visual_state": "The iPad powers on and shows the Apple logo, and audio is audible with the volume up.",
+   "common_mistakes": [
+    "Pressing the battery connector in crooked",
+    "Forgetting the display bracket",
+    "Closing the iPad before testing"
+   ],
+   "focus": [
+    "battery_flex",
+    "display_bracket",
+    "display"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Seal the display and run a final test",
+   "instruction": "Power off, then press the display down along all edges until it sticks. Power on and play music at several volumes to confirm every speaker works.",
+   "expected_visual_state": "The display sits flat in the shell with even edges, and sound plays clearly from the speaker grilles.",
+   "common_mistakes": [
+    "Leaving gaps along the edge",
+    "Not pressing the corners down firmly",
+    "Testing only one speaker"
+   ],
+   "focus": [
+    "display",
+    "shell",
+    "speakers_top",
+    "speakers_bottom"
+   ],
+   "view": "together",
+   "source_ids": []
+  }
+ ]
+}

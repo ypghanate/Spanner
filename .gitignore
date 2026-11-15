@@ -21,8 +21,14 @@ mlruns/
 training/adaption/data/
 *.egg-info/
 data/certs/
-data/models/adaption/
-data/media/
+backend/venv/
+venv/
+.DS_Store
+backend/.DS_Store
+backend/venv/
+venv/
+.DS_Store
+backend/.DS_Store
 backend/venv/
 venv/
 .DS_Store
@@ -32,4 +38,3 @@ backend/.DS_Store
 data/rag_chroma_db/
 extensive_repair_chroma_db/
 data/shop_cache/
-data/objects/

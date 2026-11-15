@@ -76,7 +76,6 @@
     "illustration_prompt": null,
     "illustration_url": null,
     "clip_url": null,
-    "title": null,
     "kind": "cable-out"
    },
    {
@@ -141,7 +140,6 @@
     "illustration_prompt": null,
     "illustration_url": null,
     "clip_url": null,
-    "title": null,
     "kind": "keycap-pull"
    },
    {
@@ -195,7 +193,6 @@
     "illustration_prompt": null,
     "illustration_url": null,
     "clip_url": null,
-    "title": null,
     "kind": "puller-place"
    },
    {
@@ -261,7 +258,6 @@
     "illustration_prompt": null,
     "illustration_url": null,
     "clip_url": null,
-    "title": null,
     "kind": "switch-pull"
    },
    {
@@ -315,7 +311,6 @@
     "illustration_prompt": null,
     "illustration_url": null,
     "clip_url": null,
-    "title": null,
     "kind": "socket-inspect"
    },
    {
@@ -369,7 +364,6 @@
     "illustration_prompt": null,
     "illustration_url": null,
     "clip_url": null,
-    "title": null,
     "kind": "new-switch-inspect"
    },
    {
@@ -432,7 +426,6 @@
     "illustration_prompt": null,
     "illustration_url": null,
     "clip_url": null,
-    "title": null,
     "kind": "switch-align"
    },
    {
@@ -496,7 +489,6 @@
     "illustration_prompt": null,
     "illustration_url": null,
     "clip_url": null,
-    "title": null,
     "kind": "switch-insert"
    },
    {
@@ -548,7 +540,6 @@
     "illustration_prompt": null,
     "illustration_url": null,
     "clip_url": null,
-    "title": null,
     "kind": "switch-test"
    },
    {
@@ -611,7 +602,6 @@
     "illustration_prompt": null,
     "illustration_url": null,
     "clip_url": null,
-    "title": null,
     "kind": "keycap-place"
    },
    {
@@ -672,7 +662,6 @@
     "illustration_prompt": null,
     "illustration_url": null,
     "clip_url": null,
-    "title": null,
     "kind": "cable-in-test"
    }
   ],
@@ -702,24 +691,19 @@
     "url": "https://world.taobao.com/lang/en-us/shopping-guide/2050292459950309376.htm",
     "kind": "web"
    }
-  ],
-  "generated": false,
-  "title": "",
-  "diagnosis": "",
-  "target_key": null,
-  "fault_signature": ""
+  ]
  },
  "parts_card": {
-  "card_id": "f5c7ecbc3cb5",
-  "title": "Replace the keycaps",
+  "card_id": "edc5497c191a",
+  "title": "Replace the mechanical switches (hot-swap, 3-pin or 5-pin MX-style)",
   "model": "Royal Kludge RK61",
   "model_read_from": "typed: Royal Kludge RK61",
   "decision": {
    "verdict": "repair",
-   "headline": "Repair it: \u00a33.44 in parts vs \u00a345.11 new. Saves \u00a341.67 and 0.5 kg of e-waste",
-   "why": "The part costs 3.44 vs 45.11 for a new one (8% of the price).",
+   "headline": "Repair it: \u00a36.94 in parts vs \u00a345.11 new. Saves \u00a338.17 and 0.5 kg of e-waste",
+   "why": "The part costs 6.94 vs 45.11 for a new one (15% of the price).",
    "sources": [
-    "https://www.ebay.co.uk/itm/186156095304",
+    "https://www.aliexpress.com/item/1005002892238487.html",
     "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-Wireless-Mechanical/dp/B0GQH2KNLB"
    ]
   },
@@ -727,63 +711,66 @@
   "recall_checked": true,
   "options": [
    {
-    "retailer": "eBay UK",
-    "part": "Replacement keycaps from RK Royal Kludge RK61 keyboards in both Black and White",
-    "part_number": "186156095304",
-    "price": "\u00a33.44",
+    "retailer": "AliExpress",
+    "part": "Gateron Kangaroo tactile switches, 59g/63g",
+    "part_number": "1005002892238487 (AliExpress item ID)",
+    "price": "$9.18",
     "in_stock": "unknown",
-    "url": "https://www.ebay.co.uk/itm/186156095304",
+    "url": "https://www.aliexpress.com/item/1005002892238487.html",
     "verified": true,
-    "badge": "\u2713 Fits your Royal Kludge RK61 \u00b7 3 sources",
-    "why": "The eBay listing explicitly describes the item as replacement keycaps taken from Royal Kludge RK61 keyboards and lists RK61 as the compatible model, and other sources note the RK61 uses Cherry MX-compatible switches whose ABS keycaps can be swapped.",
+    "badge": "\u2713 Fits your Royal Kludge RK61 \u00b7 4 sources",
+    "why": "Gateron says the Kangaroo Ink switches (59gf/63gf) fit most 5-pin MX mechanical keyboards, and Royal Kludge says the RK61 accepts any compatible 3-pin or 5-pin switch with no soldering; older non-hot-swap RK61 revisions may not accept them.",
     "evidence": [
-     "https://www.ebay.co.uk/itm/186156095304",
-     "https://yasugad.hatenablog.com/entry/2022/05/04/190000",
-     "https://pinstack.com/royal-kludge-rk61-budget-60-keyboard-review/"
-    ]
-   },
-   {
-    "retailer": "RK Royal Kludge (RKgamingstore)",
-    "part": "RK x LTC 117-Key PBT Double Shot Keycaps, Translucent OEM Profile for ISO & ANSI Layout (Pink)",
-    "part_number": "43146940023005",
-    "price": "\u20ac24.95",
-    "in_stock": "no",
-    "url": "https://rkgamingstore.com/products/117-key-pbt-double-shot-keycaps",
-    "verified": true,
-    "badge": "\u2713 Fits your Royal Kludge RK61 \u00b7 3 sources",
-    "why": "The RK product page says this set fits MX-style switches and ANSI/ISO 61-key (60%) keyboards, and RK's RK61 listings describe a 61-key 60% board with hot-swappable 3-pin/5-pin mechanical switches, though no source names the RK61 by model for this exact part.",
-    "evidence": [
-     "https://rkgamingstore.com/products/117-key-pbt-double-shot-keycaps",
-     "https://www.amazon.com/RK-Translucent-Mechanical-Keyboard-Customers/dp/B0HH6BVZTW",
+     "https://www.gateron.co/products/gateron-kangaroo-box-ink-switch-set",
      "https://rkgamingstore.com/products/rk61-60-color-block-edition",
-     "https://upgradekeyboards.com/products/royal-kludge-rk61-rgb-60-wireless-wired-mechanical-keyboard"
+     "https://www.aliexpress.com/s/wiki-ssr/article/rk61-switch-type",
+     "https://lamarnaise-moretti.fr/index.php/KPREPUBLIC-Gateron-Kangaroo-Tactile-Switches-63g-Or-59g-RGB/615470"
     ]
    },
    {
-    "retailer": "Amazon UK (sold by Sunzit; dispatched by Amazon)",
-    "part": "Sunzit Keycaps, 61 Keycaps Backlight Two-Color Mechanical Keypad PBT Keycap for GH60 / RK61 / ALT61 / Annie / Keyboard Poker Keys",
-    "part_number": "B07TKK7XLH",
-    "price": "price on site",
-    "in_stock": "yes",
-    "url": "https://www.amazon.co.uk/Sunzit-Backlight-Two-Color-Mechanical-Keyboard/dp/B07TKK7XLH",
+    "retailer": "Amazon.com",
+    "part": "GATERON G Pro 3.0 pre-lubed 5-pin RGB linear switches, Red, 35 pcs",
+    "part_number": "B0C65CNYP9 (ASIN)",
+    "price": "$12.99",
+    "in_stock": "unknown",
+    "url": "https://us.amazon.com/GATERON-Switches-Pre-lubed-Mechanical-Keyboard/dp/B0C65CNYP9",
     "verified": true,
-    "badge": "\u2713 Fits your Royal Kludge RK61 \u00b7 2 sources",
-    "why": "The Amazon UK listing for B07TKK7XLH explicitly names RK61 in its title ('61 Keycaps Backlight PBT Keycap for Ducky GH60 RK61 ALT61 Keyboard Keys') and says it is suitable for most 60% keyboards, with the caveat that it is ANSI/US layout and will not fit UK/ISO-layout boards.",
+    "badge": "\u2713 Fits your Royal Kludge RK61 \u00b7 4 sources",
+    "why": "The part is a standard 5-pin MX-style switch (Gateron says G Pro 3.0 fits any 3-pin/5-pin MX keyboard), and Royal Kludge's store says the RK61 accepts any compatible 3-pin or 5-pin mechanical switch, though a Reddit post notes some older RK61 versions are not hot-swappable.",
     "evidence": [
-     "https://www.amazon.co.uk/Sunzit-Backlight-Two-Color-Mechanical-Keyboard/dp/B07TKK7XLH",
-     "https://bigamart.com/product/sunzit-keycaps-61-keycaps-backlight-two-color-mechanical-keypad-pbt-keycap-for-gh60-rk61-alt61-annie-keyboard-poker-keys/"
+     "https://rkgamingstore.com/products/rk61-60-color-block-edition",
+     "https://www.gateron.co/products/gateron-g-pro-3-0-switch-set",
+     "https://us.amazon.com/GATERON-Switches-Pre-lubed-Mechanical-Keyboard/dp/B0C65CNYP9",
+     "https://www.reddit.com/r/buildapcsales/comments/kd9krq/keyboard_rk_royal_kludge_rk61_wireless_60/"
+    ]
+   },
+   {
+    "retailer": "RK Royal Kludge Official Store",
+    "part": "RK x LTC Kailh Switches White for Mechanical Gaming Keyboard DIY (30 Pcs, White)",
+    "part_number": "40860831744178",
+    "price": "CHF 19.00",
+    "in_stock": "no",
+    "url": "https://rkgamingstore.com/products/rk-x-ltc-kailh-switches-white",
+    "verified": true,
+    "badge": "\u2713 Fits your Royal Kludge RK61 \u00b7 3 sources",
+    "why": "The part is a standard 3-pin MX cross-stem Kailh Box switch, and RTINGS and the RK store say the RK61 is hot-swappable and accepts any 3-pin or 5-pin switch, though older RK61 units with soldered switches (per GadgetExplained and Keybumps) would not accept it without desoldering.",
+    "evidence": [
+     "https://rkgamingstore.com/products/rk-x-ltc-kailh-switches-white",
+     "https://www.rtings.com/keyboard/reviews/royal-kludge/rk61",
+     "https://www.lolvvv.com/review/royal-kludge-rk61",
+     "https://rkgamingstore.com/products/rk61-60-color-block-edition"
     ]
    }
   ],
   "manual": null,
   "tutorial": {
-   "title": "#rk61 #Royalkludge Royal Kludge RK61 Keycap Change Full Process | From White to Cyan and Pink - YouTube",
-   "url": "https://www.youtube.com/watch?v=SSGTzIXpNnk",
+   "title": "TAPE MOD RK61 ROYAL KLUDGE - Mechanical Keyboard Red Switches RGB | Modding | Typing Sounds - YouTube",
+   "url": "https://www.youtube.com/watch?v=r84f_47qies",
    "chapter": "",
    "start_s": 0
   },
-  "as_of": "Prices as of 14 Nov 18:56 UTC",
-  "sources_count": 60,
+  "as_of": "Prices as of 14 Nov 18:09 UTC",
+  "sources_count": 56,
   "mock": false
  }
 }
