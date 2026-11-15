@@ -6,6 +6,11 @@ from types import SimpleNamespace
 
 import pytest
 
+# Yash rewrote backend/brain/pass2.py (RAG + analyze(), commit e8c9edd) and removed _answer(), which these tests
+# exercised. Skipped until the camera-view question answering is ported to the new Pass 2.
+pytestmark = pytest.mark.skip(reason="pass2._answer removed in the RAG rewrite (e8c9edd); port pending")
+
+
 from backend.brain import pass2
 from backend.contracts import BrainResponse, Box, Detection, RepairPlan, SituationReport
 from backend.mocks import fixture_json
