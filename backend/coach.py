@@ -79,8 +79,24 @@ def _demo(session: str = "") -> dict:
     return _plans.get(session) or _default_demo()
 
 
+def _system_device(plan: dict) -> str:
+    """The frame check for the non-keyboard devices: generic, driven by the plan's own steps."""
+    lines = [f"You are Spanner, a repair coach watching a live phone camera. The repair: {plan['object']}; fault: {plan['fault']}.",
+             "The procedure (use these step numbers):"]
+    for s in plan["steps"]:
+        mistakes = "; ".join(s.get("common_mistakes", [])) or "none listed"
+        lines.append(f"{s['index']}. {s['instruction']}\n   DONE WHEN: {s['expected_visual_state']}\n   KNOWN MISTAKES: {mistakes}")
+    lines += ["From one camera frame, decide which step the person is on, using the state of the device and their hands and tools "
+              "as evidence (screen on or off, case open or closed, a part out or in, screws, a tool in use). The step shown on "
+              "screen is a hint: move forward only when the frame shows it.",
+              "Report a mistake only if you can actually see it. Keep what_i_see and say short and concrete."]
+    return "\n".join(lines)
+
+
 def _system(demo: dict) -> str:
     plan = demo["plan"]
+    if plan.get("device", "keyboard") != "keyboard":
+        return _system_device(plan)
     key = demo.get("broken_key", "F")
     keyline = f" The broken key is '{key}'." if plan.get("target_key") or not plan.get("generated") else ""
     lines = [f"You are Spanner, a repair coach watching a live webcam. The repair: {plan['object']}; "
@@ -258,7 +274,7 @@ def _focus(demo: dict, current: int) -> str:
     lines += [
         f"1. step_status: 'done' as soon as the frame shows step {current}'s DONE state, even if the hands are still there; "
         "'in_progress' if they are working on it; 'not_started' if not yet.",
-        "2. mistake: if the frame shows one of the known mistakes, or anything clearly wrong for this step (the wrong key, "
+        "2. mistake: if the frame shows one of the known mistakes, or anything clearly wrong for this step (the wrong part, "
         "a tool on the wrong part, force at an angle, the keyboard still plugged in when it should not be), say it in a "
         "few words. Empty if nothing is wrong.",
         f"3. step_index: {current}, unless the frame clearly shows a LATER step's state (then that step). Never go back "
@@ -287,7 +303,7 @@ def _ask(image_b64: str, current_step: int, session: str = "") -> CoachView:
         raise HTTPException(502, f"vision model gave no answer (stop_reason={resp.stop_reason})")
     out = resp.parsed_output
     out.step_index = max(0, min(out.step_index, len(demo["plan"]["steps"])))
-    resolved = resolve_gap(out)
+    resolved = resolve_gap(out) if demo["plan"].get("device", "keyboard") == "keyboard" else None
     if resolved:                                   # neighbours beat a read of the absent legend
         out.missing_keys = [resolved]
     elif out.missing_keys and (out.gap_left or out.gap_right):
@@ -319,9 +335,10 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
     _frame_inflight.add(session)
     t0 = time.perf_counter()
     try:
-        data, crop = await asyncio.to_thread(_keyboard_crop, data)
+        on_keyboard = _demo(session)["plan"].get("device", "keyboard") == "keyboard"
+        data, crop = await asyncio.to_thread(_keyboard_crop, data) if on_keyboard else (data, {"cropped": False})
         view = await asyncio.to_thread(_ask, base64.standard_b64encode(data).decode(), current_step, session)
-        gap_suspected = bool(view.missing_keys or view.gap_left or view.gap_right or view.gap_x is not None)
+        gap_suspected = on_keyboard and bool(view.missing_keys or view.gap_left or view.gap_right or view.gap_x is not None)
         verified = await asyncio.to_thread(verify_gap, data, view) if gap_suspected else None
     finally:
         _frame_inflight.discard(session)
@@ -667,7 +684,9 @@ def _plan_text(session: str) -> str:
 def _context(session: str) -> str:
     """What changes every turn: the screen, the step on it, what the camera saw."""
     st = _view_state.get(session, ViewState(session=session))
-    lines = [f"Screen: {st.screen}." + (f" Step {st.step} of {st.total} is on screen." if st.screen == "step" else "")]
+    dp = _device_parts.get(session)
+    dev = f" Device open: {dp['device']}. Its parts (use these exact names for show_part): " + ", ".join(p["name"] for p in dp["parts"]) + "." if dp else ""
+    lines = [f"Screen: {st.screen}.{dev}" + (f" Step {st.step} of {st.total} is on screen." if st.screen == "step" else "")]
     v = _latest.get(session, {}).get("view")
     if v and v.get("what_i_see"):
         lines.append(f"Camera ({max(0, round(time.time() - v['ts']))} s ago): {v['what_i_see']}"
@@ -703,6 +722,31 @@ def _converse(text: str, session: str) -> Turn:
 class PlanReq(BaseModel):
     session: str
     complaint: str
+    device: str = "keyboard"
+
+
+class DevicePartsReq(BaseModel):
+    session: str
+    device: str
+    parts: list[dict]            # [{name, label, desc, group}] as the hologram page built them
+
+
+_device_parts: dict[str, dict] = {}
+
+
+@router.post("/device/parts")
+async def device_parts(req: DevicePartsReq):
+    """The device hologram reports its real parts, so Claude plans the repair with parts that exist on that model."""
+    old = _plans.get(req.session)
+    if old and old["plan"].get("device", "keyboard") != req.device:      # a different device: the old repair no longer applies
+        _plans.pop(req.session, None)
+        _history.pop(req.session, None)
+    _device_parts[req.session] = {"device": req.device, "parts": req.parts[:80]}
+    if req.device != "keyboard" and os.getenv("ANTHROPIC_API_KEY"):      # write the common-fault plans now, in the background
+        from .device_planner import warm
+
+        asyncio.get_running_loop().run_in_executor(None, warm, req.device, req.parts[:80])
+    return {"ok": True, "parts": len(req.parts)}
 
 
 # the replacement part each kind of fault is most likely to need (shop.classify maps the words to a search)
@@ -721,12 +765,14 @@ async def generate_plan(req: PlanReq):
 
     t0 = time.perf_counter()
     try:
-        out = await asyncio.to_thread(plan_repair, req.complaint, req.session)
+        dp = _device_parts.get(req.session, {})
+        parts = dp.get("parts") if dp.get("device") == req.device else None
+        out = await asyncio.to_thread(plan_repair, req.complaint, req.session, req.device, parts)
     except Exception as e:                       # API down, bad key...: keep the session usable on the canned plan
         out = {"status": "fallback", "say": "I couldn't plan that just now, so here is the standard switch repair.",
                "errors": [f"{type(e).__name__}: {e}"]}
     if out["status"] == "ready":
-        _plans[req.session] = {"broken_key": out["broken_key"], "plan": out["plan"], "parts_card": out.get("parts_card"),
+        _plans[req.session] = {"broken_key": out.get("broken_key"), "plan": out["plan"], "parts_card": out.get("parts_card"),
                                "plan_id": out["plan_id"]}
         _latest.setdefault(req.session, {})["plan_id"] = out["plan_id"]
         # search for the part this fault needs now, in the background: by the time they ask, it is already there

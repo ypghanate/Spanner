@@ -383,8 +383,9 @@ def _use_mock() -> bool:
     return get_settings().use_mocks or not os.getenv("ANTHROPIC_API_KEY")
 
 
-def plan_repair(complaint: str, session: str = "") -> dict:
-    """Blocking. Returns {"status": ready|clarify|refused, ...}; run it in a thread from async code."""
+def plan_repair(complaint: str, session: str = "", device: str = "keyboard", device_parts: list[dict] | None = None) -> dict:
+    """Blocking. Returns {"status": ready|clarify|refused, ...}; run it in a thread from async code.
+    Other devices (iPhone, iPad, headphones) go to backend.device_planner with the parts their hologram reported."""
     t0 = time.perf_counter()
     complaint = complaint.strip()[:500]
     from .brain.safety import _STOP
@@ -395,6 +396,10 @@ def plan_repair(complaint: str, session: str = "") -> dict:
         return {"status": "refused", "say": "Stop there: that's not a safe home repair. Please call a qualified professional."}
 
     mock = _use_mock()
+    if device != "keyboard":
+        from .device_planner import plan_device_repair
+
+        return plan_device_repair(complaint, device, device_parts or [], mock=mock)
     intake = _intake_mock(complaint) if mock else (_intake_fast(complaint) or _intake_claude(complaint))
     t_intake = time.perf_counter()
     if not intake.in_scope:

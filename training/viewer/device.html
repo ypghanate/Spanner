@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Spanner · device hologram</title>
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/examples/jsm/"}}</script>
 <style>
   :root { --bg:#05080F; --cyan:#00E5FF; --cyan2:#00e5ff55; --ok:#3DFFA8; --warn:#FFC83D; --danger:#FF3D5A; --mono:"JetBrains Mono",ui-monospace,Consolas,monospace; }
   html,body { margin:0; height:100%; background:var(--bg); overflow:hidden; font-family:system-ui,"Segoe UI",Inter,sans-serif; }
@@ -29,12 +29,26 @@
   #heard { position:fixed; left:50%; bottom:110px; transform:translateX(-50%); padding:8px 14px; font:12px var(--mono); color:#e6fbff; display:none; z-index:6; }
   #wake { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; z-index:20; background:radial-gradient(#02121dcc, #000d); cursor:pointer; font:600 15px var(--mono); letter-spacing:.3em; color:var(--cyan); text-shadow:0 0 14px #00e5ff; }
   #wake small { font:11px var(--mono); letter-spacing:.14em; opacity:.7; text-shadow:none; }
+  /* the repair guide: the step on screen, how to confirm it, what to avoid */
+  #card { left:20px; bottom:20px; width:min(520px,calc(100vw - 40px)); padding:14px 18px 12px; display:none; text-shadow:none; color:#e6fbff; }
+  #card.on { display:block; }
+  #cn { font:600 11px var(--mono); letter-spacing:.2em; color:var(--cyan); text-shadow:0 0 10px #00e5ff88; }
+  #ct { font-size:20px; font-weight:500; margin:6px 0 4px; line-height:1.25; }
+  #ci { font-size:14px; line-height:1.5; color:#d3f3fa; }
+  #cd { font:12px/1.45 var(--mono); color:var(--ok); margin-top:8px; } #cm { font:12px/1.45 var(--mono); color:var(--warn); margin-top:4px; }
+  #cdots { display:flex; gap:5px; margin-top:10px; } #cdots span { flex:1; height:3px; border-radius:2px; background:#00e5ff30; }
+  #cdots span.done { background:var(--ok); } #cdots span.on { background:var(--cyan); box-shadow:0 0 8px var(--cyan); }
+  #pair { left:50%; top:96px; transform:translateX(-50%); padding:14px 18px; text-align:center; display:none; text-shadow:none; color:#e6fbff; z-index:7; font-size:12.5px; }
+  #pair img { width:200px; height:200px; display:block; margin:8px auto; border-radius:6px; background:#f2f2e9; padding:8px; }
+  #pair b { font:600 12px var(--mono); color:var(--cyan); word-break:break-all; } #pair .tr { font:10.5px var(--mono); letter-spacing:.14em; color:var(--ok); margin-top:6px; }
 </style></head>
 <body>
 <canvas id="c"></canvas><div id="labels"></div>
 <div class="hud" id="top"><div id="brand">SPANNER <b>//</b> <b id="dev">DEVICE</b> HOLOGRAM</div><div id="status"><span id="mode">STANDBY</span><br><span id="tele"></span><br><span id="listen">MIC OFF</span></div></div>
 <div class="hud panel brackets" id="insp"><h3 id="ih">PART</h3><p id="ip"></p><div class="k" id="ik"></div></div>
 <div class="hud panel brackets" id="note"><b id="nb">HOLOGRAM</b><span id="nt"></span></div>
+<div class="hud panel brackets" id="card"><div id="cn"></div><div id="ct"></div><div id="ci"></div><div id="cd"></div><div id="cm"></div><div id="cdots"></div></div>
+<div class="hud panel brackets" id="pair"></div>
 <div class="panel" id="heard"></div>
 <div id="wake">TAP TO WAKE SPANNER<small>then just talk: "take it apart", "show me the battery", "put it back", "x-ray", "keyboard"</small></div>
 <script type="module" src="./device.js"></script>

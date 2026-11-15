@@ -1,0 +1,154 @@
+{
+ "status": "ready",
+ "say": "",
+ "title": "iPad (11th generation) battery replacement",
+ "fault": "Battery drains too fast",
+ "diagnosis": "A battery that drains quickly is usually worn out after many charge cycles, so I'll plan a battery replacement. This is a hard repair on an iPad because the display is glued on and the cells are held with stretch-release strips.",
+ "difficulty": "hard",
+ "time_min": 90,
+ "tools_needed": [
+  "hairdryer or heat mat",
+  "suction handle",
+  "plastic opening picks",
+  "plastic spudger",
+  "Phillips screwdriver",
+  "tweezers",
+  "replacement battery cells",
+  "stretch-release adhesive strips"
+ ],
+ "safety_notes": [
+  "Let the iPad battery run below 25% before starting.",
+  "Never puncture, bend or pry the battery cells with metal tools.",
+  "If a cell is swollen, hot or leaking, stop and take it to a professional.",
+  "Wear safety glasses when lifting the glass."
+ ],
+ "steps": [
+  {
+   "title": "Power off and warm the edges",
+   "instruction": "Hold the top button and power the iPad off, then unplug any cable. Warm the display edges with a heat mat or hairdryer for about two minutes.",
+   "expected_visual_state": "The iPad screen is black with no cable attached, lying face up with a heat source on the edges.",
+   "common_mistakes": [
+    "Skipping the power-off step",
+    "Overheating one spot and damaging the LCD",
+    "Using a metal tool too early"
+   ],
+   "focus": [
+    "display",
+    "shell"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Separate the display",
+   "instruction": "Attach a suction handle and slide a plastic pick into the gap along the edge. Work around slowly, keeping the pick shallow, and lift the display open like a book.",
+   "expected_visual_state": "The display is lifted slightly and rests beside the shell, still connected by its flex cables.",
+   "common_mistakes": [
+    "Inserting the pick too deep and cutting the display flex",
+    "Prying hard instead of re-heating",
+    "Pulling the display fully away"
+   ],
+   "focus": [
+    "display",
+    "shell"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Disconnect the battery first",
+   "instruction": "Remove the four screws from the display cable bracket and lift it off. Use a plastic spudger to pop the battery connector straight up.",
+   "expected_visual_state": "The bracket is set aside and the battery flex connector is lifted away from the logic board.",
+   "common_mistakes": [
+    "Losing the tiny screws",
+    "Prying at the connector's side instead of lifting it straight up",
+    "Leaving the battery connected"
+   ],
+   "focus": [
+    "battery_flex",
+    "display_bracket",
+    "screws"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Disconnect the display",
+   "instruction": "Pop the display and digitizer connectors with the spudger. Lift the display away and put it aside safely.",
+   "expected_visual_state": "The display is fully removed, exposing both battery cells and the logic board.",
+   "common_mistakes": [
+    "Pulling the flex cables instead of unclipping them",
+    "Putting the display down where it can get scratched"
+   ],
+   "focus": [
+    "display",
+    "logic_board"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Release the old cells",
+   "instruction": "Pull each stretch-release strip slowly and flat along the cell, as low and straight as you can. Lift the left and right cells out of the shell.",
+   "expected_visual_state": "The old battery cells are out of the shell and the empty battery bays are visible.",
+   "common_mistakes": [
+    "Pulling the strips upward so they snap",
+    "Prying the cells with a metal tool",
+    "Bending the cells"
+   ],
+   "focus": [
+    "battery_left",
+    "battery_right",
+    "battery_flex"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Fit the new battery",
+   "instruction": "Clean the bays, apply new adhesive strips and place the new cells. Press them down gently and connect the battery flex.",
+   "expected_visual_state": "The new cells sit flat in the shell with the battery connector clipped onto the logic board.",
+   "common_mistakes": [
+    "Leaving old adhesive in the bays",
+    "Placing the cells misaligned",
+    "Not seating the battery connector fully"
+   ],
+   "focus": [
+    "battery_left",
+    "battery_right",
+    "battery_flex"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Reconnect the display and close",
+   "instruction": "Reconnect the display and digitizer connectors and refit the bracket with its four screws. Lower the display, press the edges to seal, and let it set.",
+   "expected_visual_state": "The display is closed flat against the shell with even edges and no visible gaps.",
+   "common_mistakes": [
+    "Trapping a flex under the display",
+    "Forgetting a bracket screw",
+    "Closing the display before the connectors are seated"
+   ],
+   "focus": [
+    "display",
+    "display_bracket",
+    "screws"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Test the battery",
+   "instruction": "Power on the iPad and charge it. Check that Settings > Battery shows a healthy status and that it holds charge over the next hours.",
+   "expected_visual_state": "The iPad boots to the home screen and shows it is charging with a battery percentage.",
+   "common_mistakes": [
+    "Judging the result too early",
+    "Not letting the battery fully charge the first time"
+   ],
+   "focus": [],
+   "view": "together",
+   "source_ids": []
+  }
+ ]
+}

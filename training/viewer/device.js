@@ -330,13 +330,14 @@ renderer.domElement.addEventListener("click", (e) => {
 // ------------------------------------------------------------------ voice (ElevenLabs through the backend, browser as fallback) + commands
 let elevenOK = false, sayAudio = null, speakingUntil = 0, currentSpeech = "";
 fetch(API + "/coach/health").then((r) => r.json()).then((j) => { elevenOK = !!j.tts; }).catch(() => {});
-function stopSpeaking() { if ("speechSynthesis" in window) speechSynthesis.cancel(); if (sayAudio) { sayAudio.pause(); sayAudio = null; } speakingUntil = 0; }
+function stopSpeaking() { reportSpeaking(0); if ("speechSynthesis" in window) speechSynthesis.cancel(); if (sayAudio) { sayAudio.pause(); sayAudio = null; } speakingUntil = 0; }
 function narrate(text) {
   if (!voiceOn || INSTANT || !text) return; stopSpeaking(); currentSpeech = text; speakingUntil = performance.now() + 60000;
-  if (elevenOK) { const a = new Audio(API + "/coach/say?text=" + encodeURIComponent(text)); sayAudio = a; a.onended = () => { speakingUntil = performance.now() + 300; }; a.play().catch(() => browserSay(text)); return; }
+  reportSpeaking(Math.min(45000, 2500 + text.split(/\s+/).length * 450) + 1000);
+  if (elevenOK) { const a = new Audio(API + "/coach/say?text=" + encodeURIComponent(text)); sayAudio = a; a.onended = () => { speakingUntil = performance.now() + 300; reportSpeaking(0); }; a.play().catch(() => browserSay(text)); return; }
   browserSay(text);
 }
-function browserSay(text) { if (!("speechSynthesis" in window)) return; const u = new SpeechSynthesisUtterance(text); u.rate = 1.03; u.pitch = 0.92; u.onend = () => { speakingUntil = performance.now() + 300; }; speechSynthesis.speak(u); }
+function browserSay(text) { if (!("speechSynthesis" in window)) return; const u = new SpeechSynthesisUtterance(text); u.rate = 1.03; u.pitch = 0.92; u.onend = () => { speakingUntil = performance.now() + 300; reportSpeaking(0); }; speechSynthesis.speak(u); }
 function heard(text, action) { const h = $("heard"); h.innerHTML = `🎤 <b>“${text}”</b> → ${action}`; h.style.display = "block"; clearTimeout(h._t); h._t = setTimeout(() => (h.style.display = "none"), 3500); }
 const PART_WORDS = Object.values(parts).map((p) => [new RegExp(p.label.toLowerCase().replace(/[()+]/g, "").split(/\s+/).filter((w) => w.length > 3).join("|")), p.name]);
 async function explodeAndFrame(v) { await setExplode(v); await frameAll(); }
@@ -397,6 +398,196 @@ function startMic() {
   rec.start();
 }
 
+
+// ------------------------------------------------------------------ the shared session: phone camera + microphone, Claude plans the repair
+// Same session as the keyboard page (it is passed on when a device is picked): the phone keeps listening and watching,
+// the server transcribes and answers (one Claude turn), this page plays the 3D, shows the step and speaks.
+const SESSION = QP.get("s") || (() => { try { return sessionStorage.getItem("spanner-session") || ""; } catch { return ""; } })();
+const REMOTE = !!SESSION && !INSTANT;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const jpost = (path, body, ms = 8000) => fetch(API + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(ms) });
+let plan = null, stepIdx = -1, finishedDev = false, linkLive = false, lastDataAt = 0, lastViewTs = 0, lastUtterId = "", lastReplyId = "", lastSignalTs = 0;
+let lastStateSent = "", planning = false, clarifying = null, agree = 0, lastDetect = 0, lastDoneStep = -1, lastMistakeAt = 0, stepHoldUntil = 0, runId = 0, lastSpeakReport = 0;
+
+if (REMOTE) jpost("/coach/device/parts", { session: SESSION, device: d, parts: device.parts.map((p) => ({ name: p.name, label: p.label, desc: p.desc, group: p.group })) }).catch(() => {});
+function reportSpeaking(ms) {
+  if (!REMOTE) return;
+  const now = performance.now(); if (ms > 0 && now - lastSpeakReport < 300) return; lastSpeakReport = now;
+  jpost("/coach/speaking", { session: SESSION, seconds: ms / 1000 }, 3000).catch(() => {});
+}
+
+// ---- Spanner hearing its own voice (the phone's microphone is next to the laptop's speaker)
+const echoWords = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter((w) => w.length > 2));
+const STOCK_DEV = /what('s| is) wrong with it|i'm spanner|scan the code|taking it apart|putting it back|let me work out|heads up|step \d|all done/i;
+function isEchoDev(text, graceMs = 6000) {
+  if (STOCK_DEV.test(text)) return true;
+  if (performance.now() > speakingUntil + graceMs || !currentSpeech) return false;
+  const a = echoWords(text), b = echoWords(currentSpeech); if (!a.size) return true;
+  if (a.size < 3) return false;          // "start", "next", "stop": a short command is you, even if Spanner just said the word
+  let n = 0; for (const w of a) if (b.has(w)) n++; return n / a.size >= 0.6;
+}
+
+// ---- pairing code (only while no phone is sending pictures)
+async function phoneOrigin() {
+  if (!/^(localhost|127\.|\[?::1\]?$)/.test(location.hostname)) return location.origin;
+  try { const n = await (await fetch(API + "/coach/net", { signal: AbortSignal.timeout(3000) })).json(); if (n.lan_ip) return `${location.protocol}//${n.lan_ip}${location.port ? ":" + location.port : ""}`; } catch { /* older server */ }
+  return location.origin;
+}
+let pairRun = 0;
+async function showPair() {
+  const run = ++pairRun, el = $("pair"); el.style.display = "block";
+  el.innerHTML = `<div class="tr">PREPARING THE PAIRING CODE…</div>`;
+  const url = `${await phoneOrigin()}/training/viewer/phone.html?s=${SESSION}`;
+  if (run !== pairRun || linkLive) return;
+  el.innerHTML = `<div>Scan with the Spanner app to connect your phone</div><img src="${API}/coach/qr?url=${encodeURIComponent(url)}" alt="pairing code"><div class="tr">WAITING FOR YOUR PHONE</div>`;
+}
+function hidePair() { pairRun++; $("pair").style.display = "none"; }
+
+// ---- the repair guide
+const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function renderCard() {
+  const el = $("card");
+  if (!plan) { el.classList.remove("on"); $("note").style.display = ""; return; }
+  $("note").style.display = "none"; el.classList.add("on");
+  const n = plan.steps.length, s = plan.steps[stepIdx];
+  if (finishedDev) { $("cn").textContent = "ALL DONE"; $("ct").textContent = "Repair complete"; $("ci").textContent = "Test it before you rely on it. Say “start over” to run it again."; $("cd").textContent = ""; $("cm").textContent = ""; }
+  else if (!s) { $("cn").textContent = `${plan.title || "REPAIR"} · ${n} STEPS`.toUpperCase(); $("ct").textContent = plan.diagnosis || plan.fault; $("ci").textContent = "Say “start” when you’re ready."; $("cd").textContent = plan.difficulty ? `Difficulty: ${plan.difficulty} · about ${plan.time_min} min` : ""; $("cm").textContent = (plan.safety_notes || [])[0] ? "⚠ " + plan.safety_notes[0] : ""; }
+  else { $("cn").textContent = `STEP ${s.index} OF ${n}`; $("ct").textContent = s.title || ""; $("ci").textContent = s.instruction; $("cd").textContent = s.expected_visual_state ? "✓ Done when: " + s.expected_visual_state : ""; $("cm").textContent = s.common_mistakes?.[0] ? "⚠ " + s.common_mistakes[0] : ""; }
+  $("cdots").innerHTML = plan.steps.map((_, i) => `<span class="${finishedDev || i < stepIdx ? "done" : i === stepIdx ? "on" : ""}"></span>`).join("");
+}
+function highlightParts(names) {
+  const ok = names.filter((n) => parts[n]); select(ok[0] || null);
+  if (ok.length > 1) outline.selectedObjects = ok.map((n) => parts[n].obj);   // a second and third part pulse along with the first
+  return ok;
+}
+async function runStep(s, id) {
+  for (const c of s.scene3d || []) {
+    if (id !== runId) return;
+    if (c.op === "explode") { setXray(false); select(null); await setExplode(c.amount ?? 1); await frameAll(); }
+    else if (c.op === "reset") { select(null); setXray(false); await setExplode(0); await frameAll(); }
+  }
+  if (id !== runId) return;
+  const names = (s.scene3d || []).filter((c) => (c.op === "highlight" || c.op === "pulse") && c.part).map((c) => c.part);
+  if (!names.length) return;
+  if (explode < 0.5 && !["frame", "display", "back_glass", "shell", "headband", "usb_c", "screws"].includes(names[0])) setXray(true);   // an inside part: see through the case
+  const ok = highlightParts(names); if (ok[0]) await focusPart(ok[0]);
+}
+async function goStep(i, note = "") {
+  if (!plan) { narrate("Tell me what’s wrong first, and I’ll plan the repair."); return; }
+  const id = ++runId; stepIdx = Math.max(0, Math.min(i, plan.steps.length - 1)); finishedDev = false;
+  const s = plan.steps[stepIdx]; $("mode").textContent = `STEP ${s.index}/${plan.steps.length}${note}`;
+  renderCard(); narrate(`Step ${s.index}. ${s.instruction}`);
+  await runStep(s, id);
+}
+function finishRepair() { finishedDev = true; runId++; select(null); setXray(false); renderCard(); $("mode").textContent = "REPAIR COMPLETE"; narrate("All done. Test it before you rely on it."); }
+function advance() { if (finishedDev) return restart(); if (stepIdx < 0) return goStep(0); if (stepIdx >= plan.steps.length - 1) return finishRepair(); return goStep(stepIdx + 1); }
+function restart() { runId++; stepIdx = -1; finishedDev = false; lastDoneStep = -1; select(null); setXray(false); setExplode(0).then(frameAll); renderCard(); }
+function showMistake() {
+  const s = plan?.steps[stepIdx]; const m = s?.common_mistakes?.[0];
+  if (!m) { narrate("Nothing in particular to watch for here. Take it slowly."); return; }
+  narrate("Watch out. People often get this wrong: " + m);
+}
+
+// ---- Claude plans the repair from what was said
+async function requestRepair(raw) {
+  if (planning) return; planning = true; clarifying = null; runId++;
+  heard(raw, "planning the repair"); $("mode").textContent = "PLANNING THE REPAIR";
+  narrate("Okay. Let me work out the fix.");
+  try {
+    const r = await jpost("/coach/plan/generate", { session: SESSION, complaint: raw, device: d }, 120000);
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    if (j.status === "ready") {
+      plan = j.plan; stepIdx = -1; finishedDev = false; lastDoneStep = -1; agree = 0; select(null); setXray(false); await setExplode(0); frameAll();
+      $("mode").textContent = "PLAN READY"; renderCard(); heard(raw, `${plan.steps.length}-step plan`); narrate((j.say || plan.diagnosis) + " Say start when you’re ready.");
+    } else {
+      if (j.status === "clarify") clarifying = raw;
+      $("mode").textContent = "ASSEMBLED"; heard(raw, j.status); narrate(j.say);
+    }
+  } catch (e) { $("mode").textContent = "ASSEMBLED"; heard(raw, "couldn’t plan: " + e.message); narrate("Sorry, I couldn’t plan that. Try again."); }
+  finally { planning = false; }
+}
+
+// ---- what the server decided for something said into the phone: do it
+async function onReply(r) {
+  if (!r.addressed || isEchoDev(r.text)) { heard(r.text, "not for me"); return; }
+  if (clarifying && r.action !== "plan_repair" && r.action !== "stop") { const c = clarifying + ". " + r.text; clarifying = null; return requestRepair(c); }
+  heard(r.text, r.action === "none" ? "talking" : r.action.replace(/_/g, " "));
+  if (r.action !== "stop" && performance.now() < speakingUntil) stopSpeaking();
+  switch (r.action) {
+    case "pick_device": if (r.device && r.device !== d) { location.href = r.device === "keyboard" ? "./" : `./device.html?d=${r.device}&s=${encodeURIComponent(SESSION)}`; return; } break;
+    case "plan_repair": return requestRepair(r.complaint || r.text);
+    case "start": return goStep(0);
+    case "next": return advance();
+    case "back": return goStep(stepIdx - 1);
+    case "repeat": return plan?.steps[stepIdx] ? narrate(`Step ${plan.steps[stepIdx].index}. ${plan.steps[stepIdx].instruction}`) : undefined;
+    case "stop": stopSpeaking(); heard(r.text, "ok, quiet"); return;
+    case "show_part": { const n = Object.keys(parts).find((k) => k === r.part) || (PART_WORDS.find(([re]) => re.test(r.part || ""))?.[1]); if (n) { if (explode < 0.5) await setExplode(1); select(n); await focusPart(n); narrate(parts[n].desc); return; } break; }
+    case "take_apart": setXray(false); return explodeAndFrame(1);
+    case "reassemble": return explodeAndFrame(0);
+    case "xray": return setXray(!xray);
+    case "zoom_in": return flyTo(camera.position.clone().lerp(controls.target, 0.35), controls.target.clone(), 600);
+    case "zoom_out": return flyTo(camera.position.clone().sub(controls.target).multiplyScalar(1.5).add(controls.target), controls.target.clone(), 600);
+    case "show_mistake": return showMistake();
+    case "shop_parts": case "shop_keyboards": narrate("I can only look up replacement parts for the keyboard so far."); return;
+    case "specs": case "sources": break;
+  }
+  if (r.say) narrate(r.say);
+}
+
+// ---- what the phone's camera shows (the server checks each picture against the step on screen)
+function onCoach(c) {
+  $("tele").textContent = `${Object.keys(parts).length} PARTS · CAMERA ${(c.latency_ms / 1000).toFixed(1)} s`;
+  if (!plan || !c.object_visible) { agree = 0; return; }
+  if (performance.now() < stepHoldUntil) return;                       // we just moved on: this picture was taken before that
+  const cur = stepIdx + 1;
+  if (cur >= 1 && c.mistake && c.confidence >= 0.4 && performance.now() - lastMistakeAt > 5000) {
+    lastMistakeAt = performance.now(); narrate("Careful. " + (c.say || c.mistake)); heard("camera", "⚠ " + c.mistake); return;
+  }
+  if (cur >= 1 && c.step_status === "done" && c.step_index >= cur && c.confidence >= 0.55 && lastDoneStep !== stepIdx) {
+    lastDoneStep = stepIdx; agree = 0; stepHoldUntil = performance.now() + 2500; narrate(c.say || "Nice. On to the next step.");
+    setTimeout(() => { if (stepIdx < plan.steps.length - 1) goStep(stepIdx + 1, " · auto"); else if (!finishedDev) finishRepair(); }, 900);
+    return;
+  }
+  agree = c.step_index === lastDetect ? agree + 1 : 1; lastDetect = c.step_index;
+  if (cur >= 1 && c.step_index > cur && agree >= 2 && c.confidence >= 0.6) { stepHoldUntil = performance.now() + 2500; goStep(c.step_index - 1, " · detected"); }
+}
+
+// ---- the loop: pictures, speech, signals from the phone; what is on screen back to the server
+function reportState() {
+  const st = { session: SESSION, screen: !linkLive ? "pairing" : finishedDev ? "done" : stepIdx >= 0 ? "step" : "ready", step: stepIdx + 1, total: plan?.steps?.length || 0, title: plan?.title || "" };
+  const key = JSON.stringify(st); if (key === lastStateSent) return; lastStateSent = key;
+  jpost("/coach/state", st, 4000).catch(() => { lastStateSent = ""; });
+}
+const ACKS_DEV = ["Mm-hm.", "Okay.", "Let me see.", "Right."];
+async function remoteLoop() {
+  showPair();
+  for (;;) {
+    try {
+      const d2 = await (await fetch(API + "/coach/latest?session=" + SESSION, { signal: AbortSignal.timeout(2500) })).json();
+      let fresh = false;
+      if (d2.view && d2.view.ts !== lastViewTs) { lastViewTs = d2.view.ts; fresh = true; onCoach(d2.view); }
+      if (d2.utterance && d2.utterance.id !== lastUtterId) {
+        lastUtterId = d2.utterance.id; heard(d2.utterance.text, "…");
+        const id = d2.utterance.id;   // a reply usually lands within a second or two: if it hasn't after 0.7 s, say a short "mm-hm"
+        if (d2.utterance.text.trim().split(/\s+/).length >= 3 && linkLive && !isEchoDev(d2.utterance.text))
+          setTimeout(() => { if (lastReplyId !== id && performance.now() > speakingUntil) narrate(ACKS_DEV[Math.floor(Math.random() * ACKS_DEV.length)]); }, 700);
+      }
+      if (d2.reply && d2.reply.id !== lastReplyId) { lastReplyId = d2.reply.id; onReply(d2.reply); }
+      if (d2.signal && d2.signal.ts !== lastSignalTs) {
+        lastSignalTs = d2.signal.ts;
+        if (d2.signal.signal === "stop") { stopSpeaking(); heard("✋", "ok, quiet"); }
+        else if (d2.signal.signal === "end") { try { sessionStorage.removeItem("spanner-session"); } catch { /* private window */ } location.href = "./"; return; }
+      }
+      if (fresh) lastDataAt = performance.now();
+      const live = !!lastDataAt && performance.now() - lastDataAt < 6000;
+      if (live !== linkLive) { linkLive = live; if (live) hidePair(); else showPair(); }
+      reportState();
+    } catch { /* keep polling */ }
+    await sleep(300);
+  }
+}
+
 // ------------------------------------------------------------------ loop + boot
 renderer.setAnimationLoop(() => {
   const now = performance.now();
@@ -410,5 +601,7 @@ setXray(true); await frameAll(); setXray(false);
 if (QP.get("explode") === "1") { await setExplode(1); await frameAll(); }
 if (QP.get("xray") === "1") setXray(true);
 if (QP.get("select") && parts[QP.get("select")]) { select(QP.get("select")); await focusPart(QP.get("select")); }
-if (INSTANT || QP.get("wake") === "0") $("wake").remove();
-else { const w = $("wake"); const wake = () => { w.remove(); voiceOn = true; startMic(); narrate(`${device.name}. ${device.fact} Say take it apart.`); }; w.addEventListener("pointerdown", wake, { once: true }); }
+if (INSTANT || QP.get("wake") === "0" || REMOTE) {
+  $("wake").remove();
+  if (REMOTE) { voiceOn = true; $("listen").textContent = "PHONE MIC"; $("nt").textContent = device.fact + " Tell me what's wrong with it."; narrate(`${device.name}. What's wrong with it?`); remoteLoop(); }
+} else { const w = $("wake"); const wake = () => { w.remove(); voiceOn = true; startMic(); narrate(`${device.name}. ${device.fact} Say take it apart.`); }; w.addEventListener("pointerdown", wake, { once: true }); }

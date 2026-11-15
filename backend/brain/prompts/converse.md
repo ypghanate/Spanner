@@ -7,11 +7,11 @@ Decide two things together: what to say back, and what to do.
 **Actions** (pick exactly one):
 - `none`: just talk (answering a question, chatting, reassuring).
 - `pick_device`: only on the "what do you want to fix" screen, when they name a device. Set `device` (keyboard, iphone15, momentum4, ipad11). If they also described a keyboard fault, use `plan_repair` instead.
-- `plan_repair`: they described what is wrong with their keyboard ("my space bar rattles", "the E key is sticky", "it won't turn on") or want a different repair. Put the fault in their words in `complaint`. Keep `say` empty: planning speaks for itself.
+- `plan_repair`: they described what is wrong with their keyboard ("my space bar rattles", "the E key is sticky", "it won't turn on") or with the device that is open ("the screen is cracked", "the battery drains fast", "the ear cushion is torn"), or want a different repair. Put the fault in their words in `complaint`. Keep `say` empty: planning speaks for itself.
 - `start`: begin the repair (a plan exists and no step is showing).
 - `next` / `back` / `repeat`: move between steps, or say the current one again. "done", "finished", "got it", "ok what now" while on a step usually mean `next`.
 - `stop`: stop talking / pause.
-- `show_part`: they want to look at a part. Set `part` (socket, switch, keycap, pcb, plate, case, battery, usb, led, stabilizer, spring).
+- `show_part`: they want to look at a part. Set `part`: when a device is open, the exact part name from its list in the live state; for the keyboard: socket, switch, keycap, pcb, plate, case, battery, usb, led, stabilizer, spring.
 - `take_apart`, `reassemble`, `xray`, `zoom_in`, `zoom_out`, `show_mistake` (what can go wrong here), `specs`, `sources`.
 - `shop_parts` (buy or price a replacement part) / `shop_keyboards` (other keyboards to buy instead).
 

@@ -1179,6 +1179,7 @@ function isEcho(text, graceMs = 1500) {
   if (STOCK.test(text)) return true;
   if (performance.now() > speakingUntil + graceMs || !currentSpeech) return false;
   const a = echoWords(text), b = echoWords(currentSpeech); if (!a.size) return true;
+  if (a.size < 3) return false;          // "start", "next", "stop": a short command is you, even if Spanner just said the word
   let n = 0; for (const w of a) if (b.has(w)) n++; return n / a.size >= 0.6;
 }
 let lastActed = { text: "", t: 0 };
@@ -1768,7 +1769,7 @@ const FAULT_WORDS = /(keys?|keycaps?|space ?bar|enter|shift|backspace|switch(es
 async function chooseDevice(dev, raw = "") {
   if (!pickOpen) return;
   pickOpen = false; $("pick").style.opacity = 0; setTimeout(() => { $("pick").style.display = "none"; }, 600);
-  if (dev !== "keyboard") { narrate("Opening the " + { iphone15: "iPhone 15", momentum4: "Momentum 4", ipad11: "iPad" }[dev] + "."); setTimeout(() => { location.href = `./device.html?d=${dev}`; }, 900); return; }
+  if (dev !== "keyboard") { narrate("Opening the " + { iphone15: "iPhone 15", momentum4: "Momentum 4", ipad11: "iPad" }[dev] + "."); setTimeout(() => { location.href = `./device.html?d=${dev}&s=${encodeURIComponent(SESSION)}`; }, 900); return; }
   if (!remoteOn && !camOn) { if (QP.get("camera") === "1") await toggleCamera(); else startRemote(); }
   if (FAULT_WORDS.test(raw)) return requestRepair(raw);   // they already said what's wrong: plan it now
   narrate("The keyboard. What's wrong with it?");

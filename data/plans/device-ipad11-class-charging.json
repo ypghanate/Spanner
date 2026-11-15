@@ -1,0 +1,110 @@
+{
+ "status": "ready",
+ "say": "",
+ "title": "iPad (11th gen) charging port cleaning and replacement check",
+ "fault": "",
+ "diagnosis": "Most often an iPad won't charge because of lint packed in the USB-C port or a worn cable or adapter. I'll have you rule those out first, then clean the port and check that nothing is damaged inside it.",
+ "difficulty": "easy",
+ "time_min": 15,
+ "tools_needed": [
+  "Known-good USB-C cable",
+  "Known-good wall adapter",
+  "Wooden or plastic toothpick",
+  "Flashlight or phone torch"
+ ],
+ "safety_notes": [
+  "Never use metal pins or needles in the port, as they can short pins or bend contacts.",
+  "Unplug the cable before cleaning the port.",
+  "Stop and do not charge if the iPad feels hot, or the case looks swollen or bulging."
+ ],
+ "steps": [
+  {
+   "title": "Unplug and power off",
+   "instruction": "Unplug any cable from the iPad and hold the top button to power it off. Remove any case that covers the bottom edge.",
+   "expected_visual_state": "The iPad screen is black, no cable is attached, and the bottom edge is uncovered.",
+   "common_mistakes": [
+    "Cleaning the port while a cable is still plugged in",
+    "Leaving a thick case on that blocks access to the port"
+   ],
+   "focus": [
+    "top_button"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Try a different cable and adapter",
+   "instruction": "Plug a known-good USB-C cable into a different known-good wall adapter, then connect it to the iPad. Leave it for 15 minutes in case the battery is fully drained.",
+   "expected_visual_state": "The iPad is connected to a cable and wall adapter, and a charging battery icon or lightning bolt may appear on screen.",
+   "common_mistakes": [
+    "Using a computer USB port, which may deliver too little power",
+    "Giving up after only a minute with a deeply drained battery"
+   ],
+   "focus": [
+    "usb_c"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Inspect the USB-C port",
+   "instruction": "Unplug the cable and shine a torch into the USB-C port on the bottom edge. Look for lint, dirt or bent contacts.",
+   "expected_visual_state": "The phone camera sees the iPad bottom edge with a light shining into the port, showing the central tongue and any debris.",
+   "common_mistakes": [
+    "Not using enough light to see the lint",
+    "Mistaking the central tongue for damage"
+   ],
+   "focus": [
+    "usb_c",
+    "shell"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Clean out the port",
+   "instruction": "Gently scrape along the inside walls of the port with a wooden toothpick to lift out lint. Do not press on the central tongue.",
+   "expected_visual_state": "A toothpick is in the port and small pieces of lint are visible on its tip or on the table.",
+   "common_mistakes": [
+    "Using a metal pin that can short or bend contacts",
+    "Pushing lint deeper instead of lifting it out",
+    "Pressing hard on the central tongue"
+   ],
+   "focus": [
+    "usb_c"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Re-inspect the port",
+   "instruction": "Shine the torch in again to check the port is clean and the contacts look straight. Blow out any dust with a short puff of air.",
+   "expected_visual_state": "The port interior looks clean with a straight central tongue and no visible debris.",
+   "common_mistakes": [
+    "Using compressed air cans at close range, which can push in moisture",
+    "Missing remaining lint at the very back of the port"
+   ],
+   "focus": [
+    "usb_c"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Test charging",
+   "instruction": "Plug in the known-good cable and adapter firmly, then wait a couple of minutes. Check that the charging icon appears and the battery percentage rises.",
+   "expected_visual_state": "The iPad screen shows a charging lightning bolt on the battery icon, or the percentage is climbing.",
+   "common_mistakes": [
+    "Not pushing the cable in fully so it clicks into place",
+    "Expecting an instant response from a very low battery"
+   ],
+   "focus": [
+    "usb_c",
+    "battery_left",
+    "battery_right"
+   ],
+   "view": "together",
+   "source_ids": []
+  }
+ ]
+}
