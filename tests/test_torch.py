@@ -12,4 +12,4 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_torch_governor_scenarios():
     r = subprocess.run(["node", str(ROOT / "tests" / "torch.test.mjs")], capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "all 10 scenarios pass" in r.stdout
+    assert "all 13 scenarios pass" in r.stdout
