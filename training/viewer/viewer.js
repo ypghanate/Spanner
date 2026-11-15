@@ -1883,7 +1883,10 @@ function placeTwin(obj, kind) {
   const box2 = new THREE.Box3().setFromObject(obj), c2 = box2.getCenter(V3());
   obj.position.sub(c2); obj.position.y += (box2.max.y - box2.min.y) / 2 + 0.6;
   scene.add(obj); objectFlow.twin = obj; objectFlow.twinKind = kind; console.log("twin placed:", kind, size.x.toFixed(1), size.y.toFixed(1), size.z.toFixed(1));
-  controls.target.set(0, (box2.max.y - box2.min.y) / 2 + 0.6, 0); controls.autoRotate = true;
+  // fill ~70% of the panel whatever the object's shape (a tall vacuum and a flat case need different distances)
+  const h = box2.max.y - box2.min.y, w = Math.max(box2.max.x - box2.min.x, box2.max.z - box2.min.z), fov = THREE.MathUtils.degToRad(camera.fov), asp = camera.aspect || 1.6;
+  const dist = Math.max((h / 2) / Math.tan(fov / 2), (w / 2) / (Math.tan(fov / 2) * asp)) / 0.72 + w / 2;
+  const tgt = V3(0, h / 2 + 0.6, 0); flyTo(tgt.clone().add(V3(0.55, 0.32, 0.8).normalize().multiplyScalar(dist)), tgt, 900, true); controls.autoRotate = true;
 }
 function twinFromPhoto(url) {
   new THREE.TextureLoader().load(url, (tex) => {
