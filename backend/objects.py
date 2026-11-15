@@ -28,7 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 OBJECTS = ROOT / "data" / "objects"
 INTAKE_MODEL = os.getenv("OBJECT_INTAKE_MODEL", "claude-haiku-5-5")
 PLAN_MODEL = os.getenv("OBJECT_PLAN_MODEL", "claude-sonnet-5-5")
-TWIN_MODEL = os.getenv("FAL_TWIN_MODEL", "fal-ai/trellis")
+TWIN_MODEL = os.getenv("FAL_TWIN_MODEL", "tripo3d/tripo/v2.5/image-to-3d")   # bake-off 15 Nov: Tripo clean and true to the product; Trellis lumpy
+TWIN_FALLBACK = os.getenv("FAL_TWIN_FALLBACK", "fal-ai/trellis")
 EDIT_MODEL = os.getenv("FAL_EDIT_MODEL", "fal-ai/nano-banana/edit")
 TWIN_CAP_S = int(os.getenv("FAL_TWIN_CAP_S", "240"))
 MAX_STEP_PICTURES = int(os.getenv("OBJECT_STEP_PICTURES", "6"))
@@ -81,9 +82,11 @@ class Job:
     def __init__(self, session: str, text: str):
         self.session, self.first_text = session, text
         self.answers: list[str] = []
+        self.said: list[str] = []           # everything Spanner said in this flow, so no line repeats
         self.intake: Intake | None = None
         self.asked = 0
         self.slug = ""
+        self.fault_slug = ""
         self.dir: Path | None = None
         self.phase: dict[str, dict] = {k: {"status": "pending"} for k in ("intake", "photo", "twin", "plan_web", "plan_video", "pictures")}
         self.photo_url = self.twin_url = ""
@@ -164,7 +167,7 @@ class Job:
         try:
             path = self._download_image(self._image_candidates(name))
             self.photo_url = f"/data/objects/{self.slug}/{path.name}"
-            self.set("photo", "ready", url=self.photo_url); self.record("object_photo", t0, True)
+            self.set("photo", "ready", url=self.photo_url, **{k: v for k, v in self.phase["photo"].items() if k in ("picked", "candidates")}); self.record("object_photo", t0, True)
             _pool.submit(self._guard, "twin", self.run_twin)
         except Exception as e:
             self.set("photo", "failed", error=str(e)[:200]); self.record("object_photo", t0, False)
@@ -203,7 +206,7 @@ class Job:
         try:
             from backend.shop import _tavily
 
-            res = _tavily().search(f"{name} product photo white background", include_images=True, max_results=5)
+            res = _tavily().search(f"{name} product photo white background closed", include_images=True, max_results=6)
             imgs = [i if isinstance(i, str) else i.get("url", "") for i in res.get("images", [])]
             return [u for u in imgs if u][:6]
         except Exception as e:
@@ -211,27 +214,58 @@ class Job:
             return []
 
     def _download_image(self, urls: list[str]) -> Path:
+        """Fetch the candidates in parallel, then let Claude choose the one that will make a good 3D twin: the whole
+        product alone, plain background, nothing floating beside it, no text. One image-to-3D run from the wrong photo
+        makes nonsense, so the choice is worth ~1.5 s."""
+        import base64
         import io
 
         import httpx
         from PIL import Image
 
-        last = "no image url"
-        for u in urls[:8]:
-            if not str(u).startswith("http"):
-                continue
+        def fetch(u):
             try:
-                r = httpx.get(u, timeout=15, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 (Spanner repair coach)"})
+                r = httpx.get(u, timeout=12, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 (Spanner repair coach)"})
                 r.raise_for_status()
                 img = Image.open(io.BytesIO(r.content)).convert("RGB")
-                if img.width < 300 or img.height < 300:
-                    last = f"too small: {u}"; continue
-                img.thumbnail((1600, 1600))
-                out = self.dir / "photo.jpg"; img.save(out, "JPEG", quality=90)
-                return out
+                return (u, img) if img.width >= 300 and img.height >= 300 else None
+            except Exception:
+                return None
+        cands = [c for c in _pool.map(fetch, [u for u in urls[:8] if str(u).startswith("http")]) if c]
+        if not cands:
+            raise RuntimeError("no usable product photo (none of the candidates loaded)")
+        pick = 0
+        if len(cands) > 1:
+            try:
+                import anthropic
+
+                content = []
+                for i, (_, img) in enumerate(cands[:6]):
+                    t = img.copy(); t.thumbnail((512, 512)); buf = io.BytesIO(); t.save(buf, "JPEG", quality=80)
+                    content += [{"type": "text", "text": f"Image {i}:"},
+                                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.standard_b64encode(buf.getvalue()).decode()}}]
+                content.append({"type": "text", "text": "Which image is best for turning this product into ONE solid 3D model? Hard rules: "
+                                "it must show the COMPLETE product as it is sold (for earbuds: the case with both earbuds sitting in it or the "
+                                "case closed; for a vacuum: the whole vacuum), never a single component on its own (one earbud, one cable, "
+                                "one tip). Every part must touch the main body: NEVER parts floating in the air beside or above the product. "
+                                "Plain or white background, no hands, no text, no collage, sharp. If several qualify, prefer the one with "
+                                "the simplest outline. If NO image qualifies, answer NONE. Otherwise answer with the image number only."})
+                r = anthropic.Anthropic(timeout=20, max_retries=1).messages.create(model=INTAKE_MODEL, max_tokens=5, messages=[{"role": "user", "content": content}])
+                verdict = r.content[0].text.strip().upper()
+                if "NONE" in verdict:
+                    raise RuntimeError("no clean single-object photo among the candidates; no twin (the step pictures carry the visuals)")
+                digits = "".join(ch for ch in verdict if ch.isdigit())
+                if digits and int(digits) < len(cands[:6]):
+                    pick = int(digits)
+            except RuntimeError:
+                raise
             except Exception as e:
-                last = f"{u}: {str(e)[:80]}"
-        raise RuntimeError(f"no usable product photo ({last})")
+                print(f"photo pick: {str(e)[:100]}", flush=True)
+        u, img = cands[pick]
+        img.thumbnail((1600, 1600))
+        out = self.dir / "photo.jpg"; img.save(out, "JPEG", quality=90)
+        self.set("photo", "running", picked=u, candidates=len(cands))
+        return out
 
     def run_twin(self) -> None:
         """fal image-to-3D of the product photo. Explicit queue polling with a cap: the queue host dropped for long
@@ -239,28 +273,56 @@ class Job:
         import fal_client
         import httpx
 
-        t0 = time.time(); self.set("twin", "running")
+        t0 = time.time(); self.set("twin", "running", model=TWIN_MODEL)
         try:
             url = fal_client.upload((self.dir / "photo.jpg").read_bytes(), "image/jpeg")
-            handle = fal_client.submit(TWIN_MODEL, arguments={"image_url": url})
-            result = None
-            while time.time() - t0 < TWIN_CAP_S:
+            glb = None
+            for model in (TWIN_MODEL, TWIN_FALLBACK):
                 try:
-                    st = handle.status(with_logs=False)
-                    if type(st).__name__ == "Completed":
-                        result = handle.get(); break
-                except Exception:
-                    pass
-                time.sleep(2)
-            if result is None:
-                raise RuntimeError(f"no 3D model within {TWIN_CAP_S} s")
-            m = result.get("model_mesh") or result.get("model_glb") or {}
-            glb = httpx.get(m["url"], timeout=120).content
+                    glb = self._twin_once(model, url, t0)
+                    self.set("twin", "running", model=model); break
+                except Exception as e:
+                    print(f"twin {model}: {str(e)[:120]}", flush=True)
+                    if time.time() - t0 > TWIN_CAP_S:
+                        raise
+            if glb is None:
+                raise RuntimeError("no 3D model from either model")
             (self.dir / "model.glb").write_bytes(glb)
             self.twin_url = f"/data/objects/{self.slug}/model.glb"
-            self.set("twin", "ready", url=self.twin_url, bytes=len(glb)); self.record("object_twin", t0, True)
+            self.set("twin", "ready", url=self.twin_url, bytes=len(glb), model=self.phase["twin"].get("model")); self.record("object_twin", t0, True)
         except Exception as e:
             self.set("twin", "failed", error=str(e)[:200]); self.record("object_twin", t0, False)
+
+    @staticmethod
+    def _twin_args(model: str, url: str) -> dict:
+        if "trellis" in model:
+            return {"image_url": url, "ss_sampling_steps": 8, "slat_sampling_steps": 8, "mesh_simplify": 0.95, "texture_size": 512}
+        if "hunyuan" in model:
+            return {"input_image_url": url, "textured_mesh": True}
+        return {"image_url": url}
+
+    def _twin_once(self, model: str, url: str, t0: float) -> bytes:
+        import fal_client
+        import httpx
+
+        handle = fal_client.submit(model, arguments=self._twin_args(model, url))
+        result = None
+        while time.time() - t0 < TWIN_CAP_S:
+            try:
+                st = handle.status(with_logs=False)
+                if type(st).__name__ == "Completed":
+                    result = handle.get(); break
+            except Exception:
+                pass
+            time.sleep(2)
+        if result is None:
+            raise RuntimeError(f"no 3D model within {TWIN_CAP_S} s")
+        for k in ("model_mesh", "model_glb", "pbr_model", "base_model", "model"):
+            v = result.get(k)
+            u = v.get("url") if isinstance(v, dict) else (v if isinstance(v, str) else None)
+            if u and str(u).startswith("http"):
+                return httpx.get(u, timeout=180).content
+        raise RuntimeError(f"no mesh in the answer ({sorted(result.keys())})")
 
     def run_plan_web(self) -> None:
         """Tavily finds guides, Claude reads them and writes one procedure: the first plan, fast."""
@@ -357,7 +419,7 @@ class Job:
                 try:
                     r = fal_client.subscribe(EDIT_MODEL, arguments={"prompt": prompt, "image_urls": [url]})
                     img = (r.get("images") or [r.get("image")])[0]["url"]
-                    out = self.dir / f"step{s['index']:02d}.png"; out.write_bytes(httpx.get(img, timeout=60).content)
+                    out = self.dir / f"{self.fault_slug}-step{s['index']:02d}.png"; out.write_bytes(httpx.get(img, timeout=60).content)
                     with self.lock:
                         self.pictures[s["index"]] = f"/data/objects/{self.slug}/{out.name}"
                 except Exception as e:
@@ -391,7 +453,7 @@ class Job:
         _plans[self.session] = {"broken_key": None, "plan": d, "parts_card": None, "plan_id": plan_id, "generic": True,
                                 "object": name, "photo_url": self.photo_url, "twin_url": self.twin_url}
         _latest.setdefault(self.session, {})["plan_id"] = plan_id
-        (self.dir / "plan.json").write_text(json.dumps(d, indent=1), encoding="utf-8")
+        (self.dir / f"plan-{self.fault_slug}.json").write_text(json.dumps(d, indent=1), encoding="utf-8")
 
     def _guard(self, phase: str, fn) -> None:
         try:
@@ -410,38 +472,56 @@ class Job:
         self.set("intake", "ready")
         if self.intake.is_keyboard:
             return {"say": "", **self.public()}        # the viewer hands over to the keyboard flow
-        self.slug = slug_of(f"{self.intake.model or self.intake.object}-{self.intake.fault}")
+        self.slug = slug_of(self.intake.model or self.intake.object)      # the object; the fault picks the plan inside it
+        self.fault_slug = slug_of(self.intake.fault or self.first_text)
         self.dir = OBJECTS / self.slug; self.dir.mkdir(parents=True, exist_ok=True)
         if self.intake.model_question and not self.intake.model:
             return {"say": self.intake.model_question, **self.public()}
         if self._reuse_disk():          # the same object and fault was learned earlier: a real result, served at once
             self._launch(videos_only=True)
-            return {"say": f"The {self.intake.model or self.intake.object}: I've already learned this repair. "
-                           f"{len(self.plan['steps'])} steps. Say start when you're ready.", **self.public()}
+            return {"say": self._fresh(f"The {self.intake.model or self.intake.object}: I've already learned this repair. "
+                                       f"{len(self.plan['steps'])} steps. Say start when you're ready."), **self.public()}
         self._launch()
-        return {"say": self._opening(), **self.public()}
+        return {"say": self._fresh(self._opening()), **self.public()}
+
+    def _matching_plan(self) -> Path | None:
+        """A plan written earlier for this object whose fault reads like this one (6 of 10 content words shared)."""
+        want = _words(self.intake.fault or self.first_text)
+        best, score = None, 0.0
+        for f in self.dir.glob("plan-*.json"):
+            try:
+                stored = _words(json.loads(f.read_text(encoding="utf-8")).get("fault", ""))
+            except Exception:
+                continue
+            if not want or not stored:
+                continue
+            sc = len(want & stored) / max(len(want), len(stored))
+            if sc > score:
+                best, score = f, sc
+        return best if score >= 0.6 else None
 
     def _reuse_disk(self) -> bool:
-        """Everything a previous live run of this exact object + fault left under data/objects/<slug>/."""
+        """What earlier live runs left for this object: the photo, specs and twin always (they don't depend on the fault);
+        a plan and its step pictures only when the fault matches one learned before."""
         d = self.dir
-        if not (d / "plan.json").exists():
+        match = self._matching_plan()
+        if not match and not (d / "photo.jpg").exists():
             return False
         try:
             from backend.coach import _latest, _plans
 
-            plan = json.loads((d / "plan.json").read_text(encoding="utf-8"))
             if (d / "photo.jpg").exists():
                 self.photo_url = f"/data/objects/{self.slug}/photo.jpg"; self.set("photo", "ready", cached=True)
-            else:
-                self.set("photo", "failed", error="no photo from the earlier run")
             if (d / "specs.json").exists():
                 self.specs = json.loads((d / "specs.json").read_text(encoding="utf-8")).get("specs", [])
             if (d / "model.glb").exists():
                 self.twin_url = f"/data/objects/{self.slug}/model.glb"; self.set("twin", "ready", cached=True)
-            else:
-                self.set("twin", "pending")
-            for f in sorted(d.glob("step*.png")):
-                self.pictures[int(f.stem[4:])] = f"/data/objects/{self.slug}/{f.name}"
+            if not match:
+                return False                     # photo and twin reused; the plan for this fault is learned now
+            self.fault_slug = match.stem[len("plan-"):]
+            plan = json.loads(match.read_text(encoding="utf-8"))
+            for f in sorted(d.glob(f"{self.fault_slug}-step*.png")):
+                self.pictures[int(f.stem.rsplit("step", 1)[1])] = f"/data/objects/{self.slug}/{f.name}"
             self.set("pictures", "ready" if self.pictures else "pending", n=len(self.pictures))
             with self.lock:
                 self.plan, self.plan_source = plan, "an earlier run"
@@ -466,21 +546,80 @@ class Job:
         if self.intake.fault_question and not self.intake.fault:
             self.intake.fault = text.strip()
             self._launch()
-            return {"say": self._opening(), **self.public()}
+            return {"say": self._fresh(self._opening()), **self.public()}
         self.answers.append(text.strip()); self.asked += 1
         q = self.next_question()
         if self.plan:
-            return {"say": "Thanks. The steps are ready. Say start when you're ready.", **self.public()}
+            return {"say": self._fresh(self._react(text, "", ready=True)), **self.public()}
         if q:
-            return {"say": "Got it. " + q, **self.public()}
-        return {"say": self._waiting_line(), **self.public()}
+            return {"say": self._fresh(self._react(text, q)), **self.public()}
+        return {"say": self._fresh(self._waiting_line()), **self.public()}
+
+    def _react(self, answer: str, next_q: str, ready: bool = False) -> str:
+        """One spoken turn, written by Claude from the conversation so far: a real reaction to the answer, then the next
+        question (or 'the steps are ready'). Falls back to a plain line if the model is slow."""
+        import anthropic
+
+        name = self.intake.model or self.intake.object
+        hist = "\n".join(f"Spanner: {s}" for s in self.said[-6:])
+        remaining = [q for q in self.intake.questions[self.asked:] if q != next_q]
+        told = any("say start" in x.lower() for x in self.said)
+        goal = (("Just react; they already know to say start, so do not tell them again." if told else
+                 "Tell them the steps are ready and to say start when they're ready.") if ready else
+                f"Then ask this question, in your own words: {next_q}" +
+                (f" If they have in fact already answered it, ask instead the first of these that they haven't: {remaining}" if remaining else ""))
+        try:
+            r = anthropic.Anthropic(timeout=8, max_retries=0).messages.create(
+                model=INTAKE_MODEL, max_tokens=90,
+                system=(f"You are Spanner, a repair coach on a voice call. The person is fixing a {name} ({self.intake.fault}). "
+                        "Reply with ONE or two short spoken sentences: first react to what they just said like a good technician would "
+                        "(what it suggests, briefly), never a bare 'got it'. " + goal + " Never repeat a sentence you already said. "
+                        "No lists, no markdown.\n\nWhat you already said:\n" + (hist or "(nothing yet)")),
+                messages=[{"role": "user", "content": answer}])
+            out = "".join(b.text for b in r.content if b.type == "text").strip()
+            if out:
+                return out
+        except Exception as e:
+            print(f"react: {str(e)[:80]}", flush=True)
+        return ("The steps are ready. Say start when you're ready." if ready else f"Thanks. {next_q}")
+
+    def _fresh(self, line: str) -> str:
+        """Never the same sentence twice in one flow: a repeat becomes a progress line, or a short variant."""
+        if line in self.said:
+            line = self._progress_line() if self.intake else "Still here."
+            if line in self.said:
+                for alt in ("Right.", "Okay.", "Still on it.", "One moment."):
+                    if alt not in self.said:
+                        line = alt; break
+        self.said.append(line)
+        return line
+
+    def _progress_line(self) -> str:
+        """What is done and what is still running, from the real phase states; different every time the state changes."""
+        p = self.phase
+        done = [n for n, k in (("the photo", "photo"), ("the 3D twin", "twin"), ("the guides", "plan_web")) if p[k]["status"] == "ready"]
+        running = [n for n, k in (("the twin", "twin"), ("the guides", "plan_web"), ("two repair videos", "plan_video")) if p[k]["status"] == "running"]
+        name = self.intake.model or self.intake.object
+        parts = []
+        if done:
+            parts.append(f"I have {', '.join(done)} for the {name}.")
+        if running:
+            parts.append(f"Still working on {' and '.join(running)}.")
+        if self.plan and not self.intake.questions[self.asked:]:
+            parts.append("Say start when you're ready.")
+        return " ".join(parts) or f"Still on the {name}."
 
     def _launch(self, videos_only: bool = False) -> None:
         if not videos_only:
-            if self.phase["photo"]["status"] != "pending":
+            if self.phase["plan_web"]["status"] != "pending":
                 return
-            _pool.submit(self._guard, "photo", self.run_photo)
+            if self.phase["photo"]["status"] == "pending":
+                _pool.submit(self._guard, "photo", self.run_photo)
+            elif self.phase["twin"]["status"] == "pending" and self.photo_url:
+                _pool.submit(self._guard, "twin", self.run_twin)          # photo reused from an earlier run, twin still missing
             _pool.submit(self._guard, "plan_web", self.run_plan_web)
+        elif self.phase["photo"]["status"] == "pending":                 # plan reused, but no photo yet: fetch it (the twin follows)
+            _pool.submit(self._guard, "photo", self.run_photo)
         elif self.phase["twin"]["status"] == "pending" and self.photo_url:
             _pool.submit(self._guard, "twin", self.run_twin)
         if os.getenv("GEMINI_API_KEY"):
@@ -496,12 +635,20 @@ class Job:
     def _waiting_line(self) -> str:
         p = self.phase
         if p["plan_web"]["status"] == "running":
-            return "Thanks. I'm still reading the guides, a few more seconds."
+            return self._progress_line()
         if p["plan_web"]["status"] == "failed" and p["plan_video"]["status"] == "running":
             return "Thanks. The written guides were no good; I'm watching two repair videos instead, give me a minute."
         if p["plan_web"]["status"] == "failed" and p["plan_video"]["status"] != "running":
             return "I couldn't find a usable repair guide for that. Tell me the fault in different words and I'll try again."
         return "Thanks."
+
+
+_STOP = {"the", "a", "an", "is", "are", "my", "it", "its", "of", "to", "and", "or", "than", "one", "very", "much", "on", "in",
+         "has", "have", "does", "doesnt", "not", "any", "more", "will", "wont", "be", "been", "with", "that", "this"}
+
+
+def _words(text: str) -> set[str]:
+    return {w for w in re.sub(r"[^a-z0-9 ]", " ", (text or "").lower()).split() if len(w) > 2 and w not in _STOP}
 
 
 def _claude():
@@ -518,7 +665,13 @@ class ObjectReq(BaseModel):
 
 @router.post("/object")
 async def start_object(req: ObjectReq):
-    job = Job(req.session, req.text.strip()[:300])
+    text = req.text.strip()[:300]
+    cur = _jobs.get(req.session)
+    if cur and cur.intake and time.time() - cur.t0 < 90 and not cur.intake.is_keyboard:
+        if _words(text) & _words(cur.first_text) or cur.next_question():   # the same request again, or an answer: join the running job
+            return await asyncio.to_thread(cur.answer, text) if cur.next_question() and not (_words(text) & _words(cur.first_text)) \
+                else {"say": cur._fresh(cur._progress_line()), **cur.public()}
+    job = Job(req.session, text)
     _jobs[req.session] = job
     return await asyncio.to_thread(job.start, job.first_text)
 
