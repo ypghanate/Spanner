@@ -15,13 +15,13 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
 
 const QP = new URLSearchParams(location.search), INSTANT = QP.get("instant") === "1", FX = QP.get("fx") !== "0";
-const CYAN = 0x00e5ff, $ = (id) => document.getElementById(id), V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const CYAN = 0xcaf879 /* the accent, same as the laptop viewer */, $ = (id) => document.getElementById(id), V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const API = QP.get("api") || "";
 
 // ------------------------------------------------------------------ scene (same look as the keyboard hologram)
 const renderer = new THREE.WebGLRenderer({ canvas: $("c"), antialias: true, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75)); renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0x05080f); scene.fog = new THREE.FogExp2(0x05080f, 0.011);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x131a15); scene.fog = new THREE.FogExp2(0x131a15, 0.011);
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 400); camera.position.set(0, 30, 40);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -41,7 +41,7 @@ for (const [r, w, o] of [[19, 0.08, 0.6], [20.4, 0.03, 0.35], [22.5, 0.05, 0.25]
 }
 const composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera));
 const outline = new OutlinePass(new THREE.Vector2(innerWidth, innerHeight), scene, camera); Object.assign(outline, { edgeStrength: 4, edgeGlow: 0.5, edgeThickness: 1.3, pulsePeriod: 0 });
-outline.visibleEdgeColor.set(CYAN); outline.hiddenEdgeColor.set(0x0a5566); composer.addPass(outline);
+outline.visibleEdgeColor.set(CYAN); outline.hiddenEdgeColor.set(0x6f8a45); composer.addPass(outline);
 composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } }, vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
   fragmentShader: "uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (c.r != c.r || c.g != c.g || c.b != c.b || c.a != c.a) c = vec4(0.0,0.0,0.0,1.0); gl_FragColor = vec4(min(c.rgb, vec3(16.0)), c.a); }" }));
 composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.35, 0.4, 1.6)); composer.addPass(new OutputPass());
@@ -78,7 +78,7 @@ function canvasTex(w, h, draw) { const c = document.createElement("canvas"); c.w
 const TEX = {
   screen: () => canvasTex(512, 1024, (g, w, h) => {
     const bg = g.createLinearGradient(0, 0, w, h); bg.addColorStop(0, "#0b2a4a"); bg.addColorStop(0.55, "#071424"); bg.addColorStop(1, "#1a0b2e"); g.fillStyle = bg; g.fillRect(0, 0, w, h);
-    const glow = g.createRadialGradient(w * 0.7, h * 0.3, 10, w * 0.7, h * 0.3, 420); glow.addColorStop(0, "#00e5ff44"); glow.addColorStop(1, "#00000000"); g.fillStyle = glow; g.fillRect(0, 0, w, h);
+    const glow = g.createRadialGradient(w * 0.7, h * 0.3, 10, w * 0.7, h * 0.3, 420); glow.addColorStop(0, "#caf87933"); glow.addColorStop(1, "#00000000"); g.fillStyle = glow; g.fillRect(0, 0, w, h);
     g.lineWidth = 22; g.strokeStyle = "#050607"; g.beginPath(); g.roundRect(11, 11, w - 22, h - 22, 70); g.stroke();   // bezel
     g.fillStyle = "#000"; g.beginPath(); g.roundRect(w / 2 - 70, 44, 140, 38, 19); g.fill();                     // Dynamic Island
     g.fillStyle = "#e6fbff"; g.font = "600 92px system-ui,Segoe UI,Inter,sans-serif"; g.textAlign = "center"; g.fillText("9:41", w / 2, 230);
@@ -176,7 +176,7 @@ function iphone15() {
 }
 TEX.ipad = () => canvasTex(1024, 768, (g, w, h) => {
   const bg = g.createLinearGradient(0, 0, w, h); bg.addColorStop(0, "#102a4a"); bg.addColorStop(0.5, "#0a1a2e"); bg.addColorStop(1, "#2a0f3a"); g.fillStyle = bg; g.fillRect(0, 0, w, h);
-  const glow = g.createRadialGradient(w * 0.3, h * 0.7, 10, w * 0.3, h * 0.7, 520); glow.addColorStop(0, "#00e5ff33"); glow.addColorStop(1, "#00000000"); g.fillStyle = glow; g.fillRect(0, 0, w, h);
+  const glow = g.createRadialGradient(w * 0.3, h * 0.7, 10, w * 0.3, h * 0.7, 520); glow.addColorStop(0, "#caf87926"); glow.addColorStop(1, "#00000000"); g.fillStyle = glow; g.fillRect(0, 0, w, h);
   g.lineWidth = 46; g.strokeStyle = "#050607"; g.beginPath(); g.roundRect(23, 23, w - 46, h - 46, 40); g.stroke();   // bezel
   g.fillStyle = "#e6fbff"; g.font = "600 110px system-ui,Segoe UI,Inter,sans-serif"; g.textAlign = "center"; g.fillText("9:41", w / 2, 300);
   g.font = "500 30px system-ui,Segoe UI,Inter,sans-serif"; g.fillStyle = "#bfeef7"; g.fillText("Saturday 15 November", w / 2, 345);

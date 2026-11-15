@@ -184,12 +184,12 @@
   @media (prefers-reduced-motion:reduce) { .ldot, .wave i { animation:none !important; } }
 
   /* ------------------------------------------------------------ "What do you want to fix?" (first screen) */
-  #pick.first { display:flex; z-index:30; cursor:pointer; } #pick.first .hint::before { background:var(--cyan); box-shadow:0 0 8px var(--cyan); animation:none; }
-  #pick { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:18px; z-index:19; background:#05080F; transition:opacity .6s; }
-  #pick .q { font:300 34px/1.3 system-ui,"Segoe UI",Inter,sans-serif; color:#e6fbff; letter-spacing:.01em; text-align:center; max-width:720px; padding:0 24px; }
-  #pick .hint { font:11px var(--mono); letter-spacing:.3em; color:var(--cyan); opacity:.75; text-transform:uppercase; }
-  #pick .hint::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:#ff3d5a; margin-right:8px; box-shadow:0 0 8px #ff3d5a; animation:blink 1.2s infinite; }
-  #pick .echo { font:13px var(--mono); color:#7fd6e6; min-height:18px; opacity:.85; }
+  #pick.first { display:flex; z-index:30; cursor:pointer; } #pick.first .hint::before { background:var(--muted); box-shadow:none; animation:none; }
+  #pick { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:18px; z-index:19; background:var(--base); transition:opacity .6s; }
+  #pick .q { font-size:36px; font-weight:500; line-height:1.25; color:var(--text); letter-spacing:-.01em; text-align:center; max-width:720px; padding:0 24px; }
+  #pick .hint { font-size:13px; color:var(--muted); display:flex; align-items:center; gap:8px; }
+  #pick .hint::before { content:""; display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--action); box-shadow:0 0 0 4px rgba(202,248,121,.18); animation:blink 1.2s infinite; }
+  #pick .echo { font-size:14px; color:var(--action); min-height:20px; }
 </style>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/build/three.module.js",

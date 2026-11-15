@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-ADAPTER = ROOT / "data" / "models" / "adaption" / "judge"
+ADAPTER = ROOT / "data" / "models" / "adaption" / os.getenv("JUDGE_ADAPTER", "judge")   # judge = run 1, judge2 = run 2
 BASE = os.getenv("JUDGE_BASE_MODEL", "Qwen/Qwen3.5-2B")
 _model = _tok = None
 _adapter_on = True
@@ -30,7 +30,7 @@ def load(adapter: bool = True):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    torch.set_num_threads(max(1, (os.cpu_count() or 4) - 1))
+    torch.set_num_threads(int(os.getenv("JUDGE_THREADS", max(1, (os.cpu_count() or 4) - 1))))   # cap it while the demo server runs
     _tok = AutoTokenizer.from_pretrained(BASE)
     m = AutoModelForCausalLM.from_pretrained(BASE, dtype=torch.float32, low_cpu_mem_usage=True)
     if adapter:
