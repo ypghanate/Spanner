@@ -230,6 +230,8 @@ const ROWP = [{ h: 1.08, tilt: 7 }, { h: 0.98, tilt: 3 }, { h: 0.92, tilt: 0 }, 
 
 // ------------------------------------------------------------------ state
 let pack, plan, card, brokenKey = "F", K, stepIdx = -1, xray = false, touring = false, selected = null, hovered = null;
+// any object learned live (object mode): see the block before the picker
+const objectFlow = { on: false, asking: false, status: null, timer: null, twin: null, twinKind: "", pictures: {}, photoShown: false, glbShown: false };
 let rgbOn = true, voiceOn = false, micOn = false, mistakeOn = false, flying = false, lastInput = performance.now();
 const parts = {};         // name -> { obj, group, base: Vector3 }
 const amount = {};        // group -> explode amount 0..1
@@ -801,7 +803,8 @@ function buildStages() {
 const stageNow = () => (stepIdx >= 0 ? STAGES[stageOf[stepIdx]] : null);
 function setMode(t) {
   const g = stageNow(), el = $("mode");
-  el.textContent = /^(assembled|scanning)$/.test(t) && stepIdx < 0 ? "Auto-follow · keyboard overview"
+  const overview = objectFlow.on ? (objectFlow.status?.model || objectFlow.status?.object || "your object") + " · twin" : "keyboard overview";
+  el.textContent = /^(assembled|scanning)$/.test(t) && stepIdx < 0 ? "Auto-follow · " + overview
     : /^repair/.test(t) && g ? "Auto-follow · " + fillK(g.mode) : t.charAt(0).toUpperCase() + t.slice(1);
 }
 function telemetry() { $("telemetry").textContent = `${Object.keys(parts).length - 1} parts · ${selected ?? "none selected"}`; }
@@ -840,7 +843,7 @@ function setReady() {
   $("helper").textContent = "Your phone stays on camera and voice.\nYour laptop follows the same repair.";
   $("sd").textContent = ""; $("sm").textContent = ""; $("tools").innerHTML = "";
   $("ctaLabel").textContent = "Say “start”"; $("foot").textContent = "The 3D view follows at your pace.";
-  $("sceneTitle").textContent = "Keyboard overview";
+  $("sceneTitle").textContent = objectFlow.on ? (objectFlow.status?.model || "Your object") + " · 3D twin" : "Keyboard overview";
   caption(`Hi, I’m Spanner.\nShow me the keyboard and we’ll begin.`);
   renderStages();
 }
@@ -914,7 +917,7 @@ async function goStep(i, note = "", silent = false) {
   $("sm").textContent = s.common_mistakes?.length ? `⚠ ${s.common_mistakes[0]}` : "";
   warnLearned(s);
   $("tools").innerHTML = (TOOL_OF[s.kind] || "HANDS").split(" · ").map((t) => `<span class="chip">${t}</span>`).join("");
-  dots();
+  renderStepPicture(); dots();
   if (!silent) narrate(`Step ${s.index}. ${s.instruction}`, false);   // the card already shows the short coach line
   await applyState(stateBefore(stepIdx), 450);
   if (id !== runId) return;
@@ -1577,7 +1580,8 @@ async function onReply(r) {
     zoom_out: "zoom out", show_mistake: "show me the mistake", specs: "specs", sources: "sources" };
   switch (r.action) {
     case "pick_device": if (pickOpen && r.device) return chooseDevice(r.device, ""); break;
-    case "plan_repair": closePicker(); return requestRepair(r.complaint || r.text);
+    case "plan_repair": if (objectFlow.asking) return answerObject(r.text); if (!KEYBOARD_WORDS.test(r.complaint || r.text)) return startObject(r.complaint || r.text); closePicker(); return requestRepair(r.complaint || r.text);
+    case "none": if (objectFlow.asking) return answerObject(r.text); break;
     case "start": stopTour(); return goStep(0);
     case "next": stopTour(); return advance();
     case "back": stopTour(); return goStep(stepIdx - 1);
@@ -1774,6 +1778,101 @@ setXray(true); setMode("scanning");
   } catch (e) { console.error("intro / deep link:", e); setXray(false); window.__spannerReady = true; }
 })();
 
+// ------------------------------------------------------------------ any object, live: photo + specs (Linkup/Tavily), twin (fal),
+// sourced plan (web guides, then YouTube), diagnostic questions meanwhile. The keyboard keeps its own hologram; everything
+// else is "object mode": the keyboard hides, the twin stands in its place, the steps play as text + picture + voice.
+const KEYBOARD_WORDS = /key ?board|rk ?6[18]|rk ?84|keycap|space ?bar|\bkeys?\b/i;
+function setObjectMode(on) {
+  for (const p of Object.values(parts)) p.obj.visible = !on;
+  $("fx").classList.toggle("on", !on);         // the bloom is tuned for the keyboard's RGB; a white product twin would blow out
+  setRGB(!on);
+  hideTools(); if (tools.plug) tools.plug.visible = !on; if (dimLabel) dimLabel.div.style.display = on ? "none" : "";
+  for (const c of Object.values(callouts)) c.div.style.display = on ? "none" : "";
+  if (!on && objectFlow.twin) { scene.remove(objectFlow.twin); objectFlow.twin = null; objectFlow.twinKind = ""; }
+}
+function placeTwin(obj, kind) {
+  if (objectFlow.twin) scene.remove(objectFlow.twin);
+  const box = new THREE.Box3().setFromObject(obj), size = box.getSize(V3()), c = box.getCenter(V3());
+  const k = 16 / Math.max(size.x, size.y, size.z, 0.001); obj.scale.multiplyScalar(k);
+  const box2 = new THREE.Box3().setFromObject(obj), c2 = box2.getCenter(V3());
+  obj.position.sub(c2); obj.position.y += (box2.max.y - box2.min.y) / 2 + 0.6;
+  scene.add(obj); objectFlow.twin = obj; objectFlow.twinKind = kind; console.log("twin placed:", kind, size.x.toFixed(1), size.y.toFixed(1), size.z.toFixed(1));
+  controls.target.set(0, (box2.max.y - box2.min.y) / 2 + 0.6, 0); controls.autoRotate = true;
+}
+function twinFromPhoto(url) {
+  new THREE.TextureLoader().load(url, (tex) => {
+    if (objectFlow.twinKind === "glb") return;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const ar = tex.image.width / tex.image.height, h = 12, w = h * ar;
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true }));
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(w + 0.6, h + 0.6), new THREE.MeshBasicMaterial({ color: 0x253027, side: THREE.DoubleSide }));
+    back.position.z = -0.05; const g = new THREE.Group(); g.add(back, plane); placeTwin(g, "photo");
+  });
+}
+async function twinFromGlb(url) {
+  try {
+    const { GLTFLoader } = await import("https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js");
+    new GLTFLoader().load(url, (gltf) => {
+      gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; const m = o.material; if (m) { if ("envMapIntensity" in m) m.envMapIntensity = 0.5; if (m.emissive) m.emissive.setHex(0x000000); if (m.color) m.color.multiplyScalar(0.85); } } });
+      placeTwin(gltf.scene, "glb"); heard("fal", "3D twin ready"); setMode("3D twin · " + (objectFlow.status?.model || ""));
+    }, undefined, (e) => console.warn("twin glb failed:", e?.message || e));
+  } catch (e) { console.warn("GLTFLoader unavailable:", e); }
+}
+function objectSay(text) { if (text) { $("pickq").textContent = text; narrate(text); } }
+async function startObject(raw) {
+  objectFlow.on = true; objectFlow.asking = true; pickOpen = true;
+  $("pickhint").textContent = "listening"; $("pickecho").textContent = "“" + raw.trim() + "”";
+  if (!INSTANT && !remoteOn && !camOn) { if (QP.get("camera") === "1") toggleCamera(); else startRemote(); }
+  try {
+    const r = await fetchT(API + "/coach/object", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: SESSION, text: raw }) }, 30000);
+    const d = await r.json();
+    if (d.is_keyboard) { objectFlow.on = objectFlow.asking = false; return chooseDevice("keyboard", raw); }
+    objectFlow.status = d; objectSay(d.say); heard(raw, (d.model || d.object || "object") + " · learning the repair");
+    objectPoll();
+  } catch (e) { objectFlow.asking = false; objectSay("I couldn't start on that. Say the object and its model again."); }
+}
+async function answerObject(raw) {
+  try {
+    const r = await fetchT(API + "/coach/object/answer", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: SESSION, text: raw }) }, 30000);
+    const d = await r.json(); objectFlow.status = d; objectSay(d.say); heard(raw, "noted");
+  } catch (e) { heard(raw, "couldn't send that"); }
+}
+async function objectPoll() {
+  clearTimeout(objectFlow.timer);
+  if (!objectFlow.on) return;
+  try {
+    const st = await fetchJson(API + "/coach/object?session=" + SESSION, 8000);
+    const prev = objectFlow.status || {}; objectFlow.status = st;
+    if (st.photo_url && !objectFlow.photoShown) {
+      objectFlow.photoShown = true;
+      $("pickecho").innerHTML = `<img src="${API + st.photo_url}" alt="" style="max-width:260px;max-height:200px;border-radius:10px;margin-top:8px;object-fit:contain;background:#fff;padding:6px">`;
+      setObjectMode(true); twinFromPhoto(API + st.photo_url);
+    }
+    if (st.twin_url && !objectFlow.glbShown) { objectFlow.glbShown = true; twinFromGlb(API + st.twin_url); }
+    if (st.pictures && Object.keys(st.pictures).length !== Object.keys(objectFlow.pictures).length) { objectFlow.pictures = st.pictures; renderStepPicture(); }
+    if (st.plan_ready && !chosen) {
+      const pj = await fetchJson(API + "/coach/plan?session=" + SESSION, 10000);
+      if (pj.chosen && pj.plan?.steps?.length) {
+        setObjectMode(true); objectFlow.asking = false;
+        await loadPlan({ plan: pj.plan, parts_card: pj.parts_card, broken_key: "F" }); setObjectMode(true);   // loadPlan re-shows the keyboard's plug
+        $("sessTitle").textContent = st.model || st.object || pj.plan.title; $("sessSub").textContent = (st.fault || "") + (st.plan_source ? " · learned from " + st.plan_source : "");
+        closePicker(); caption(`${pj.plan.steps.length} steps, from ${st.plan_source}. Say “start” when you're ready.`);
+        narrate(`I've got it. ${pj.plan.steps.length} steps, learned from ${st.plan_source}. Say start when you're ready.`, false);
+      }
+    } else if (st.plan_ready && chosen && st.plan_source !== prev.plan_source && prev.plan_source) {
+      const pj = await fetchJson(API + "/coach/plan?session=" + SESSION, 10000);   // the YouTube pass landed: same repair, better steps
+      if (pj.plan?.steps?.length) { const keep = stepIdx; plan = pj.plan; for (const x of plan.steps) if (!x.kind) x.kind = "other"; buildStages(); if (keep >= 0) goStep(Math.min(keep, plan.steps.length - 1), "", true); narrate("I've watched two repair videos and updated the steps.", false); }
+    }
+    const done = st.phases && Object.values(st.phases).every((p) => ["ready", "failed", "skipped"].includes(p.status));
+    if (!done) objectFlow.timer = setTimeout(objectPoll, 3000);
+  } catch { objectFlow.timer = setTimeout(objectPoll, 4000); }
+}
+function renderStepPicture() {
+  const h = $("helper"); if (!objectFlow.on || stepIdx < 0) { if (objectFlow.on) h.innerHTML = ""; return; }
+  const url = objectFlow.pictures[String(plan.steps[stepIdx].index)];
+  h.innerHTML = url ? `<img src="${API + url}" alt="" style="width:100%;border-radius:10px;margin:6px 0 8px;display:block">` : "";
+}
+
 // what do you want to fix? keyboard = the guided repair; the others open their hologram (device.html)
 let pickOpen = false;
 /** Pairing on the question page (nothing behind it is shown yet): the QR for the Spanner app, then the question. */
@@ -1801,13 +1900,8 @@ async function pickByVoice(raw) {   // free speech -> which device; Claude decid
   const t = raw.toLowerCase();
   let dev = /key ?board|rk ?61|keys?|keycap|space ?bar/.test(t) ? "keyboard" : /i ?phone/.test(t) ? "iphone15" : /head ?phone|momentum|sennheiser|ear ?phone/.test(t) ? "momentum4" : /i ?pad|tablet/.test(t) ? "ipad11" : null;
   $("pickecho").textContent = "“" + raw.trim() + "”";
-  if (!dev) {
-    try {
-      const r = await fetchT(API + "/coach/device", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: raw }) }, 12000);
-      const j = r.ok ? await r.json() : {}; dev = j.device && j.device !== "none" ? j.device : null;
-      if (!dev) { $("pickq").textContent = j.say || "I can fix a keyboard, an iPhone 15, Momentum 4 headphones or an iPad. Which one?"; narrate($("pickq").textContent); return; }
-    } catch { $("pickq").textContent = "Say: keyboard, iPhone, headphones, or iPad."; return; }
-  }
+  if (objectFlow.asking) return answerObject(raw);          // mid-conversation about an object: this is an answer
+  if (!dev) return startObject(raw);                        // anything else: Spanner learns it live
   chooseDevice(dev, raw);
 }
 if (QP.get("pick") === "1" && INSTANT) { pickOpen = true; $("pick").style.display = "flex"; }
@@ -1832,3 +1926,4 @@ if (INSTANT || QP.get("wake") === "0" || QP.get("pick") === "0") {
   };
   $("pick").addEventListener("pointerdown", wake, { once: true }); addEventListener("keydown", wake, { capture: true, once: true });
 }
+if (QP.get("object")) { pickOpen = true; $("pick").classList.remove("first"); $("pick").style.display = "flex"; voiceOn = !INSTANT; startObject(QP.get("object")); }   // deep link: ?object=AirPods%20Pro%202...
