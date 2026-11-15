@@ -33,6 +33,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import ValidationError
 
 from . import mocks
+from . import perception as perception_mod
 from .brain import pass1 as pass1_mod
 from .config import get_settings
 from .contracts import (
@@ -41,7 +42,7 @@ from .contracts import (
     LiveResponse, LiveStart, LiveStop, LiveTtsEnd, LiveTtsStart, LiveUtterance, SessionCreate,
     SessionCreated, SessionSummary, Transcript,
 )
-from .session import Session, SessionManager, UnknownSession
+from .session import FrameSnap, Session, SessionManager, UnknownSession
 from .voice import stt as stt_mod
 from .voice import tts as tts_mod
 
@@ -223,6 +224,8 @@ class Orchestrator:
                 log.warning("detect failed for %s", frame_id, exc_info=True)
 
         session.last_frame_jpeg, session.last_frame_id, session.last_detections = jpeg, frame_id, detections
+        if usable:        # blurry or dark frames are useless to Claude: only sharp ones go in the ring
+            session.recent_frames.append(FrameSnap(frame_id, time.time(), jpeg, detections))
 
         keyframe = quality.is_keyframe and usable
         image_path = ""
@@ -248,14 +251,30 @@ class Orchestrator:
 
     # -- the brain (shared by slow loop, /audio and live voice) ----------------
 
-    async def run_brain(self, session: Session, transcript: Transcript | None) -> tuple[Any, BrainResponse]:
-        """Pass 1 -> safety -> Pass 2. Caller must hold session.brain_lock."""
+    async def run_brain(self, session: Session, transcript: Transcript | None,
+                        speech_end_ts: float | None = None) -> tuple[Any, BrainResponse]:
+        """Pass 1 -> safety -> Pass 2. Caller must hold session.brain_lock.
+
+        `speech_end_ts` is when the spoken message arrived (server clock), or None when nobody spoke.
+        On a spoken turn Claude is shown the recent camera frames, a close-up and the YOLO tracks along
+        with the words (backend/perception.py); on a keyframe-only turn just the detector list."""
         st, s = self.stages, get_settings()
-        inp = pass1_mod.build_input(session, transcript)
         session.last_step_check = None                          # never let Pass 2 read a stale check
+        session.perception = session.last_perception_summary = None
+        perception = None
+        try:
+            perception = await perception_mod.gather(
+                session, speech_end_ts if transcript is not None else None,
+                transcript.duration_s if transcript is not None else None)
+        except Exception:
+            log.warning("could not gather the camera view; Claude gets the text only this turn", exc_info=True)
+        session.perception = perception                         # Pass 2 reads this to answer questions
+        session.last_perception_summary = {**perception.summary(), "at": time.time()} if perception else None
+        inp = pass1_mod.build_input(session, transcript, perception)
         check_task = self._start_step_check(session, transcript)  # runs alongside Pass 1
         try:
             report = await call_stage(st.pass1, inp, session.id, st.store,
+                                      (perception.images or None) if perception else None,
                                       timeout=s.claude_timeout_s + 2, session=session, name="pass1")
         except Exception as e:
             if check_task is not None:
@@ -347,6 +366,7 @@ class Orchestrator:
             log.warning("understand failed for %s; skipping slow loop run", job.frame_id, exc_info=True)
             return
         session.observations.append(obs)
+        session.last_observation_at = time.time()
         self.write("observations", {"frame_id": job.frame_id, "ts": time.time(), "json": obs.model_dump_json()})
 
         if session.voice_waiting:
@@ -366,6 +386,7 @@ class Orchestrator:
 
     async def handle_audio(self, session: Session, audio: bytes, filename: str, meta: dict) -> AudioResponse:
         s = get_settings()
+        arrived = time.time()
         session.voice_waiting = True
         try:
             transcript: Transcript | None = None
@@ -385,7 +406,7 @@ class Orchestrator:
                                        "text": transcript.text, "duration_s": transcript.duration_s})
             async with session.brain_lock:
                 try:
-                    _, response = await self.run_brain(session, transcript)
+                    _, response = await self.run_brain(session, transcript, speech_end_ts=arrived)
                 except BrainError:
                     log.warning("brain failed on /audio", exc_info=True)
                     response = BrainResponse(phase=session.phase, say=APOLOGY_BRAIN)
@@ -407,6 +428,7 @@ class Orchestrator:
                 "detections": [d.model_dump() for d in session.last_detections],
                 "observation": st["observations"][-1] if st["observations"] else None,
                 "report": st["last_report"], "response": st["last_response"],
+                "perception": st["last_perception"],
                 "timings": st["timings"], "slow_busy": st["slow_busy"],
                 "voice_waiting": st["voice_waiting"], "live": session.live_conn is not None}
 
@@ -426,7 +448,7 @@ class LiveConnection:
         self.started = False                   # realtime STT stream opened (PCM path only)
         self.keyterms: list[str] = []
         self.tts_mode = "url"                  # "url": replies carry tts_url; "stream": MP3 on this socket
-        self.queue: asyncio.Queue[tuple[str, float, int]] = asyncio.Queue()
+        self.queue: asyncio.Queue[tuple[str, float, int, float]] = asyncio.Queue()
         self.pending = 0                       # utterances being transcribed or answered
         self.seq = 0                           # bumps whenever the user starts or finishes an utterance
         self.speaking_task: asyncio.Task | None = None
@@ -541,31 +563,33 @@ class LiveConnection:
         self.pending -= 1
         self.session.voice_waiting = self.pending > 0
 
-    async def _accept_utterance(self, text: str, duration: float, already_pending: bool = False) -> None:
+    async def _accept_utterance(self, text: str, duration: float, already_pending: bool = False,
+                                arrived: float | None = None) -> None:
+        """`arrived` is when the spoken message reached the server (the camera view is matched to it)."""
         self.seq += 1
         await self.send(LiveFinal(text=text))
         if not already_pending:
             self._begin_pending()
-        self.queue.put_nowait((text, duration, self.seq))
+        self.queue.put_nowait((text, duration, self.seq, time.time() if arrived is None else arrived))
 
     async def _worker(self) -> None:
         while True:
-            text, duration, seq = await self.queue.get()
+            text, duration, seq, arrived = await self.queue.get()
             try:
-                await self._handle_utterance(text, duration, seq)
+                await self._handle_utterance(text, duration, seq, arrived)
             except Exception:
                 log.exception("live utterance failed")
             finally:
                 self._end_pending()
 
-    async def _handle_utterance(self, text: str, duration: float, seq: int) -> None:
+    async def _handle_utterance(self, text: str, duration: float, seq: int, arrived: float) -> None:
         session = self.session
         transcript = Transcript(text=text, language="en", duration_s=duration)
         self.orch.write("transcripts", {"session_id": session.id, "ts": time.time(),
                                         "text": text, "duration_s": duration, "source": "live"})
         async with session.brain_lock:
             try:
-                _, response = await self.orch.run_brain(session, transcript)
+                _, response = await self.orch.run_brain(session, transcript, speech_end_ts=arrived)
             except BrainError:
                 log.warning("brain failed on live utterance", exc_info=True)
                 response = BrainResponse(phase=session.phase, say=APOLOGY_BRAIN)
@@ -617,11 +641,11 @@ class LiveConnection:
         except (ValueError, binascii.Error):
             await self.send(LiveError(code="bad_message", message="audio_b64 is not valid base64"))
             return
-        task = asyncio.create_task(self._process_clip(audio, msg))
+        task = asyncio.create_task(self._process_clip(audio, msg, time.time()))
         self._clip_tasks.add(task)
         task.add_done_callback(self._clip_tasks.discard)
 
-    async def _process_clip(self, audio: bytes, msg: LiveUtterance) -> None:
+    async def _process_clip(self, audio: bytes, msg: LiveUtterance, arrived: float) -> None:
         s = get_settings()
         self._begin_pending()                       # voice_waiting covers transcription too
         enqueued = False
@@ -638,7 +662,7 @@ class LiveConnection:
             if not text:
                 await self._send_reply(BrainResponse(phase=self.session.phase, say=APOLOGY_NO_SPEECH), speak=True)
                 return
-            await self._accept_utterance(text, transcript.duration_s, already_pending=True)
+            await self._accept_utterance(text, transcript.duration_s, already_pending=True, arrived=arrived)
             enqueued = True                         # the worker ends the pending count
         finally:
             if not enqueued:
@@ -758,6 +782,8 @@ DEBUG_HTML = """<!doctype html><meta charset=utf-8><title>Spanner debug</title>
  .card{background:#0b1220;border:1px solid #16314a;border-radius:6px;padding:10px;min-width:300px;flex:1}
  canvas{max-width:100%;border:1px solid #16314a;background:#000} pre{white-space:pre-wrap;margin:0}
  .real{color:#3dffa8}.mock{color:#ffc83d} td{padding:1px 8px 1px 0} .bad{color:#ff3d5a}
+ .pics{display:flex;gap:8px;flex-wrap:wrap} .pics figure{margin:0;max-width:230px} .pics img{max-width:100%;border:1px solid #16314a}
+ figcaption{font-size:11px;color:#8ab}
 </style>
 <h2>Spanner pipeline <span id=sid></span> <span id=phase></span></h2>
 <div class=row>
@@ -768,6 +794,9 @@ DEBUG_HTML = """<!doctype html><meta charset=utf-8><title>Spanner debug</title>
  <div class=card><h2>Observation</h2><pre id=obs></pre></div>
  <div class=card><h2>Situation report</h2><pre id=rep></pre></div>
  <div class=card><h2>Brain response</h2><pre id=resp></pre></div>
+</div>
+<div class=row>
+ <div class=card><h2>What Claude saw on the last spoken turn</h2><div id=percept class=pics>-</div><div id=perceptmeta></div></div>
 </div>
 <script>
 const q=new URLSearchParams(location.search).get('session');
@@ -783,6 +812,8 @@ async function tick(){try{const r=await fetch('/debug/data'+(q?'?session='+q:'')
  window._dets=d.detections;if(d.frame_id&&d.frame_id!==lastFrame){lastFrame=d.frame_id;img.src='/debug/frame/'+d.frame_id+'.jpg?session='+d.session}else draw(d.detections);
  document.getElementById('fid').textContent=d.frame_id||'';
  const show=(id,o)=>document.getElementById(id).textContent=o?JSON.stringify(o,null,2):'-';show('obs',d.observation);show('rep',d.report);show('resp',d.response);
+ const pc=d.perception;document.getElementById('percept').innerHTML=pc&&pc.image_notes.length?pc.image_notes.map((n,i)=>'<figure><img src="/debug/perception/'+i+'.jpg?session='+d.session+'&v='+pc.at+'"><figcaption>'+(i+1)+'. '+n+'</figcaption></figure>').join(''):'-';
+ document.getElementById('perceptmeta').textContent=pc?('YOLO tracks: '+pc.detections+' | text observation age: '+(pc.observation_age_s==null?'fresh':pc.observation_age_s+' s')):'no camera view on the last turn';
  document.getElementById('timings').innerHTML=(d.timings||[]).slice(-12).reverse().map(t=>'<tr class='+(t.ok?'':'bad')+'><td>'+t.stage+'</td><td>'+t.ms+'</td></tr>').join('');
 }catch(e){}}
 tick();setInterval(tick,1000);
@@ -915,6 +946,19 @@ def create_app() -> FastAPI:
         except UnknownSession:
             s = None
         return JSONResponse(json.loads(json.dumps(o.debug_data(s), default=str)))
+
+    @app.get("/debug/perception/{index}.jpg")
+    async def debug_perception(request: Request, index: int, session: str | None = None):
+        """One of the pictures Claude was shown on the last turn (0 = first image, in the order listed)."""
+        o = orch_of(request)
+        try:
+            s = o.sessions.get(session) if session else o.sessions.latest()
+        except UnknownSession:
+            s = None
+        p = s.perception if s is not None else None
+        if p is None or not (0 <= index < len(p.images)):
+            return Response(status_code=404)
+        return Response(p.images[index], media_type="image/jpeg")
 
     @app.get("/debug/frame/{frame_id}.jpg")
     async def debug_frame(request: Request, frame_id: str, session: str | None = None):

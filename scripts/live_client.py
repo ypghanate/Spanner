@@ -102,7 +102,12 @@ async def json_modes(a: argparse.Namespace) -> int:
             try:
                 raw = await asyncio.wait_for(ws.recv(), timeout=0.25)
             except asyncio.TimeoutError:
-                if send_task.done() and time.perf_counter() - quiet_since > a.settle_s:
+                # stop only once everything we asked for has arrived (a slow server, or MOCK_LATENCY_MS,
+                # must not look like silence), then a quiet moment to catch pushed events
+                expected = {"frame_result": a.frames if a.frame else 0,
+                            "final": 1 if a.clip else 0, "response": 1 if a.clip else 0}
+                got_all = all(counts.get(k, 0) >= n for k, n in expected.items())
+                if send_task.done() and got_all and time.perf_counter() - quiet_since > a.settle_s:
                     break
                 continue
             quiet_since = time.perf_counter()

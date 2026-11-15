@@ -1,0 +1,103 @@
+{
+  "dead_key": {
+    "fault": "The {KEY} key no longer registers because its switch has failed; swap the switch.",
+    "diagnosis": "That sounds like a dead switch under the {KEY} key. We will unplug the board, pull the keycap and the switch, and drop in a new one.",
+    "difficulty": "easy", "time_min": 10,
+    "tools_needed": ["keycap puller", "switch puller", "spare switch"],
+    "safety_notes": ["Unplug the keyboard before pulling anything.", "Touch grounded metal first to discharge static."],
+    "steps": [
+      {"title": "Unplug", "instruction": "Unplug the USB-C cable from the keyboard.", "kind": "cable-out", "parts": ["USB-C port"], "expected_visual_state": "No cable is plugged into the USB-C port and the backlight is off.", "common_mistakes": ["Pulling switches while the cable is still plugged in."], "source_ids": []},
+      {"title": "Pull the keycap", "instruction": "Slide the keycap puller under the {KEY} keycap and lift it straight up.", "kind": "keycap-pull", "parts": ["keycap"], "expected_visual_state": "The {KEY} keycap is off and the switch below it is visible.", "common_mistakes": ["Prying at an angle and bending the stem."], "source_ids": []},
+      {"title": "Place the switch puller", "instruction": "Put the two prongs of the switch puller on the top and bottom clips of the {KEY} switch.", "kind": "puller-place", "parts": ["switch"], "expected_visual_state": "A switch puller is gripping the {KEY} switch.", "common_mistakes": ["Putting the prongs on the sides instead of the clips."], "source_ids": []},
+      {"title": "Pull the switch", "instruction": "Squeeze the puller and pull the switch straight up out of its socket.", "kind": "switch-pull", "parts": ["switch", "hot-swap socket"], "expected_visual_state": "The {KEY} switch is out and the empty socket is visible.", "common_mistakes": ["Twisting the switch and bending the pins."], "source_ids": []},
+      {"title": "Check the socket", "instruction": "Look into the empty socket and blow out any dust.", "kind": "socket-inspect", "parts": ["hot-swap socket"], "expected_visual_state": "The socket is clean and its two contacts are flat.", "common_mistakes": ["Pressing on the socket contacts."], "source_ids": []},
+      {"title": "Check the new switch", "instruction": "Check the new switch's two pins are straight.", "kind": "new-switch-inspect", "parts": ["switch pins"], "expected_visual_state": "The spare switch is held up with both pins straight.", "common_mistakes": ["Fitting a switch with a bent pin."], "source_ids": []},
+      {"title": "Line it up", "instruction": "Hold the new switch over the socket with its pins over the holes.", "kind": "switch-align", "parts": ["switch", "hot-swap socket"], "expected_visual_state": "The spare switch hovers over the socket.", "common_mistakes": ["Rotating the switch 180 degrees."], "source_ids": []},
+      {"title": "Press it in", "instruction": "Press the switch straight down until it clicks flush in the plate.", "kind": "switch-insert", "parts": ["switch"], "expected_visual_state": "The new switch sits flush in the plate.", "common_mistakes": ["Pushing on one corner only."], "source_ids": []},
+      {"title": "Refit the keycap", "instruction": "Press the {KEY} keycap back on until it seats.", "kind": "keycap-place", "parts": ["keycap"], "expected_visual_state": "The {KEY} keycap is on and level with its neighbours.", "common_mistakes": ["Seating the keycap crooked."], "source_ids": []},
+      {"title": "Plug in and test", "instruction": "Plug the cable back in and press the {KEY} key three times.", "kind": "cable-in-test", "parts": ["USB-C port"], "expected_visual_state": "The backlight is on and {KEY} types once per press.", "common_mistakes": ["Testing before the keycap is seated."], "source_ids": []}
+    ]
+  },
+  "sticky_key": {
+    "fault": "The {KEY} key is sticky or slow to spring back, usually from dust or a spill under the keycap.",
+    "diagnosis": "A sticky {KEY} is usually dirt under the keycap. We will unplug the board, lift the keycap and blow the switch clean.",
+    "difficulty": "easy", "time_min": 8,
+    "tools_needed": ["keycap puller", "compressed air"],
+    "safety_notes": ["Unplug the keyboard before cleaning.", "Never pour liquid into the keyboard."],
+    "steps": [
+      {"title": "Unplug", "instruction": "Unplug the USB-C cable from the keyboard.", "kind": "cable-out", "parts": ["USB-C port"], "expected_visual_state": "No cable is plugged in and the backlight is off.", "common_mistakes": ["Cleaning with the keyboard still powered."], "source_ids": []},
+      {"title": "Pull the keycap", "instruction": "Lift the {KEY} keycap straight up with the keycap puller.", "kind": "keycap-pull", "parts": ["keycap"], "expected_visual_state": "The {KEY} keycap is off and the switch is visible.", "common_mistakes": ["Prying from one side."], "source_ids": []},
+      {"title": "Blow it clean", "instruction": "Give the {KEY} switch and the plate around it short puffs of compressed air.", "kind": "socket-inspect", "parts": ["switch", "plate"], "expected_visual_state": "The area around the {KEY} switch is free of crumbs and dust.", "common_mistakes": ["Holding the can upside down and spraying liquid."], "source_ids": []},
+      {"title": "Test the stem", "instruction": "Press the switch stem a few times to feel whether it springs back freely.", "kind": "switch-test", "parts": ["switch"], "expected_visual_state": "A finger presses the switch stem and it springs back.", "common_mistakes": ["Pressing with the keycap still half on."], "source_ids": []},
+      {"title": "Refit the keycap", "instruction": "Press the {KEY} keycap back on until it seats.", "kind": "keycap-place", "parts": ["keycap"], "expected_visual_state": "The {KEY} keycap is on and level.", "common_mistakes": ["Seating it crooked."], "source_ids": []},
+      {"title": "Plug in and test", "instruction": "Plug the cable back in and press {KEY} three times.", "kind": "cable-in-test", "parts": ["USB-C port"], "expected_visual_state": "The backlight is on and {KEY} springs back each time.", "common_mistakes": ["Skipping the final test."], "source_ids": []}
+    ]
+  },
+  "missing_keycap": {
+    "fault": "The {KEY} keycap is missing or damaged and needs replacing.",
+    "diagnosis": "The {KEY} keycap needs a replacement. We will check the switch underneath is fine and press a new keycap on.",
+    "difficulty": "easy", "time_min": 5,
+    "tools_needed": ["replacement keycap"],
+    "safety_notes": ["Unplug the keyboard while the switch is exposed."],
+    "steps": [
+      {"title": "Unplug", "instruction": "Unplug the USB-C cable from the keyboard.", "kind": "cable-out", "parts": ["USB-C port"], "expected_visual_state": "No cable is plugged in and the backlight is off.", "common_mistakes": ["Leaving it plugged in while handling the exposed switch."], "source_ids": []},
+      {"title": "Check the switch", "instruction": "Look at the exposed {KEY} switch and check the stem is intact.", "kind": "socket-inspect", "parts": ["switch"], "expected_visual_state": "The {KEY} switch is visible with an intact cross-shaped stem.", "common_mistakes": ["Pressing the stem sideways."], "source_ids": []},
+      {"title": "Fit the keycap", "instruction": "Line the new keycap up over the {KEY} stem and press it straight down until it seats.", "kind": "keycap-place", "parts": ["keycap"], "expected_visual_state": "A keycap sits level on the {KEY} switch.", "common_mistakes": ["Pressing on one corner so the keycap tilts."], "source_ids": []},
+      {"title": "Plug in and test", "instruction": "Plug the cable back in and press {KEY} three times.", "kind": "cable-in-test", "parts": ["USB-C port"], "expected_visual_state": "The backlight is on and {KEY} types once per press.", "common_mistakes": ["Skipping the test."], "source_ids": []}
+    ]
+  },
+  "spacebar_stabilizer": {
+    "fault": "The long {KEY} key rattles or sticks on one side because its stabilizer bar is loose or dirty.",
+    "diagnosis": "A rattling {KEY} is almost always the stabilizer bar underneath. We will lift the keycap and check the bar seats cleanly.",
+    "difficulty": "medium", "time_min": 12,
+    "tools_needed": ["keycap puller", "compressed air"],
+    "safety_notes": ["Unplug the keyboard first.", "Lift long keycaps evenly so the stabilizer bar does not snap."],
+    "steps": [
+      {"title": "Unplug", "instruction": "Unplug the USB-C cable from the keyboard.", "kind": "cable-out", "parts": ["USB-C port"], "expected_visual_state": "No cable is plugged in and the backlight is off.", "common_mistakes": ["Working on the keyboard while powered."], "source_ids": []},
+      {"title": "Pull the keycap", "instruction": "Lift the {KEY} keycap straight up, working the puller along both ends so it comes off evenly.", "kind": "keycap-pull", "parts": ["keycap"], "expected_visual_state": "The {KEY} keycap is off and the stabilizer bar is visible.", "common_mistakes": ["Lifting one end only and bending the stabilizer wire."], "source_ids": []},
+      {"title": "Inspect the stabilizer", "instruction": "Look at the stabilizer bar under the {KEY} key and check both ends sit in their housings.", "kind": "stabilizer", "parts": ["stabilizer"], "expected_visual_state": "The stabilizer wire is visible under the {KEY} key with both ends seated.", "common_mistakes": ["Bending the wire while checking it."], "source_ids": []},
+      {"title": "Blow it clean", "instruction": "Blow short puffs of compressed air along the bar and housings.", "kind": "socket-inspect", "parts": ["stabilizer", "plate"], "expected_visual_state": "The stabilizer bar and its housings are free of dust.", "common_mistakes": ["Spraying liquid by tilting the can."], "source_ids": []},
+      {"title": "Refit the keycap", "instruction": "Press the {KEY} keycap back on evenly, with both ends clicking onto the stabilizer.", "kind": "keycap-place", "parts": ["keycap", "stabilizer"], "expected_visual_state": "The {KEY} keycap is on, level, and does not rock.", "common_mistakes": ["Seating only one end of the stabilizer."], "source_ids": []},
+      {"title": "Plug in and test", "instruction": "Plug the cable back in and press the {KEY} at both ends and the middle.", "kind": "cable-in-test", "parts": ["USB-C port"], "expected_visual_state": "The backlight is on and the {KEY} presses evenly without rattling.", "common_mistakes": ["Only testing the middle of the key."], "source_ids": []}
+    ]
+  },
+  "no_power": {
+    "fault": "The keyboard does not power on or is not detected, so the cable or USB-C port is suspect.",
+    "diagnosis": "When a board will not power up, the cable or the port is the usual cause. We will check the cable first, then the port.",
+    "difficulty": "easy", "time_min": 5,
+    "tools_needed": ["a second USB-C cable"],
+    "safety_notes": ["Do not force the plug into the port."],
+    "steps": [
+      {"title": "Unplug", "instruction": "Unplug the USB-C cable from the keyboard.", "kind": "cable-out", "parts": ["USB-C port"], "expected_visual_state": "The cable is out of the port.", "common_mistakes": ["Yanking the cable at an angle."], "source_ids": []},
+      {"title": "Inspect the port", "instruction": "Look into the USB-C port at the back for lint or bent contacts.", "kind": "other", "parts": ["USB-C port"], "expected_visual_state": "The USB-C port is visible and clear of lint.", "common_mistakes": ["Poking the contacts with metal."], "source_ids": []},
+      {"title": "Swap the cable", "instruction": "Try a different USB-C data cable and plug it in firmly.", "kind": "cable-in-test", "parts": ["USB-C port"], "expected_visual_state": "A different cable is fully seated in the port and the backlight comes on.", "common_mistakes": ["Using a charge-only cable."], "source_ids": []},
+      {"title": "Check the mode switch", "instruction": "Check the mode switch is set to cable, not wireless.", "kind": "other", "parts": ["mode switch"], "expected_visual_state": "The mode switch is slid to the cable position.", "common_mistakes": ["Leaving the switch on wireless."], "source_ids": []}
+    ]
+  },
+  "backlight": {
+    "fault": "The backlight is dead or flickering.",
+    "diagnosis": "A dead backlight is often just the lighting mode. We will check the cable and the lighting settings before opening anything.",
+    "difficulty": "easy", "time_min": 5,
+    "tools_needed": [],
+    "safety_notes": ["Do not open the case on a keyboard that is plugged in."],
+    "steps": [
+      {"title": "Unplug", "instruction": "Unplug the USB-C cable from the keyboard.", "kind": "cable-out", "parts": ["USB-C port"], "expected_visual_state": "The cable is out and the backlight is off.", "common_mistakes": ["Skipping the unplug before checking connections."], "source_ids": []},
+      {"title": "Check the lights", "instruction": "Look at the LEDs under the keys for any that look damaged or dark.", "kind": "other", "parts": ["LED"], "expected_visual_state": "The LEDs under the keys are visible and none are burnt.", "common_mistakes": ["Touching the LEDs."], "source_ids": []},
+      {"title": "Plug in and test", "instruction": "Plug the cable back in and cycle the lighting mode with the Function key combination in the manual.", "kind": "cable-in-test", "parts": ["USB-C port", "backlight"], "expected_visual_state": "The backlight comes on and changes mode.", "common_mistakes": ["Setting the brightness to zero."], "source_ids": []},
+      {"title": "Check the cable", "instruction": "If the lights stay off, try a second USB-C cable.", "kind": "other", "parts": ["USB-C port"], "expected_visual_state": "A different cable is plugged in and the keyboard is powered.", "common_mistakes": ["Testing with the same worn cable."], "source_ids": []}
+    ]
+  },
+  "other_keyboard_fault": {
+    "fault": "A keyboard fault that needs a general inspection.",
+    "diagnosis": "I am not sure what is wrong yet, so we will start by checking the cable and the key area.",
+    "difficulty": "easy", "time_min": 5,
+    "tools_needed": [],
+    "safety_notes": ["Unplug the keyboard before touching anything inside."],
+    "steps": [
+      {"title": "Unplug", "instruction": "Unplug the USB-C cable from the keyboard.", "kind": "cable-out", "parts": ["USB-C port"], "expected_visual_state": "The cable is out and the backlight is off.", "common_mistakes": ["Working while plugged in."], "source_ids": []},
+      {"title": "Look at the keys", "instruction": "Look across the key area for anything loose, cracked or out of place.", "kind": "other", "parts": ["keycap"], "expected_visual_state": "The key area is visible and all keycaps sit level.", "common_mistakes": ["Missing a keycap that sits slightly crooked."], "source_ids": []},
+      {"title": "Check the port", "instruction": "Check the USB-C port for lint or damage.", "kind": "other", "parts": ["USB-C port"], "expected_visual_state": "The USB-C port is visible and clear.", "common_mistakes": ["Poking inside with metal."], "source_ids": []},
+      {"title": "Plug in and test", "instruction": "Plug the cable back in and test the keys.", "kind": "cable-in-test", "parts": ["USB-C port"], "expected_visual_state": "The backlight is on and keys type.", "common_mistakes": ["Skipping the test."], "source_ids": []}
+    ]
+  }
+}

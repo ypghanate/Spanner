@@ -1,20 +1,25 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert as RNAlert, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
 import * as Haptics from "expo-haptics";
+import * as FileSystem from "expo-file-system/legacy";
 import { useVideoPlayer, VideoView } from "expo-video";
+import type { RepairStep } from "../../types/contracts";
 import { camera, hud as hudColors, radius, useTheme } from "../theme";
-import { useSpanner } from "../state/SpannerProvider";
+import { CallView, useSpanner } from "../state/SpannerProvider";
 import { absUrl } from "../lib/config";
 import { Icon, icons, images, Txt } from "../components/ui";
 import {
-  CallHeader, CameraBackdrop, DurationPillStandalone, HudBoxes, PhaseBar, SafetyBanner, SpokenCaption, StepProgressCard, UserCard, VoiceFooter,
+  CallHeader, CameraBackdrop, CameraBox, DurationPillStandalone, FindingCard, HudBoxes, PhaseBar, SafetyBanner, SpokenCaption, StepProgressCard,
+  UserCard, VoiceFooter,
 } from "../components/call";
+import { ControlsSheet, SheetVariant } from "../components/controls";
+import { Diagram2D } from "../components/diagram";
 
-const FRAME_MS = 1000; // contract: about one frame per second
+const CAPTURE_GAP_MS = 400; // pause between photos; the provider throttles the upload to about one coach frame per 1.2 s
 
 const PHASE_TEXT = {
   identifying: "Looking · point the camera at the problem",
@@ -22,35 +27,60 @@ const PHASE_TEXT = {
   researching: "02 / Research · finding the fix",
 } as const;
 
-/** Everything on the live call: diagnose, guided repair, mistake intercept and the 3D / demonstration view. */
+/** Everything on the live call: diagnose, guided repair, mistake intercept and the diagram views. The phone is the laptop's camera. */
 export default function CallScreen() {
   useKeepAwake();
-  const { c, mode, toggle } = useTheme();
+  const { c } = useTheme();
   const st = useSpanner();
   const [perm, requestPerm] = useCameraPermissions();
   const cam = useRef<CameraView>(null);
-  const busy = useRef(false);
+  const cameraOn = useRef(st.cameraOn);
+  cameraOn.current = st.cameraOn;
+  const send = useRef(st.sendCapture);
+  send.current = st.sendCapture;
+  const [sheet, setSheet] = useState(false);
+  const [capErr, setCapErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (perm && !perm.granted && perm.canAskAgain) void requestPerm();
   }, [perm, requestPerm]);
 
-  // One JPEG per second, never while the previous capture is still running.
+  // Photos for the laptop: one at a time (the camera can't take two at once), never while it is switched off.
   useEffect(() => {
     if (!perm?.granted) return;
-    const t = setInterval(async () => {
-      if (busy.current || !cam.current) return;
-      busy.current = true;
-      try {
-        const pic = await cam.current.takePictureAsync({ base64: true, quality: 0.4, skipProcessing: true, shutterSound: false });
-        if (pic?.base64) st.sendFrame(pic.base64);
-      } catch {
-      } finally {
-        busy.current = false;
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let fails = 0;
+    const loop = async () => {
+      if (stop) return;
+      let gap = CAPTURE_GAP_MS;
+      if (cameraOn.current && cam.current) {
+        try {
+          // a camera call that never settles (app backgrounded, view swapped) must not stall the loop for good
+          const shoot = (opts: { quality: number; shutterSound?: boolean; skipProcessing?: boolean }) =>
+            Promise.race([
+              cam.current!.takePictureAsync(opts),
+              new Promise<never>((_, no) => setTimeout(() => no(new Error("camera timeout (is the camera ready?)")), 4000)),
+            ]);
+          // no skipProcessing: it discards `quality`, which sent multi-MB photos several times a second
+          const pic = await shoot({ quality: 0.25, shutterSound: false }).catch(() => shoot({ quality: 0.25 }));
+          fails = 0;
+          setCapErr(null);
+          // photos nothing uploaded are deleted at once so the cache does not fill up
+          if (pic?.uri && !stop && !send.current(pic.uri)) void FileSystem.deleteAsync(pic.uri, { idempotent: true }).catch(() => {});
+        } catch (e) {
+          setCapErr(e instanceof Error ? e.message : String(e));
+          gap = Math.min(3000, 300 * 2 ** Math.min(fails++, 4)); // back off instead of retrying every 120 ms
+        }
       }
-    }, FRAME_MS);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      else if (cameraOn.current && !cam.current) setCapErr("camera view not mounted");
+      if (!stop) timer = setTimeout(loop, gap);
+    };
+    timer = setTimeout(loop, 500); // let the camera warm up
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
   }, [perm?.granted]);
 
   const warn = st.stepStatus === "mistake" || st.alert?.severity === "warn";
@@ -61,56 +91,75 @@ export default function CallScreen() {
   const step = st.plan?.steps.find((s) => s.index === st.currentStep) ?? null;
   const guiding = st.phase === "guiding" || st.phase === "verifying";
   const clipUrl = step?.clip_url ?? [...st.media].reverse().find((m) => m.kind === "clip")?.url ?? null;
-  const explainer = st.explainer && guiding;
-
-  const openMore = () =>
-    RNAlert.alert("Spanner", undefined, [
-      ...(guiding ? [{ text: explainer ? "Back to camera" : "Show 3D view", onPress: () => st.setExplainer(!explainer) }] : []),
-      { text: mode === "dark" ? "Light theme" : "Dark theme", onPress: toggle },
-      { text: "Cancel", style: "cancel" as const },
-    ]);
-
+  const view: CallView = guiding ? st.view : "camera";
+  const understood = st.phase === "researching" && !!st.finding;
   const permitted = !!perm?.granted;
 
-  if (explainer) {
+  const variant: SheetVariant = guiding ? "repair" : st.phase === "diagnosing" || st.phase === "researching" ? "diagnosis" : "basic";
+  const openMore = () => setSheet(true);
+  const controls = <ControlsSheet visible={sheet} variant={variant} onClose={() => setSheet(false)} />;
+
+  if (view !== "camera") {
     return (
       <View style={{ flex: 1, backgroundColor: c.base }}>
-        <CameraBackdrop ref={cam} permitted={permitted} mode={clipUrl ? "pip" : "hidden"} pipTop={250} />
-        <Explainer clipUrl={clipUrl} onMore={openMore} />
+        {view === "split" || view === "demo" ? null : <CameraBackdrop ref={cam} permitted={permitted} mode="hidden" />}
+        <Explainer view={view} cam={cam} permitted={permitted} clipUrl={clipUrl} onMore={openMore} />
+        {controls}
       </View>
     );
   }
 
-  const caption =
-    st.caption || (guiding ? "" : "Show me what’s going wrong.\nYou can just talk to me.");
+  const caption = st.caption || (guiding ? "" : "Show me what’s going wrong.\nYou can just talk to me.");
   const footer = warn
-    ? { action: "Say “I’ve fixed it”", hint: "Tap only once the area is clear" }
+    ? { action: "Say “my hand is clear”", hint: "Tap only once the area is clear" }
     : guiding
       ? { action: "Say “done”", hint: "“Repeat” · “show a diagram”" }
-      : { action: "Say what’s going wrong", hint: "Tap once you’ve explained it" };
+      : understood
+        ? { action: "Say “show me how”", hint: "Tap to continue · or ask a question" }
+        : { action: "Say what’s going wrong", hint: "Tap once you’ve explained it" };
+  const phaseText = understood ? "01 / Diagnose · the problem is understood" : PHASE_TEXT[st.phase as keyof typeof PHASE_TEXT] ?? PHASE_TEXT.diagnosing;
 
   return (
     <View style={{ flex: 1, backgroundColor: camera.surface }}>
       <CameraBackdrop ref={cam} permitted={permitted}>
-        {guiding ? <HudBoxes warn={warn} /> : null}
+        {!st.cameraOn ? (
+          <View style={[StyleSheet.absoluteFill, styles.cameraOff]}>
+            <Txt weight="medium" size={12} color={camera.text}>Camera off · Spanner can’t see</Txt>
+          </View>
+        ) : guiding || st.hud.length ? (
+          <HudBoxes warn={warn} />
+        ) : null}
       </CameraBackdrop>
       <SafeAreaView style={styles.fill} edges={["top"]} pointerEvents="box-none">
         <View style={styles.column} pointerEvents="box-none">
           <CallHeader />
+          {capErr || st.error ? (
+            <Txt size={11} color="#FF3D5A" style={{ marginTop: 8 }}>{capErr ? "Camera: " + capErr : st.error}</Txt>
+          ) : null}
           <View style={{ marginTop: 28, gap: 14 }}>
             {guiding ? (
               <StepProgressCard />
             ) : (
               <>
-                <PhaseBar text={PHASE_TEXT[st.phase as keyof typeof PHASE_TEXT] ?? PHASE_TEXT.diagnosing} />
-                {st.userText ? <UserCard text={st.userText} /> : null}
+                <PhaseBar text={phaseText} />
+                {understood && st.finding ? (
+                  <View style={styles.belowPhase}>
+                    <FindingCard title={st.finding.title} detail={st.finding.detail} />
+                  </View>
+                ) : st.userText ? (
+                  <View style={styles.belowPhase}>
+                    <UserCard text={st.userText} />
+                  </View>
+                ) : null}
               </>
             )}
           </View>
           {!permitted && perm && !perm.canAskAgain ? (
             <Txt size={12} color={hudColors.warn} style={{ marginTop: 16 }}>Camera is off. Enable it in Settings so Spanner can see.</Txt>
           ) : null}
-          {st.error ? <Txt size={11} color={hudColors.danger} style={{ marginTop: 10 }}>{st.error}</Txt> : null}
+          {!st.connected ? (
+            <Txt size={11} color={hudColors.warn} style={{ marginTop: 10 }}>Lost contact with your laptop. Reconnecting…</Txt>
+          ) : null}
 
           <View style={{ flex: 1 }} pointerEvents="none" />
 
@@ -125,47 +174,96 @@ export default function CallScreen() {
       <SafeAreaView edges={["bottom"]} style={{ backgroundColor: c.base }}>
         <VoiceFooter action={footer.action} hint={footer.hint} onMore={openMore} />
       </SafeAreaView>
+      {controls}
     </View>
   );
 }
 
-/** "See how it fits." (image / 3D) or "Watch it once." (clip) with Spanner talking over it. */
-function Explainer({ clipUrl, onMore }: { clipUrl: string | null; onMore: () => void }) {
+const sentences = (t: string) => (t.match(/[^.!?]+[.!?]?/g) ?? []).map((s) => s.trim().replace(/[.!?]$/, "")).filter(Boolean);
+
+const COPY: Record<Exclude<CallView, "camera">, { label: string; title: string }> = {
+  "3d": { label: "3D explanation · voice stays on", title: "See how it fits." },
+  "2d": { label: "2D guide · voice stays on", title: "Follow the chain path." },
+  split: { label: "Camera + guide · voice stays on", title: "Your repair, side by side." },
+  demo: { label: "Demonstration · voice stays on", title: "Watch it once." },
+};
+
+/** 3D view, 2D step board, side-by-side guide and demonstration player, with Spanner talking over them. */
+function Explainer({
+  view,
+  cam,
+  permitted,
+  clipUrl,
+  onMore,
+}: {
+  view: Exclude<CallView, "camera">;
+  cam: React.RefObject<CameraView | null>;
+  permitted: boolean;
+  clipUrl: string | null;
+  onMore: () => void;
+}) {
   const { c, mode } = useTheme();
   const st = useSpanner();
   const step = st.plan?.steps.find((s) => s.index === st.currentStep) ?? null;
-  const illustration =
+  const copy = COPY[view];
+  const object = st.plan?.object ? shortName(st.plan.object) : null;
+  const title = view === "split" && object ? `Your ${object}, side by side.` : copy.title;
+  const render =
     [...st.media].reverse().find((m) => m.kind === "illustration" && (m.step_index == null || m.step_index === st.currentStep))?.url ??
     step?.illustration_url ??
     null;
-  const labels = [...new Set([...st.scene3d.map((x) => x.part), ...(step?.parts ?? [])].filter((x): x is string => !!x))].slice(0, 2);
+  const steps = step ? sentences(step.instruction) : [];
 
   return (
     <SafeAreaView style={styles.fill} edges={["top"]}>
       <View style={styles.column}>
         <View style={styles.exHeader}>
-          <CallHeaderLogo />
+          <Image source={images.logo} style={{ width: 126, height: 22, marginLeft: 10 }} contentFit="contain" />
           <DurationPillStandalone />
         </View>
-        <Txt size={11} color={c.textSecondary} style={{ marginTop: 20 }}>
-          {clipUrl ? "Demonstration · voice stays on" : "3D explanation · voice stays on"}
-        </Txt>
-        <Txt weight="medium" size={26} style={{ marginTop: 6 }}>{clipUrl ? "Watch it once." : "See how it fits."}</Txt>
+        <Txt size={11} color={c.textSecondary} style={{ marginTop: 19 }}>{copy.label}</Txt>
+        <Txt weight="medium" size={26} numberOfLines={1} adjustsFontSizeToFit style={{ marginTop: 19 }}>{title}</Txt>
 
         <View style={styles.stage}>
-          {clipUrl ? (
-            <ClipPlayer url={absUrl(clipUrl)} />
-          ) : (
+          {view === "3d" || (view === "demo" && !clipUrl) ? (
+            <ModelRender uri={render ? absUrl(render) : null} dark={mode === "dark"} />
+          ) : null}
+
+          {view === "3d" ? <Labels step={step} /> : null}
+
+          {view === "demo" ? (
             <>
-              <Image
-                source={illustration ? { uri: absUrl(illustration) } : mode === "dark" ? images.model : images.modelLight}
-                style={StyleSheet.absoluteFill}
-                contentFit="contain"
-              />
-              {labels[0] ? <ModelLabel text={labels[0]} style={{ left: 0, top: 68 }} /> : null}
-              {labels[1] ? <ModelLabel text={labels[1]} style={{ right: 0, bottom: 46 }} /> : null}
+              {clipUrl ? <ClipPlayer url={absUrl(clipUrl)} /> : null}
+              <CameraBox ref={cam} permitted={permitted} variant="pip" style={styles.pip} />
             </>
-          )}
+          ) : null}
+
+          {view === "2d" ? (
+            <>
+              <View style={styles.board}>
+                <Diagram2D width={354} />
+              </View>
+              <StepChip text={steps.length ? `1 · ${steps[0]}` : "1 · Lift the chain"} style={{ left: 24, top: 24, minWidth: 141 }} />
+              {steps.length === 0 || steps.length > 1 ? (
+                <StepChip text={steps.length ? `2 · ${steps[1]}` : "2 · Rest it on the top teeth"} style={{ right: 24, bottom: 8, minWidth: 196 }} />
+              ) : null}
+            </>
+          ) : null}
+
+          {view === "split" ? (
+            <View style={styles.split}>
+              <CameraBox ref={cam} permitted={permitted} variant="split" style={styles.splitCamera} />
+              <View style={[styles.splitPanel, { backgroundColor: c.raised }]}>
+                <Txt weight="medium" size={10} color={c.textSecondary} style={{ position: "absolute", left: 16, top: 20 }}>2D GUIDE</Txt>
+                <Txt weight="medium" size={15} numberOfLines={4} style={{ position: "absolute", left: 16, top: 54, width: 154 }}>
+                  {steps.length ? steps[0] + "." : "Lay the chain on the top teeth."}
+                </Txt>
+                <View style={{ position: "absolute", left: 174, top: 20 }}>
+                  <Diagram2D width={164} />
+                </View>
+              </View>
+            </View>
+          ) : null}
         </View>
 
         {st.caption ? <SpokenCaption text={st.caption} speaking={st.speaking} listening={st.level > 0.15} /> : null}
@@ -177,17 +275,45 @@ function Explainer({ clipUrl, onMore }: { clipUrl: string | null; onMore: () => 
   );
 }
 
-function CallHeaderLogo() {
-  return <Image source={images.logo} style={{ width: 126, height: 22, marginLeft: 10 }} contentFit="contain" />;
+/** "Royal Kludge RK61 60% mechanical keyboard (hot-swappable)" -> "keyboard" */
+const shortName = (o: string) => {
+  const base = o.replace(/\s*\(.*\)\s*$/, "").trim().split(/\s+/);
+  return (base[base.length - 1] ?? o).toLowerCase();
+};
+
+/** Part ids from the plan's 3D commands read nicely: "switch_F" -> "Switch F". */
+const partLabel = (p: string) => {
+  const t = p.replace(/_/g, " ").trim();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
+
+function ModelRender({ uri, dark }: { uri: string | null; dark: boolean }) {
+  return <Image source={uri ? { uri } : dark ? images.model : images.modelLight} style={StyleSheet.absoluteFill} contentFit="contain" />;
 }
 
-function ModelLabel({ text, style }: { text: string; style: object }) {
+/** Part tags on the 3D render, from the laptop plan's 3D commands for this step. */
+function Labels({ step }: { step: RepairStep | null }) {
+  const st = useSpanner();
+  const labels = [...new Set([...st.scene3d.map((x) => x.part), ...(step?.parts ?? [])].filter((x): x is string => !!x))].slice(0, 2).map(partLabel);
+  return (
+    <>
+      {labels[0] ? <Tag text={labels[0]} style={{ left: 24, top: 68 }} /> : null}
+      {labels[1] ? <Tag text={labels[1]} style={{ right: 24, bottom: 16 }} /> : null}
+    </>
+  );
+}
+
+function Tag({ text, style }: { text: string; style: object }) {
   const { c } = useTheme();
   return (
     <View style={[{ position: "absolute", height: 30, borderRadius: radius.r8, backgroundColor: c.raised, paddingHorizontal: 12, justifyContent: "center" }, style]}>
       <Txt weight="medium" size={12}>{text}</Txt>
     </View>
   );
+}
+
+function StepChip({ text, style }: { text: string; style: object }) {
+  return <Tag text={text.length > 34 ? text.slice(0, 33).trimEnd() + "…" : text} style={style} />;
 }
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -210,7 +336,7 @@ function ClipPlayer({ url }: { url: string }) {
     setPlaying(!playing);
   };
   return (
-    <View style={StyleSheet.absoluteFill}>
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} />
       <View style={styles.playback}>
         <Pressable onPress={toggle} accessibilityLabel={playing ? "Pause" : "Play"} style={styles.playBtn}>
@@ -231,10 +357,17 @@ function ClipPlayer({ url }: { url: string }) {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   column: { flex: 1, paddingHorizontal: 24, paddingTop: 18, paddingBottom: 12 },
+  belowPhase: { marginTop: 59 }, // 14 (gap) + 59 = the design's 73 below the phase bar
+  cameraOff: { backgroundColor: camera.surface, alignItems: "center", justifyContent: "center" },
   exHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", height: 36 },
-  stage: { flex: 1, marginHorizontal: -24, marginVertical: 12 },
-  playback: { position: "absolute", left: 24, right: 24, bottom: 0, height: 48, borderRadius: radius.r12, backgroundColor: camera.surface, flexDirection: "row", alignItems: "center", gap: 10, paddingRight: 12 },
+  stage: { flex: 1, marginHorizontal: -24, marginTop: 7, marginBottom: 12 },
+  pip: { position: "absolute", right: 24, top: 16, width: 120, height: 160 },
+  board: { position: "absolute", left: 24, top: 12 },
+  split: { paddingTop: 2, paddingHorizontal: 24, gap: 16 },
+  splitCamera: { height: 198 },
+  splitPanel: { height: 184, borderRadius: radius.r12, overflow: "hidden" },
+  playback: { position: "absolute", left: 24, right: 24, bottom: 10, height: 48, borderRadius: radius.r12, backgroundColor: camera.surface, flexDirection: "row", alignItems: "center", gap: 10, paddingRight: 12 },
   playBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginLeft: 2 },
-  pbTrack: { height: 3, borderRadius: radius.r2, backgroundColor: "#354137", marginTop: 8, overflow: "hidden" },
+  pbTrack: { height: 3, borderRadius: radius.r2, backgroundColor: camera.track, marginTop: 8, overflow: "hidden" },
   pbFill: { height: 3, backgroundColor: camera.accent },
 });

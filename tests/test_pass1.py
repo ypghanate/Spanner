@@ -147,12 +147,13 @@ def test_call_claude_request_shape(monkeypatch):
     out = run(pass1.call_claude(inp("which key")))
     assert out == report()
     kw = parse.kwargs
-    assert kw["model"] == "claude-haiku-5-5"
+    assert kw["model"] == "claude-haiku-5-5", "no pictures: the cheap text model"
     assert kw["output_format"] is SituationReport
     assert kw["thinking"] == {"type": "disabled"}
     assert kw["output_config"] == {"effort": "low"}
     assert kw["timeout"] == 10.0 and kw["max_tokens"] >= 1024
-    assert kw["system"] == pass1.load_system_prompt()
+    assert kw["system"] == [{"type": "text", "text": pass1.load_system_prompt(),
+                             "cache_control": {"type": "ephemeral"}}], "the fixed system prompt is cached"
     assert kw["messages"] == [{"role": "user", "content": pass1.render_user(inp("which key"))}]
     for banned in ("temperature", "top_p", "top_k"):
         assert banned not in kw, "Haiku 5.5 rejects sampling parameters"
@@ -428,3 +429,207 @@ def test_eval_only_counts_adaption_as_configured_with_the_pass1_model_id(monkeyp
     assert ev.adaption_configured() is False
     set_env(monkeypatch, PASS1_ADAPTION_MODEL_ID="pass1-ft")
     assert ev.adaption_configured() is True
+
+
+# --- what the camera and detector add to a turn ---------------------------------
+
+import base64 as _b64  # noqa: E402
+
+from backend.contracts import Box, Detection  # noqa: E402
+from backend.perception import Perception  # noqa: E402
+from backend.session import FrameSnap  # noqa: E402
+
+
+def d(label="keyboard", score=0.91, x=0.2, y=0.3, w=0.5, h=0.4, tid=3) -> Detection:
+    return Detection(label=label, score=score, box=Box(x=x, y=y, w=w, h=h), track_id=tid)
+
+
+def seen(**extra) -> pass1.Pass1Input:
+    return inp("is this the right switch").model_copy(update={
+        "detections": [d()], "observation_age_s": 4.2,
+        "image_notes": ["earlier frame, 3.0 s before the latest", "latest frame, 0.3 s old",
+                        "close-up of keyboard#3 from the latest frame"], **extra})
+
+
+def test_inputs_without_a_perception_render_exactly_as_before():
+    plain = inp("which key")
+    text = pass1.render_user(plain)
+    assert "IMAGES ATTACHED" not in text and "DETECTOR" not in text and "seen " not in text.split("USER SAID")[0]
+    assert plain.detections == [] and plain.image_notes == [] and plain.observation_age_s is None
+
+
+def test_render_with_a_perception_adds_the_age_images_and_detector_lines():
+    text = pass1.render_user(seen())
+    lines = text.splitlines()
+    obs_lines = [l for l in lines if l.startswith("  [")]
+    assert obs_lines[0].endswith("confidence: 0.82"), "older observations carry no age"
+    assert obs_lines[1].endswith("confidence: 0.78 | seen 4.2 s ago"), "only the newest observation is tagged"
+    i = lines.index(next(l for l in lines if l.startswith("IMAGES ATTACHED")))
+    assert lines[i] == ("IMAGES ATTACHED (in order): 1. earlier frame, 3.0 s before the latest; "
+                        "2. latest frame, 0.3 s old; 3. close-up of keyboard#3 from the latest frame")
+    assert lines[i + 1] == "DETECTOR (YOLO, latest frame): keyboard#3 0.91 x=0.20 y=0.30 w=0.50 h=0.40"
+    assert lines[i + 2].startswith('USER SAID: "is this the right switch"'), "speech comes last"
+
+
+def test_detector_line_says_none_when_pictures_are_attached_but_nothing_was_detected():
+    text = pass1.render_user(seen(detections=[]))
+    assert "DETECTOR (YOLO, latest frame): none" in text
+
+
+def test_detections_alone_add_a_detector_line_and_no_images_line():
+    text = pass1.render_user(inp("hello").model_copy(update={"detections": [d()]}))
+    assert "DETECTOR (YOLO, latest frame): keyboard#3" in text and "IMAGES ATTACHED" not in text
+
+
+def test_detector_line_is_sorted_by_confidence_capped_and_handles_missing_track_ids():
+    dets = [d("mouse", 0.30, tid=None), d("keyboard", 0.95, tid=1)] + [d("cup", 0.5 - i / 100, tid=10 + i) for i in range(14)]
+    line = next(l for l in pass1.render_user(inp("x").model_copy(update={"detections": dets})).splitlines()
+                if l.startswith("DETECTOR"))
+    parts = line.split(": ", 1)[1].split("; ")
+    assert len(parts) == pass1.MAX_DETECTIONS_SHOWN == 12
+    assert parts[0].startswith("keyboard#1 0.95") and "mouse" not in line, "weakest detections are dropped"
+
+
+def test_a_mouse_without_a_track_id_is_written_without_a_hash():
+    line = next(l for l in pass1.render_user(inp("x").model_copy(update={"detections": [d("mouse", 0.8, tid=None)]})).splitlines()
+                if l.startswith("DETECTOR"))
+    assert "mouse 0.80 x=" in line and "#" not in line
+
+
+def test_the_perception_fields_survive_json_logging_without_any_image_bytes():
+    restored = pass1.Pass1Input.model_validate_json(seen().model_dump_json())
+    assert restored == seen()
+    assert "jpeg" not in seen().model_dump_json()
+
+
+def test_build_input_copies_the_perception_in():
+    s = Session(id="s", phase="guiding")
+    p = Perception(snaps=[FrameSnap("f", 1.0, b"x", [d()])], detections=[d()], observation_age_s=2.5,
+                   image_notes=["latest frame, 0.2 s old"])
+    built = pass1.build_input(s, None, p)
+    assert built.detections == [d()] and built.observation_age_s == 2.5 and built.image_notes == ["latest frame, 0.2 s old"]
+    plain = pass1.build_input(s, None)
+    assert plain.detections == [] and plain.observation_age_s is None and plain.image_notes == []
+
+
+# --- sending the pictures to Claude ----------------------------------------------------
+
+def test_call_claude_puts_the_images_first_then_the_text(monkeypatch):
+    client, parse = parse_client(ok_message(report()))
+    monkeypatch.setattr(pass1, "_get_client", lambda: client)
+    imgs = [b"\xff\xd8earlier", b"\xff\xd8latest", b"\xff\xd8closeup"]
+    run(pass1.call_claude(seen(), imgs))
+    content = parse.kwargs["messages"][0]["content"]
+    assert [b["type"] for b in content] == ["image", "image", "image", "text"]
+    for block, raw in zip(content[:3], imgs):
+        assert block["source"]["type"] == "base64" and block["source"]["media_type"] == "image/jpeg"
+        assert _b64.b64decode(block["source"]["data"]) == raw
+    assert content[3]["text"] == pass1.render_user(seen())
+    assert parse.kwargs["messages"][0]["role"] == "user" and parse.kwargs["messages"][-1]["role"] == "user"
+    assert parse.kwargs["model"] == "claude-sonnet-5-5" and "temperature" not in parse.kwargs
+    assert parse.kwargs["thinking"] == {"type": "between_tools"}, "Sonnet 5.5 rejects thinking disabled"
+    assert parse.kwargs["output_config"] == {"effort": "low"}
+
+
+def test_call_claude_without_images_keeps_the_plain_text_content(monkeypatch):
+    client, parse = parse_client(ok_message(report()))
+    monkeypatch.setattr(pass1, "_get_client", lambda: client)
+    run(pass1.call_claude(inp("which key")))
+    assert parse.kwargs["messages"][0]["content"] == pass1.render_user(inp("which key"))
+    run(pass1.call_claude(inp("which key"), []))
+    assert isinstance(parse.kwargs["messages"][0]["content"], str), "an empty image list is text-only too"
+
+
+def test_run_forwards_the_images_to_claude_only_when_there_are_some(monkeypatch):
+    got = []
+
+    async def fake(i, images=None):
+        got.append(images)
+        return report()
+    monkeypatch.setattr(pass1, "call_claude", fake)
+    run(pass1.run(seen(), "s", store=MockStore(), images=[b"a", b"b"]))
+    run(pass1.run(inp("x"), "s", store=MockStore()))
+    assert got == [[b"a", b"b"], None]
+
+
+def test_the_fine_tuned_backend_never_receives_images_but_still_sees_the_detections(monkeypatch):
+    adaption_env(monkeypatch)
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return chat_reply(report(summary="from adaption").model_dump_json())
+    adaption_client(monkeypatch, handler)
+    claude_calls = stub_claude(monkeypatch, report(summary="from claude"))
+    out = run(pass1.run(seen(), "s", store=MockStore(), images=[b"\xff\xd8x"]))
+    assert out.summary == "from adaption" and claude_calls == []
+    user = bodies[0]["messages"][1]["content"]
+    assert isinstance(user, str) and "DETECTOR (YOLO, latest frame): keyboard#3" in user
+    assert "base64" not in json.dumps(bodies[0])
+
+
+def test_logged_calls_keep_the_notes_but_never_the_picture_bytes(monkeypatch):
+    async def fake(i, images=None):
+        return report()
+    monkeypatch.setattr(pass1, "call_claude", fake)
+    store = MockStore()
+    img = b"\xff\xd8SECRET-PIXELS"
+    run(pass1.run(seen(), "s", store=store, images=[img]))
+    row = store.read("pass1_calls")[0]
+    blob = json.dumps(row)
+    assert "latest frame, 0.3 s old" in row["input_json"] and "keyboard" in row["input_json"]
+    assert "SECRET-PIXELS" not in blob and _b64.b64encode(img).decode() not in blob
+    assert "SECRET-PIXELS" not in (config.get_settings().training_data_dir / "raw" / "pass1_calls.jsonl").read_text()
+
+
+def test_the_system_prompt_explains_the_pictures_and_the_detector():
+    p = pass1.load_system_prompt()
+    for needle in ("IMAGES ATTACHED", "DETECTOR (YOLO)", "seen N s ago", "trust them over", "this", "earlier frame"):
+        assert needle in p, needle
+
+
+# --- which model, thinking and effort (cost) --------------------------------------------------------
+
+def test_pictures_go_to_the_vision_model_and_plain_text_stays_on_the_cheap_one():
+    assert pass1.model_for(True) == "claude-sonnet-5-5"
+    assert pass1.model_for(False) == "claude-haiku-5-5"
+
+
+def test_the_vision_model_can_be_switched_off_with_an_empty_setting(monkeypatch):
+    set_env(monkeypatch, PASS1_VISION_MODEL="")
+    assert pass1.model_for(True) == "claude-haiku-5-5" == pass1.model_for(False)
+    set_env(monkeypatch, PASS1_VISION_MODEL="claude-opus-5-5")
+    assert pass1.model_for(True) == "claude-opus-5-5" and pass1.model_for(False) == "claude-haiku-5-5"
+
+
+@pytest.mark.parametrize("model,expected", [
+    ("claude-sonnet-5-5", {"type": "between_tools"}),
+    ("claude-haiku-5-5", {"type": "disabled"}),
+    ("claude-opus-5-5", None),                 # thinking can't be disabled there: leave the model's default
+    ("claude-fable-5-2", None),
+])
+def test_thinking_is_set_the_way_each_model_accepts(model, expected):
+    assert pass1.thinking_for(model) == expected
+
+
+def test_a_model_without_a_thinking_setting_is_called_without_the_field(monkeypatch):
+    set_env(monkeypatch, PASS1_VISION_MODEL="claude-opus-5-5")
+    client, parse = parse_client(ok_message(report()))
+    monkeypatch.setattr(pass1, "_get_client", lambda: client)
+    run(pass1.call_claude(seen(), [b"\xff\xd8x"]))
+    assert "thinking" not in parse.kwargs and parse.kwargs["model"] == "claude-opus-5-5"
+
+
+def test_sonnet_is_never_sent_the_thinking_disabled_setting(monkeypatch):
+    client, parse = parse_client(ok_message(report()))
+    monkeypatch.setattr(pass1, "_get_client", lambda: client)
+    run(pass1.call_claude(seen(), [b"\xff\xd8x"]))
+    assert parse.kwargs["thinking"] != {"type": "disabled"}
+
+
+def test_the_dataset_teacher_still_uses_the_text_model(monkeypatch):
+    """call_claude(inp) with no pictures (make_dataset's teacher) must stay on Haiku, not Sonnet."""
+    client, parse = parse_client(ok_message(report()))
+    monkeypatch.setattr(pass1, "_get_client", lambda: client)
+    run(pass1.call_claude(inp("x")))
+    assert parse.kwargs["model"] == "claude-haiku-5-5"

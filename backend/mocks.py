@@ -237,7 +237,8 @@ async def mock_transcribe(audio: bytes, filename: str, keyterms: list[str] | Non
     return Transcript.model_validate(fixture_json(f"transcript_{name}"))
 
 
-async def mock_pass1_run(inp: Any, session_id: str, store: Any = None) -> SituationReport:
+async def mock_pass1_run(inp: Any, session_id: str, store: Any = None,
+                         images: list[bytes] | None = None) -> SituationReport:
     """Fixture report chosen by the heuristic's intent, with the user's words filled in."""
     await _latency()
     from .brain.pass1 import fallback_report

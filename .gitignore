@@ -23,3 +23,7 @@ training/adaption/data/
 data/certs/
 data/models/adaption/
 data/media/
+backend/venv/
+venv/
+.DS_Store
+backend/.DS_Store

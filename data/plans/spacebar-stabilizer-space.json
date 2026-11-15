@@ -1,0 +1,330 @@
+{
+ "object": "Royal Kludge RK61 60% mechanical keyboard",
+ "fault": "The space bar rattles and sticks on one side, which points to a stabilizer bar that has popped out of its clip or needs seating.",
+ "difficulty": "easy",
+ "time_min": 10,
+ "tools_needed": [
+  "keycap puller"
+ ],
+ "safety_notes": [
+  "Unplug the USB-C cable before opening the key.",
+  "Touch grounded metal first to discharge static.",
+  "Do not bend the stabilizer wire."
+ ],
+ "steps": [
+  {
+   "index": 1,
+   "instruction": "Unplug the USB-C cable from the back of the keyboard. Touch grounded metal first.",
+   "parts": [
+    "USB-C port"
+   ],
+   "expected_visual_state": "No cable is in the USB-C port and the backlight is off.",
+   "common_mistakes": [
+    "Leaving the cable plugged in while working on the key.",
+    "Reaching for the board without grounding yourself first."
+   ],
+   "scene3d": [
+    {
+     "op": "rotate_to",
+     "part": null,
+     "group": null,
+     "view": "back",
+     "amount": null,
+     "direction": null
+    },
+    {
+     "op": "highlight",
+     "part": "usb_c_port",
+     "group": null,
+     "view": null,
+     "amount": null,
+     "direction": null
+    },
+    {
+     "op": "arrow",
+     "part": "usb_c_port",
+     "group": null,
+     "view": null,
+     "amount": null,
+     "direction": "out"
+    }
+   ],
+   "sources": [
+    {
+     "title": "www.youtube.com",
+     "url": "https://www.youtube.com/watch?v=7OYqa5fSISA",
+     "kind": "youtube"
+    },
+    {
+     "title": "www.youtube.com",
+     "url": "https://www.youtube.com/watch?v=9vJODP6_s1g",
+     "kind": "youtube"
+    }
+   ],
+   "illustration_prompt": null,
+   "illustration_url": null,
+   "clip_url": null,
+   "title": "Unplug the keyboard",
+   "kind": "cable-out"
+  },
+  {
+   "index": 2,
+   "instruction": "Hook the keycap puller under both ends of the space bar. Lift both ends evenly and straight up.",
+   "parts": [
+    "keycap",
+    "space bar"
+   ],
+   "expected_visual_state": "The space bar keycap is off and set aside, and the stabilizer wire and switch are visible.",
+   "common_mistakes": [
+    "Lifting only one end so the stabilizer bends.",
+    "Pulling at an angle that scratches the case."
+   ],
+   "scene3d": [
+    {
+     "op": "rotate_to",
+     "part": null,
+     "group": null,
+     "view": "detail",
+     "amount": null,
+     "direction": null
+    },
+    {
+     "op": "highlight",
+     "part": "keycap_SPACE",
+     "group": null,
+     "view": null,
+     "amount": null,
+     "direction": null
+    },
+    {
+     "op": "arrow",
+     "part": "keycap_SPACE",
+     "group": null,
+     "view": null,
+     "amount": null,
+     "direction": "up"
+    }
+   ],
+   "sources": [
+    {
+     "title": "www.youtube.com",
+     "url": "https://www.youtube.com/watch?v=7OYqa5fSISA",
+     "kind": "youtube"
+    },
+    {
+     "title": "www.youtube.com",
+     "url": "https://www.youtube.com/watch?v=9vJODP6_s1g",
+     "kind": "youtube"
+    }
+   ],
+   "illustration_prompt": null,
+   "illustration_url": null,
+   "clip_url": null,
+   "title": "Pull the space bar keycap",
+   "kind": "keycap-pull"
+  },
+  {
+   "index": 3,
+   "instruction": "Look at the stabilizer bar under the space bar. Check that both ends of the wire sit in their clips.",
+   "parts": [
+    "stabilizer",
+    "plate"
+   ],
+   "expected_visual_state": "The stabilizer wire is visible and its ends are seen sitting in, or popped out of, the clips on both sides.",
+   "common_mistakes": [
+    "Bending the wire while checking it.",
+    "Missing a wire end that is unhooked on one side."
+   ],
+   "scene3d": [
+    {
+     "op": "rotate_to",
+     "part": null,
+     "group": null,
+     "view": "detail",
+     "amount": null,
+     "direction": null
+    },
+    {
+     "op": "highlight",
+     "part": "keycap_SPACE",
+     "group": null,
+     "view": null,
+     "amount": null,
+     "direction": null
+    },
+    {
+     "op": "arrow",
+     "part": "keycap_SPACE",
+     "group": null,
+     "view": null,
+     "amount": null,
+     "direction": "up"
+    }
+   ],
+   "sources": [],
+   "illustration_prompt": null,
+   "illustration_url": null,
+   "clip_url": null,
+   "title": "Inspect the stabilizer",
+   "kind": "stabilizer"
+  },
+  {
+   "index": 4,
+   "instruction": "Blow compressed air around the stabilizer and switch to clear dust and crumbs.",
+   "parts": [
+    "stabilizer",
+    "switch",
+    "plate"
+   ],
+   "expected_visual_state": "The area around the stabilizer and switch looks clean, with no visible crumbs.",
+   "common_mistakes": [
+    "Holding the air can tilted so liquid sprays out.",
+    "Skipping this step when debris is causing the sticking."
+   ],
+   "scene3d": [
+    {
+     "op": "rotate_to",
+     "part": null,
+     "group": null,
+     "view": "socket",
+     "amount": null,
+     "direction": null
+    },
+    {
+     "op": "highlight",
+     "part": "socket_SPACE",
+     "group": null,
+     "view": null,
+     "amount": null,
+     "direction": null
+    }
+   ],
+   "sources": [],
+   "illustration_prompt": null,
+   "illustration_url": null,
+   "clip_url": null,
+   "title": "Clear dust and debris",
+   "kind": "socket-inspect"
+  },
+  {
+   "index": 5,
+   "instruction": "Hook the keycap onto the stabilizer ends first. Then press both ends down evenly until it seats.",
+   "parts": [
+    "keycap",
+    "space bar",
+    "stabilizer"
+   ],
+   "expected_visual_state": "The space bar sits level with the neighboring keys, with no tilt on either side.",
+   "common_mistakes": [
+    "Pressing down on only one end so it seats crooked.",
+    "Not seating it fully so it sits higher than the other keys."
+   ],
+   "scene3d": [
+    {
+     "op": "rotate_to",
+     "part": null,
+     "group": null,
+     "view": "detail",
+     "amount": null,
+     "direction": null
+    },
+    {
+     "op": "highlight",
+     "part": "keycap_SPACE",
+     "group": null,
+     "view": null,
+     "amount": null,
+     "direction": null
+    },
+    {
+     "op": "arrow",
+     "part": "keycap_SPACE",
+     "group": null,
+     "view": null,
+     "amount": null,
+     "direction": "down"
+    }
+   ],
+   "sources": [
+    {
+     "title": "www.youtube.com",
+     "url": "https://www.youtube.com/watch?v=7OYqa5fSISA",
+     "kind": "youtube"
+    },
+    {
+     "title": "www.youtube.com",
+     "url": "https://www.youtube.com/watch?v=9vJODP6_s1g",
+     "kind": "youtube"
+    }
+   ],
+   "illustration_prompt": null,
+   "illustration_url": null,
+   "clip_url": null,
+   "title": "Put the space bar back",
+   "kind": "keycap-place"
+  },
+  {
+   "index": 6,
+   "instruction": "Plug the USB-C cable back in. Press the space bar three times, at the left, middle and right.",
+   "parts": [
+    "USB-C port",
+    "space bar",
+    "backlight"
+   ],
+   "expected_visual_state": "The backlight is on and the space bar moves up and down evenly with no rattle or sticking.",
+   "common_mistakes": [
+    "Only pressing the middle of the space bar.",
+    "Powering on with the space bar still tilted."
+   ],
+   "scene3d": [
+    {
+     "op": "reset",
+     "part": null,
+     "group": null,
+     "view": null,
+     "amount": null,
+     "direction": null
+    },
+    {
+     "op": "rotate_to",
+     "part": null,
+     "group": null,
+     "view": "iso",
+     "amount": null,
+     "direction": null
+    },
+    {
+     "op": "pulse",
+     "part": "keycap_SPACE",
+     "group": null,
+     "view": null,
+     "amount": null,
+     "direction": null
+    }
+   ],
+   "sources": [],
+   "illustration_prompt": null,
+   "illustration_url": null,
+   "clip_url": null,
+   "title": "Plug in and test",
+   "kind": "cable-in-test"
+  }
+ ],
+ "sources": [
+  {
+   "title": "www.youtube.com",
+   "url": "https://www.youtube.com/watch?v=7OYqa5fSISA",
+   "kind": "youtube"
+  },
+  {
+   "title": "www.youtube.com",
+   "url": "https://www.youtube.com/watch?v=9vJODP6_s1g",
+   "kind": "youtube"
+  }
+ ],
+ "generated": true,
+ "title": "Space stabilizer fix",
+ "diagnosis": "This sounds like the stabilizer wire under your space bar has come unhooked or is sitting crooked on one side. I'll have you pull the space bar keycap, check and reseat the stabilizer, then put it back evenly.",
+ "target_key": "SPACE",
+ "fault_signature": "spacebar-stabilizer-space"
+}

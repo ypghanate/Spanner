@@ -170,10 +170,18 @@ def step_kind(text: str, parts: list[str]) -> str:
     return "other"
 
 
+KIND_NAMES = [k for k, _, _ in KINDS] + ["other"]
+
+
 def scene3d_for_step(text: str, parts: list[str], key: str = "F") -> list[dict]:
     """3D commands (contracts.SceneCommand) for one repair step. `key` is the broken key."""
+    return scene3d_for_kind(step_kind(text, parts), parts, key)
+
+
+def scene3d_for_kind(kind: str, parts: list[str], key: str = "F") -> list[dict]:
+    """Same, when the kind is already known (Claude-generated plans choose it per step)."""
     cap, sw, sock = f"keycap_{key}", f"switch_{key}", f"socket_{key}"
-    kind = step_kind(text, parts)
+    stab_cap = cap if key in ("SPACE", "ENTER", "BACKSPACE", "LSHIFT", "RSHIFT") else "keycap_SPACE"
     table = {
         "cable-out": [{"op": "rotate_to", "view": "back"}, {"op": "highlight", "part": "usb_c_port"},
                       {"op": "arrow", "part": "usb_c_port", "direction": "out"}],
@@ -192,7 +200,8 @@ def scene3d_for_step(text: str, parts: list[str], key: str = "F") -> list[dict]:
         "switch-pull": [{"op": "rotate_to", "view": "detail"}, {"op": "highlight", "part": sw},
                         {"op": "arrow", "part": sw, "direction": "up"}],
         "socket-inspect": [{"op": "rotate_to", "view": "socket"}, {"op": "highlight", "part": sock}],
-        "stabilizer": [{"op": "highlight", "part": "keycap_SPACE"}, {"op": "arrow", "part": "keycap_SPACE", "direction": "up"}],
+        "stabilizer": [{"op": "rotate_to", "view": "detail"}, {"op": "highlight", "part": stab_cap},
+                       {"op": "arrow", "part": stab_cap, "direction": "up"}],
     }
     if kind in table:
         return table[kind]

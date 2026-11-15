@@ -8,6 +8,7 @@ import { ThemeProvider, useTheme } from "./src/theme";
 import { SpannerProvider, useSpanner } from "./src/state/SpannerProvider";
 import HomeScreen from "./src/screens/HomeScreen";
 import CallScreen from "./src/screens/CallScreen";
+import PairScreen from "./src/screens/PairScreen";
 import SafetyScreen from "./src/screens/SafetyScreen";
 import SummaryScreen from "./src/screens/SummaryScreen";
 
@@ -41,15 +42,17 @@ function Router() {
   const { status, phase, summary } = useSpanner();
   const { mode } = useTheme();
   const inCall = status === "live";
+  const pairing = status === "scanning" || status === "connecting";
 
   let screen: React.ReactNode;
   if (summary) screen = <SummaryScreen />;
+  else if (pairing) screen = <PairScreen />;
   else if (!inCall) screen = <HomeScreen />;
   else if (phase === "safety_stop") screen = <SafetyScreen />;
   else screen = <CallScreen />;
 
-  // The call screen sits on a camera feed, so its status bar is always light.
-  const light = inCall && phase !== "safety_stop";
+  // The call and scanner screens sit on a camera feed, so their status bar is always light.
+  const light = pairing || (inCall && phase !== "safety_stop");
   return (
     <>
       <StatusBar style={light ? "light" : mode === "dark" ? "light" : "dark"} />

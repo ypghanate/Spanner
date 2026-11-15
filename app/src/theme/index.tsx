@@ -23,7 +23,7 @@ const dark: Palette = {
   textPrimary: "#f2f2e9",
   textSecondary: "#a0a99f",
   borderSubtle: "#354137",
-  borderStrong: "#354137",
+  borderStrong: "#39463b",
   action: "#caf879",
   onAction: "#172415",
   dangerFg: "#f3917c",
@@ -52,6 +52,7 @@ export const camera = {
   surface: "#101512",
   accent: "#caf879",
   text: "#ffffff",
+  track: "#39463b",
   tint: "rgba(12,23,17,0.13)",
   scrimStrong: "rgba(0,0,0,0.85)",
   scrimClear: "rgba(0,0,0,0)",
@@ -61,7 +62,10 @@ export const camera = {
 export const hud = { info: "#92e6ef", ok: "#caf879", warn: "#ffd166", danger: "#f3917c" };
 export const callFill = "#b7332d";
 
-export const radius = { r2: 2, r6: 6, r8: 8, r12: 12, r36: 36, pill: 999 };
+/** Dim behind bottom sheets (overlay/scrim in the Figma file). */
+export const scrim = "rgba(5,8,5,0.42)";
+
+export const radius = { r2: 2, r6: 6, r8: 8, r12: 12, r16: 16, r36: 36, pill: 999 };
 
 export const font = {
   regular: "Inter_400Regular",

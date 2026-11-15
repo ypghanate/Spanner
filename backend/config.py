@@ -36,6 +36,12 @@ class Settings:
     mock_latency_ms: int
     # models
     pass1_model: str = "claude-haiku-5-5"
+    # Spoken turns that carry camera pictures use this model. Measured on real Royal Kludge photos: Haiku
+    # (low effort) often named the wrong removed key, Sonnet 5.5 (low effort) got it right every time.
+    # Turns without pictures stay on the much cheaper pass1_model. Set PASS1_VISION_MODEL= (empty) to
+    # use pass1_model for everything.
+    pass1_vision_model: str = "claude-sonnet-5-5"
+    pass1_effort: str = "low"
     dataset_model: str = "claude-opus-5-5"
     eleven_tts_model: str = "eleven_flash_v2_5"
     eleven_stt_model: str = "scribe_v1"            # one-shot /audio fallback
@@ -64,6 +70,7 @@ def get_settings() -> Settings:
         together_api_key=os.getenv("TOGETHER_API_KEY", ""),
         adaption_api_key=os.getenv("ADAPTION_API_KEY") or os.getenv("TOGETHER_API_KEY", ""),
         pass1_adaption_model_id=os.getenv("PASS1_ADAPTION_MODEL_ID", ""),
+        pass1_vision_model=os.getenv("PASS1_VISION_MODEL", "claude-sonnet-5-5").strip(),
         adaption_base_url=os.getenv("ADAPTION_BASE_URL", "https://api.together.xyz/v1"),
         fal_key=os.getenv("FAL_KEY", ""),
         pass1_backend=os.getenv("PASS1_BACKEND", "claude").strip().lower(),

@@ -19,6 +19,17 @@ log = logging.getLogger(__name__)
 SlowHandler = Callable[["Session", Any], Awaitable[None]]
 
 
+@dataclass
+class FrameSnap:
+    """One usable camera frame as the fast loop saw it: the preprocessed JPEG, the YOLO tracks on it
+    and when it arrived (server clock). The session keeps the last few so a spoken turn can show Claude
+    what the camera saw while the person was talking."""
+    frame_id: str
+    ts: float
+    jpeg: bytes
+    detections: list[Detection]
+
+
 class UnknownSession(KeyError):
     pass
 
@@ -46,6 +57,13 @@ class Session:
     last_frame_jpeg: bytes | None = None
     last_frame_id: str | None = None
     last_detections: list[Detection] = field(default_factory=list)
+    recent_frames: deque[FrameSnap] = field(default_factory=lambda: deque(maxlen=12))   # usable frames, newest last
+    last_observation_at: float | None = None       # when the newest SceneObservation was made (server clock)
+    # What Claude is shown for the current turn: a backend.perception.Perception (frames, crop, YOLO list,
+    # ages) or None. Set by the orchestrator before Pass 1 runs, cleared at the start of every brain run.
+    # Pass 2 reads it to answer questions about what is on camera.
+    perception: Any = None
+    last_perception_summary: dict | None = None    # the same, without image bytes (for /debug and logs)
     frame_seq: int = 0
     steps_done: int = 0
 
@@ -215,6 +233,10 @@ class Session:
             "last_report": self.last_report.model_dump() if self.last_report else None,
             "last_response": self.last_response.model_dump() if self.last_response else None,
             "last_step_check": self.last_step_check,
+            "recent_frames": [{"frame_id": f.frame_id, "ts": f.ts, "detections": len(f.detections)}
+                              for f in self.recent_frames],
+            "last_observation_at": self.last_observation_at,
+            "last_perception": self.last_perception_summary,
             "queued_events": len(self.events),
             "slow_busy": self._slow_running,
             "voice_waiting": self.voice_waiting,
