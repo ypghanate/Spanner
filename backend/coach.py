@@ -450,7 +450,6 @@ class Intent(BaseModel):
                      "show_mistake", "fix_it", "shop_parts", "shop_keyboards", "camera_on", "camera_off",
                      "calibrate", "show_part", "zoom_in", "zoom_out", "lights_on", "lights_off", "specs",
                      "sources", "ask", "new_repair", "none"]
-                     "sources", "show_mine", "ask", "none"]
     part: str = Field(default="", description="For show_part: socket, switch, keycap, pcb, plate, case, battery, usb, led, stabilizer, spring")
     shop_query: str = Field(default="", description="For shop_*: what to search for, in the user's words")
 
@@ -473,8 +472,6 @@ async def intent(req: IntentReq):
                 "lights_on, lights_off, specs, sources, ask (a real question about the repair that needs an answer), "
                 "new_repair (the person says what is broken or what they want fixed, e.g. 'my space bar rattles', "
                 "'the E key is sticky', 'I want to fix my keyboard', 'it won't turn on'), "
-                "lights_on, lights_off, specs, sources, show_mine (show the step on MY keyboard / on mine / in a picture "
-                "or video / what should it look like / show me how to do it), ask (a real question about the repair that needs an answer), "
                 "none (noise, not addressed to Spanner). Fillers like ok, please, hey Spanner are ignored.")
     def run() -> Intent:
         resp = _client().beta.messages.parse(
@@ -859,7 +856,6 @@ def mount(app) -> None:
 
     app.include_router(router)
     app.include_router(shop_router)
-    app.include_router(fal_router)
 
     import logging
 

@@ -912,7 +912,7 @@ async function goStep(i, note = "", silent = false) {
   typeText($("si"), s.instruction);
   $("sd").textContent = `Step ${s.index} of ${plan.steps.length}` + (s.expected_visual_state ? ` · ✓ Done when: ${s.expected_visual_state}` : "");
   $("sm").textContent = s.common_mistakes?.length ? `⚠ ${s.common_mistakes[0]}` : "";
-  warnLearned(s); vizEnsure();
+  warnLearned(s);
   $("tools").innerHTML = (TOOL_OF[s.kind] || "HANDS").split(" · ").map((t) => `<span class="chip">${t}</span>`).join("");
   dots();
   if (!silent) narrate(`Step ${s.index}. ${s.instruction}`, false);   // the card already shows the short coach line
@@ -1125,7 +1125,6 @@ async function command(raw) {
   if (!/^(which|what|where|how|why|is|are)\b/.test(t) && (FIX_EXPLICIT.test(t) || (!midRepair() && FIX_SYMPTOM.test(t)))) { return requestRepair(raw); }
   if (/\b(close|hide|dismiss|go away|that's enough|never ?mind)\b/.test(t)) { closePanels(); said = "closed"; }
   else if (/calibrat|align the hologram|set (this|that) as zero|zero it/.test(t)) { calibratePose(); said = "calibrated"; }
-  else if (/\b(on (my|mine)|mine|show me how|how do i do (it|this|that)|picture|photo|image|video|clip|what (should|does) it look like)\b/.test(t) && !/replace|buy|price|order|instead|other keyboards?/.test(t)) { showMine(raw); said = "on your keyboard"; }
   else if (/use (my|the) phone|phone camera|phone as (the )?camera/.test(t)) { startRemote(); said = "phone camera"; }
   else if (/(other|another|alternative|different|new|better) keyboards?|keyboards? (instead|to buy)|instead of (this|the rk|it)|upgrade|should i buy|what else could i buy/.test(t)) { openShop(raw); said = "searching other keyboards"; }
   else if (/replace(ment)?s?|\bbuy\b|order|price|how much|where (can|do) i get|spare|new (key ?caps?|switch(es)?|stabili[sz]ers?|cable)/.test(t)) { openShop(raw); said = "searching replacements"; }
@@ -1247,7 +1246,7 @@ const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const money = (p, c) => (p > 0 ? `${{ GBP: "£", USD: "$", EUR: "€" }[c] || (c ? c + " " : "")}${Number(p).toFixed(2)}` : "see price ↗");
 const moneyGbp = (i) => money(i.price, i.currency) + (i.price_gbp && i.currency !== "GBP" ? ` <small style="opacity:.6">≈ £${i.price_gbp.toFixed(2)}</small>` : "");
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
-function closePanels() { clearTimeout(verifyTimer); shopReq++; mineWanted = false; for (const id of ["shop", "side", "insp", "mine"]) $(id).style.display = "none"; select(null); }
+function closePanels() { clearTimeout(verifyTimer); shopReq++; for (const id of ["shop", "side", "insp"]) $(id).style.display = "none"; select(null); }
 let shopReq = 0, verifyTimer = null;
 const cites = (d) => (d.sources?.length ? `<div class="cites">LINKUP READ ${d.sources_count} PAGES · ${d.sources.slice(0, 8).map((x) => `<a href="${esc(x.url)}" target="_blank">${esc(hostOf(x.url))} ↗</a>`).join("")}</div>` : "");
 function verifyBox(v) {
@@ -1338,71 +1337,10 @@ async function intentFallback(raw) {
     if (d.command === "calibrate") { calibratePose(); heard(raw, "calibrated"); return; }
     if (d.command === "shop_parts") { heard(raw, "searching replacements"); return openShop(d.shop_query || raw); }
     if (d.command === "shop_keyboards") { heard(raw, "searching other keyboards"); return openShop("show me other keyboards " + (d.shop_query || "")); }
-    if (d.command === "show_mine") { heard(raw, "on your keyboard"); return showMine(raw); }
     if (d.command === "show_part") { heard(raw, "showing " + d.part); return command("show me the " + (d.part || "switch")); }
     const phrase = INTENT_TEXT[d.command]; if (phrase) { heard(raw, "→ " + phrase); return command(phrase); }
     heard(raw, "not understood");
   } catch (e) { heard(raw, "not understood"); }
-}
-// ------------------------------------------------------------------ fal: this step drawn on YOUR keyboard
-// At every step start, fal redraws the latest camera frame of the user's keyboard with a hand doing the step on the
-// key the camera found (image ~12 s), then animates it (clip ~2 min). Generated in the background, shown only when asked.
-let mine = { k: "", st: null, timer: null }, mineWanted = false;
-const mineKey = () => (stepIdx >= 0 && (camOn || remoteOn) ? `${stepIdx + 1}:${brokenKey}` : "");
-function vizEnsure() {
-  const k = mineKey(); if (!k || k === mine.k) return;
-  clearTimeout(mine.timer); mine = { k, st: null, timer: null };
-  if ($("mine").style.display === "block") { $("mine").dataset.sig = ""; drawMine(); }
-  vizPoll(k, "POST");
-}
-async function vizPoll(k, method = "GET") {
-  if (k !== mine.k) return;
-  const [step, key] = k.split(":"), q = { session: SESSION, step: Number(step), key, label: pack.keys[key]?.label || key };
-  try {
-    const r = method === "POST"
-      ? await fetch(API + "/coach/visualize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(q) })
-      : await fetch(API + "/coach/visualize?" + new URLSearchParams(q));
-    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 100)}`);
-    const d = await r.json(); if (k !== mine.k) return;
-    mine.st = d;
-  } catch (e) { if (k !== mine.k) return; mine.st = { status: "failed", error: e.message }; }
-  renderMine();
-  const st = mine.st.status;
-  if (st === "waiting_frame" || st === "generating" || (st === "image_ready" && !mine.st.video_error)) mine.timer = setTimeout(() => vizPoll(k), 3000);
-  else if (st === "failed") mine.timer = setTimeout(() => vizPoll(k), 25000);      // the server retries a failed job after 20 s
-}
-const MINE_BADGE = { waiting_frame: "ON YOUR KEYBOARD · WAITING FOR A FRAME", generating: "ON YOUR KEYBOARD · FAL IS DRAWING IT…",
-  image_ready: "ON YOUR KEYBOARD · IMAGE READY · CLIP RENDERING…", ready: "ON YOUR KEYBOARD · READY · SAY “SHOW ME ON MINE”", failed: "ON YOUR KEYBOARD · FAILED" };
-function renderMine() {
-  const st = mine.st || {}, b = $("minebadge"), s = st.status;
-  b.style.display = s && s !== "disabled" ? "block" : "none";
-  b.className = s === "ready" || s === "image_ready" ? "ready" : s === "failed" ? "bad" : "";
-  b.textContent = s === "image_ready" && st.video_error ? "ON YOUR KEYBOARD · IMAGE READY" : (MINE_BADGE[s] || "");
-  if ($("mine").style.display === "block") drawMine();
-  if (mineWanted && st.image_url) { mineWanted = false; narrate("Here it is on your keyboard."); }
-}
-function drawMine() {
-  const el = $("mine"), st = mine.st || {}, s = plan.steps[stepIdx]; if (!s) return;
-  const label = pack.keys[brokenKey]?.label || brokenKey;
-  const head = `<h3><span>STEP ${s.index} ON YOUR KEYBOARD · KEY ${esc(label)}</span><small>GENERATED BY FAL FROM YOUR CAMERA</small></h3>`;
-  const wait = { waiting_frame: "WAITING FOR A FRAME OF YOUR KEYBOARD", disabled: "FAL IS NOT CONFIGURED: SET FAL_KEY", failed: "GENERATION FAILED" }[st.status] || "FAL IS DRAWING THIS STEP ON YOUR KEYBOARD";
-  const media = st.video_url ? `<video src="${API + st.video_url}" poster="${API + st.image_url}" autoplay loop muted playsinline></video>`
-    : st.image_url ? `<img src="${API + st.image_url}" alt="Step ${s.index} drawn on your keyboard">`
-    : `<div class="wait">${wait}${st.status === "failed" || st.status === "disabled" ? "" : `<div class="bar"><i></i></div>`}</div>`;
-  const meta = st.status === "failed" ? `<div class="meta bad">${esc(st.error || "")}</div>`
-    : `<div class="meta">${[st.image_ms ? `image ${(st.image_ms / 1000).toFixed(1)} s` : "", st.video_ms ? `clip ${Math.round(st.video_ms / 1000)} s` : (st.image_url && !st.video_error ? "clip rendering…" : ""),
-        st.video_error ? "clip failed: " + esc(st.video_error) : "", st.ringed ? "placed on the key the camera found" : ""].filter(Boolean).join(" · ")}</div>`;
-  const sig = `${mine.k}|${st.video_url || st.image_url || st.status}`;        // don't restart the clip on every poll
-  if (el.dataset.sig !== sig) { el.innerHTML = `${head}<div class="media">${media}</div><div class="cap">${esc(s.instruction)}</div>${meta}`; el.dataset.sig = sig; }
-  else { const m = el.querySelector(".meta"); if (m) m.outerHTML = meta; }
-}
-function showMine() {
-  if (stepIdx < 0) { narrate("Start a step first, then I'll draw it on your keyboard."); return; }
-  if (!(camOn || remoteOn)) { narrate("I need to see your keyboard first. Say use my phone camera."); return; }
-  closePanels(); vizEnsure();
-  const el = $("mine"); el.style.display = "block"; el.dataset.sig = ""; drawMine();
-  if (mine.st?.image_url) narrate("Here it is on your keyboard.");
-  else { mineWanted = true; narrate("I'm still drawing it on your keyboard. A few seconds."); }
 }
 /** Swap in a plan: put the old key back first, then re-aim everything at the new key and chapters. */
 async function loadPlan(d) {
@@ -1533,7 +1471,7 @@ function onMissingKeys(c) {
 let stepHoldUntil = 0;   // after a step change, ignore frames that were taken before it
 function onCoach(c) {
   $("camlat").textContent = `${(c.latency_ms / 1000).toFixed(1)} s${c.crop?.cropped ? " · zoomed" : ""}`;
-  onMissingKeys(c); vizEnsure();                          // before a plan exists this is the only thing the camera can start
+  onMissingKeys(c);                          // before a plan exists this is the only thing the camera can start
   if (!chosen) return;                       // no plan yet: nothing to follow (and no "tell me what's wrong" on every frame)
   $("camconfbar").style.width = Math.round(c.confidence * 100) + "%";
   const stepTxt = c.step_index > 0 ? ` · <b>STEP ${c.step_index}</b> ${c.step_status.replace("_", " ")}` : "";

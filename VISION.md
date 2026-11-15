@@ -7,12 +7,9 @@ _Agreed with the team on 2026-11-14 (Imperial AI Hackathon, 14–15 Nov 2026)._
 
 ---
 
-## Update 2026-11-15 01:00: track switch + fal "On your keyboard" (agreed with Alberto)
+## Update 2026-11-15: track switch (agreed with Alberto)
 - **Main track is now Voice, Vision & Generative Media** (team decision; bounties are gated, so the Databricks / Linkup / Tavily bounties are no longer contested; those layers stay in the product, not in the pitch's lead). Adaption and Figma are open to all and stay.
-- **fal feature, "On your keyboard":** at every repair step, Spanner takes the live camera frame of the user's own keyboard (the YOLO crop from `/coach/frame`), a fal image-edit model redraws *that photo* showing the step being done on the key the camera saw missing, and a fal image-to-video model animates that still into a 4–5 s loop. Generated automatically in the background at step start; **shown only when asked** ("show me on mine", any phrasing), closed with "close". Nothing covers the hologram on its own.
-- **Rules:** zero mocks (a real fal call, or an honest waiting/disabled/failed state, never a stand-in image); the edit and video models are chosen by a live test on a real keyboard frame; timings go to Databricks `stage_timings` (`fal_image`, `fal_video`); a per-session job cap protects credits.
-- **Out of scope for now:** fal on the iPhone/iPad/Momentum holograms, any-device image-to-3D, an end-of-repair recap video, the pitch rewrite (separate step).
-- Plan: `C:\Users\alber\.claude\plans\frolicking-dreaming-wind.md`.
+- **fal:** the first use (redrawing the user's camera frame with the step done, then animating it) was built, tested and **dropped by Alberto on 15 Nov**. A different use of fal is to be decided.
 
 ---
 
