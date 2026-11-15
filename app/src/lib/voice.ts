@@ -10,8 +10,8 @@ import { absUrl } from "./config";
 const SPEECH_OVER_FLOOR_DB = 16; // this much above the room's noise = someone talking into the phone (raised: busy rooms)
 const QUIET_OVER_FLOOR_DB = 8; // back within this of the noise = they stopped
 const MIN_SPEECH_DB = -42; // never treat a very quiet room's tiny sounds as speech
-const SILENCE_MS = 500; // end of utterance: shorter = snappier replies
-const MIN_SPEECH_MS = 350;
+const SILENCE_MS = 300; // end of utterance: shorter = snappier replies
+const MIN_SPEECH_MS = 250;
 const MAX_UTTERANCE_MS = 6000; // room chatter must not hold a clip open
 
 export interface Utterance {
@@ -92,7 +92,7 @@ export class VoiceListener {
   private async begin() {
     if (!this.running || this.muted || this.rec) return;
     try {
-      const rec = new AudioModule.AudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
+      const rec = new AudioModule.AudioRecorder({ ...RecordingPresets.HIGH_QUALITY, sampleRate: 16000, numberOfChannels: 1, bitRate: 32000, isMeteringEnabled: true });
       await rec.prepareToRecordAsync();
       rec.record();
       this.rec = rec;
@@ -100,7 +100,7 @@ export class VoiceListener {
       this.speechAt = 0;
       this.lastLoud = 0;
       this.forceFlush = false;
-      this.timer = setInterval(() => void this.tick(), 100);
+      this.timer = setInterval(() => void this.tick(), 50);
     } catch {
       setTimeout(() => void this.begin(), 1000);
     }
