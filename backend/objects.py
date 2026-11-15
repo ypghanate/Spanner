@@ -299,9 +299,10 @@ class Job:
         import fal_client
         import httpx
 
-        t0 = time.time(); self.set("twin", "running", model=TWIN_MODEL)
+        t0 = time.time(); self.set("twin", "running", model=TWIN_MODEL, step="cleaning the photo")
         try:
-            url = fal_client.upload((self.dir / "photo.jpg").read_bytes(), "image/jpeg")
+            url = self._clean_photo_url()
+            self.set("twin", "running", model=TWIN_MODEL, step="building the 3D model")
             glb = None
             for model in (TWIN_MODEL, TWIN_FALLBACK):
                 try:
@@ -318,6 +319,38 @@ class Job:
             self.set("twin", "ready", url=self.twin_url, bytes=len(glb), model=self.phase["twin"].get("model")); self.record("object_twin", t0, True)
         except Exception as e:
             self.set("twin", "failed", error=str(e)[:200]); self.record("object_twin", t0, False)
+
+    def _clean_photo_url(self) -> str:
+        """Bake-off 15 Nov (same photos, 8 variants): a web photo with a lone part or floating bits gives a blob in 3D; the same
+        photo cleaned by fal's image editor first (the complete product, studio white, three-quarter view, every part connected)
+        gives a proper twin for ~12 s more. Multi-view cost 30 s more for no better result and HD/PBR was slower for nothing.
+        The edit is told to keep the exact design (a generator drifts: it once gave AirPods 3 the Pro's ear tips). Falls back to
+        the raw photo if the edit fails."""
+        import fal_client
+
+        raw = (self.dir / "photo.jpg").read_bytes()
+        clean = self.dir / "clean.png"
+        if clean.exists():
+            return fal_client.upload(clean.read_bytes(), "image/png")
+        t0 = time.time()
+        try:
+            name = self.intake.model or self.intake.object
+            prompt = (f"Show this exact product alone, as a clean studio product photo on a pure white background, three-quarter front view. "
+                      f"The product is: {name}, the complete product as it is sold. Keep its exact design, colours, proportions and details: do "
+                      "not add, remove or restyle any feature. Every part is connected to the body; nothing floats in the air; no hands, no text, "
+                      "no shadows, no other objects.")
+            r = fal_client.subscribe(EDIT_MODEL, arguments={"prompt": prompt, "image_urls": [fal_client.upload(raw, "image/jpeg")]})
+            import httpx
+
+            img = (r.get("images") or [r.get("image")])[0]["url"]
+            data = httpx.get(img, timeout=60).content
+            clean.write_bytes(data)
+            self.record("object_clean", t0, True)
+            return fal_client.upload(data, "image/png")
+        except Exception as e:
+            print(f"photo cleanup failed ({str(e)[:100]}): using the raw photo", flush=True)
+            self.record("object_clean", t0, False)
+            return fal_client.upload(raw, "image/jpeg")
 
     @staticmethod
     def _twin_args(model: str, url: str) -> dict:

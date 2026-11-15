@@ -1994,6 +1994,7 @@ async function pickByVoice(raw) {   // free speech -> which device; Claude decid
 }
 if (QP.get("pick") === "1" && INSTANT) { pickOpen = true; $("pick").style.display = "flex"; }
 if (QP.get("kb")) fetchLayout();
+if (QP.get("twin")) { objectFlow.on = true; setObjectMode(true); twinFromGlb(QP.get("twin")); }   // test hook: ?twin=/data/objects/... shows any mesh
 if (QP.get("say")) { const seq = QP.get("say").split("|"); let i = 0; const go = () => { if (i < seq.length) { hearSpeech(seq[i++]); setTimeout(go, 2500); } }; setTimeout(go, 5000); }   // test hook: ?say=a|b|c feeds heard sentences
 // wake: browsers need one gesture before mic + speech; after that it's voice only
 // The question page is the first thing on screen (it covers the boot and the keyboard). One tap wakes the voice
