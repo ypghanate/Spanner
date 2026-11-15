@@ -1059,7 +1059,15 @@ fetchJson(API + "/coach/health", 4000).then((d) => { elevenOK = !!d.tts; }).catc
 // While Spanner talks, the mic ignores what it hears (it would hear Spanner). That window must always end: the
 // estimate below is based on the text length, and every way a clip can stop (end, error, stall, abort) closes it.
 const speechMs = (text) => Math.min(45000, 2500 + text.split(/\s+/).length * 450);
+// tell the phone how long we'll be talking, so it pauses its microphone (it would only record our own voice)
+let lastSpeakReport = 0;
+function reportSpeaking(ms) {
+  if (!remoteOn) return;
+  const now = performance.now(); if (ms > 0 && now - lastSpeakReport < 300) return; lastSpeakReport = now;
+  fetch(API + "/coach/speaking", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: SESSION, seconds: ms / 1000 }) }).catch(() => {});
+}
 function stopSpeech() {
+  reportSpeaking(0);
   if ("speechSynthesis" in window) speechSynthesis.cancel();
   if (sayAudio) { try { sayAudio.pause(); } catch { /* already gone */ } sayAudio = null; }
   speakingUntil = 0;
@@ -1067,9 +1075,9 @@ function stopSpeech() {
 function browserSay(text) {
   if (!("speechSynthesis" in window)) { speakingUntil = 0; return; }
   const u = new SpeechSynthesisUtterance(text); if (voice) u.voice = voice; u.rate = 1.03; u.pitch = 0.92;
-  const done = () => { speakingUntil = performance.now() + 400; };
+  const done = () => { speakingUntil = performance.now() + 400; reportSpeaking(0); };
   u.onend = done; u.onerror = done;
-  speakingUntil = performance.now() + speechMs(text); currentSpeech = text; speechSynthesis.speak(u);
+  speakingUntil = performance.now() + speechMs(text); currentSpeech = text; reportSpeaking(speechMs(text)); speechSynthesis.speak(u);
 }
 function narrate(text, show = true) {
   if (!text) return;
@@ -1078,9 +1086,9 @@ function narrate(text, show = true) {
   stopSpeech();
   if (!elevenOK) return browserSay(text);
   const a = new Audio(API + "/coach/say?text=" + encodeURIComponent(text));
-  sayAudio = a; speakingUntil = performance.now() + speechMs(text) + 4000; currentSpeech = text;
+  sayAudio = a; speakingUntil = performance.now() + speechMs(text) + 4000; currentSpeech = text; reportSpeaking(speechMs(text) + 1000);
   const fallback = () => { if (sayAudio === a) { sayAudio = null; browserSay(text); } };
-  a.onended = () => { if (sayAudio === a) { sayAudio = null; speakingUntil = performance.now() + 400; } };
+  a.onended = () => { if (sayAudio === a) { sayAudio = null; speakingUntil = performance.now() + 400; reportSpeaking(0); } };
   a.onerror = a.onstalled = a.onabort = fallback;
   setTimeout(() => { if (sayAudio === a && a.paused && a.currentTime === 0) fallback(); }, 5000);   // never started playing
   a.play().catch(fallback);
@@ -1690,8 +1698,16 @@ setXray(true); setMode("scanning");
 
 // what do you want to fix? keyboard = the guided repair; the others open their hologram (device.html)
 let pickOpen = false;
+/** Pairing on the question page (nothing behind it is shown yet): the QR for the Spanner app, then the question. */
+async function pickPairCode() {
+  const { origin } = await phoneOrigin();
+  const url = `${origin}/training/viewer/phone.html?s=${SESSION}`;
+  $("pickq").textContent = "First, scan this with the Spanner app";
+  $("pickhint").textContent = "waiting for your phone";
+  $("pickecho").innerHTML = `<img src="${API}/coach/qr?url=${encodeURIComponent(url)}" alt="Pairing code" style="width:220px;height:220px;border-radius:8px;margin-top:6px;background:#f2f2e9;padding:8px">`;
+}
 function showPicker() {
-  pickOpen = true; $("pick").style.display = "flex"; $("pick").style.opacity = 1; $("pickecho").textContent = ""; $("pickq").textContent = "What do you want to fix?";
+  pickOpen = true; $("pick").style.display = "flex"; $("pick").style.opacity = 1; $("pickecho").textContent = ""; $("pickq").textContent = "What do you want to fix?"; $("pickhint").textContent = "listening · just say it";
   narrate("What do you want to fix?");
 }
 const FAULT_WORDS = /(keys?|keycaps?|space ?bar|enter|shift|backspace|switch(es)?|cable|chargw*|power|lights?|backlight|led|dead|broken|stuck|sticky|rattlw*|wobblw*|loose|missing|cracked|flickerw*|double|chatterw*|not (working|registering|typing)|doesn'?t|won'?t)/i;
@@ -1734,7 +1750,8 @@ if (INSTANT || QP.get("wake") === "0" || QP.get("pick") === "0") {
       $("pick").style.display = "flex"; $("pickhint").textContent = "listening"; narrate("What do you want to fix?");
       return;
     }
-    $("pick").style.display = "none";     // show the pairing QR; the question comes once the phone is connected
+    // The keyboard stays hidden until the person says it is a keyboard: the pairing QR goes on the question page itself.
+    $("pick").style.display = "flex"; pickPairCode();
     try { startRemote(); } catch (e) { console.error("wake:", e); }
     narrate("Hi, I'm Spanner. Scan the code with the Spanner app on your phone.");
     const waitPhone = setInterval(() => { if (linkState === "live") { clearInterval(waitPhone); if (pickOpen) showPicker(); } }, 500);

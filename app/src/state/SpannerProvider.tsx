@@ -241,6 +241,8 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
             tracker.current.tick(Date.now());
             if (tracker.current.step !== before) project(l.view);
           }
+          // the laptop is talking: pause the phone's mic (it would only hear Spanner), resume when it stops
+          void listener.current?.setMuted(!!d.speaking || stateRef.current.micMuted);
           if (!stateRef.current.connected) patch({ connected: true });
         } catch {
           if (stateRef.current.connected) patch({ connected: false });

@@ -4,7 +4,12 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Speech from "expo-speech";
 import { absUrl } from "./config";
 
-const SPEECH_DB = -38; // louder than this counts as speech
+// Noise gate that adapts to the room: speech must be clearly louder than the background (a busy hackathon floor),
+// and the utterance ends when the level drops back near that background. A fixed threshold let room chatter count
+// as speech, so clips never ended and ran to the cap (slow replies full of other people's words).
+const SPEECH_OVER_FLOOR_DB = 12; // this much above the room's noise = someone talking into the phone
+const QUIET_OVER_FLOOR_DB = 6; // back within this of the noise = they stopped
+const MIN_SPEECH_DB = -42; // never treat a very quiet room's tiny sounds as speech
 const SILENCE_MS = 500; // end of utterance: shorter = snappier replies
 const MIN_SPEECH_MS = 350;
 const MAX_UTTERANCE_MS = 6000; // room chatter must not hold a clip open
@@ -24,6 +29,9 @@ export class VoiceListener {
   private startedAt = 0;
   private speechAt = 0;
   private lastLoud = 0;
+  private floor = NaN; // running estimate of the room noise (dB), learnt while nobody is talking
+  private sumDb = 0;
+  private nDb = 0;
   private forceFlush = false;
 
   constructor(
@@ -104,9 +112,14 @@ export class VoiceListener {
     this.onLevel(Math.max(0, Math.min(1, (db + 60) / 50)));
 
     if (this.muted) return;
-    if (db > SPEECH_DB) {
+    if (Number.isNaN(this.floor)) this.floor = db; // start from what the room sounds like right now
+    if (!this.speechAt) this.floor += (db - this.floor) * (db < this.floor ? 0.3 : 0.05); // falls fast, rises slowly
+    else { this.sumDb += db; this.nDb++; }
+    const loud = db > Math.max(MIN_SPEECH_DB, this.floor + SPEECH_OVER_FLOOR_DB);
+    const stillTalking = db > Math.max(MIN_SPEECH_DB, this.floor + QUIET_OVER_FLOOR_DB);
+    if (loud || (this.speechAt && stillTalking)) {
       if (!this.speechAt) {
-        this.speechAt = now;
+        this.speechAt = now; this.sumDb = 0; this.nDb = 0;
         this.onSpeechStart();
       }
       this.lastLoud = now;
@@ -114,6 +127,13 @@ export class VoiceListener {
     const spoke = this.speechAt > 0 && this.lastLoud - this.speechAt >= MIN_SPEECH_MS;
     const quiet = this.speechAt > 0 && now - this.lastLoud >= SILENCE_MS;
     const tooLong = this.speechAt > 0 && now - this.speechAt >= MAX_UTTERANCE_MS;
+    if (tooLong && now - this.lastLoud < SILENCE_MS) {
+      // never went quiet for the whole clip: that is the room, not someone talking to Spanner. Learn it and drop it.
+      this.floor = Math.max(this.floor, this.sumDb / Math.max(1, this.nDb) - 3);
+      this.sumDb = 0; this.nDb = 0;
+      await this.cycle(false);
+      return;
+    }
     if ((spoke && quiet) || tooLong || (this.forceFlush && spoke)) await this.cycle(true);
     else if (this.speechAt === 0 && now - this.startedAt > 20000) await this.cycle(false); // keep files short
     else if (quiet && !spoke) await this.cycle(false); // a click, not speech

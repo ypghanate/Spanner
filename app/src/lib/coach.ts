@@ -48,6 +48,8 @@ export interface Latest {
   pose?: CoachPose;
   /** Changes whenever the laptop generates a new plan for this session (the user said what they want fixed). */
   plan_id?: string;
+  /** The laptop is talking right now: pause the microphone so it doesn't record Spanner's own voice. */
+  speaking?: boolean;
 }
 
 /** The laptop's QR encodes `${origin}/training/viewer/phone.html?s=<session>`. Anything else is not a pairing code. */

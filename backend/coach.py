@@ -505,10 +505,26 @@ async def signal(sig: Signal):
     return {"ok": True}
 
 
+class Speaking(BaseModel):
+    session: str
+    seconds: float      # how much longer the laptop expects to be talking; 0 = it stopped
+
+
+@router.post("/speaking")
+async def speaking(sp: Speaking):
+    """The laptop is talking: the phone pauses its microphone meanwhile, so it doesn't record Spanner's own voice."""
+    _speaking[sp.session] = time.time() + max(0.0, min(sp.seconds, 60.0))
+    return {"ok": True}
+
+
+_speaking: dict[str, float] = {}
+
+
 @router.get("/latest")
 async def latest(session: str):
-    """The phone's last results for this session: the coach's view (every ~2 s) and the keyboard pose (~4/s)."""
-    return _latest.get(session, {})
+    """The phone's last results for this session: the coach's view, the newest utterance, signals, and whether the
+    laptop is talking right now (judged on the server's clock, so phone and laptop clocks don't matter)."""
+    return {**_latest.get(session, {}), "speaking": _speaking.get(session, 0) > time.time()}
 
 
 @router.get("/plan")
