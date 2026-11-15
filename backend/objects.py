@@ -36,9 +36,7 @@ MAX_STEP_PICTURES = int(os.getenv("OBJECT_STEP_PICTURES", "6"))
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 router = APIRouter(prefix="/coach", tags=["objects"])
-_pool = ThreadPoolExecutor(max_workers=8)             # reading guides and videos (slow, many tasks)
-_media_pool = ThreadPoolExecutor(max_workers=6)       # photo, twin, step pictures: what the person is waiting to see
-_fetch_pool = ThreadPoolExecutor(max_workers=16)      # downloading the candidate photos
+_pool = ThreadPoolExecutor(max_workers=8)
 _jobs: dict[str, "Job"] = {}
 
 
@@ -75,20 +73,6 @@ class ProductSearch(BaseModel):
 
 
 # ---------------------------------------------------------------- the job
-_BRANDS = {"apple", "sony", "samsung", "bose", "dyson", "google", "microsoft", "lg", "jbl", "anker", "logitech", "nintendo",
-           "sennheiser", "royal", "kludge", "xiaomi", "huawei", "oneplus", "asus", "dell", "hp", "lenovo", "philips", "bosch"}
-
-
-def canonical_slug(slug: str) -> str:
-    """An existing folder for the same product written with or without its brand: reuse it."""
-    key = "-".join(w for w in slug.split("-") if w not in _BRANDS)
-    if OBJECTS.exists():
-        for d in sorted(OBJECTS.iterdir()):
-            if d.is_dir() and not d.name.startswith("_") and "-".join(w for w in d.name.split("-") if w not in _BRANDS) == key:
-                return d.name
-    return slug
-
-
 def slug_of(text: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:48]
     return s or hashlib.sha1(text.encode()).hexdigest()[:10]
@@ -181,10 +165,10 @@ class Job:
         t0 = time.time(); self.set("photo", "running")
         name = self.intake.model or self.first_text
         try:
-            path = self._download_image(self._image_candidates(name), name)
+            path = self._download_image(self._image_candidates(name))
             self.photo_url = f"/data/objects/{self.slug}/{path.name}"
             self.set("photo", "ready", url=self.photo_url, **{k: v for k, v in self.phase["photo"].items() if k in ("picked", "candidates")}); self.record("object_photo", t0, True)
-            _media_pool.submit(self._guard, "twin", self.run_twin)
+            _pool.submit(self._guard, "twin", self.run_twin)
         except Exception as e:
             self.set("photo", "failed", error=str(e)[:200]); self.record("object_photo", t0, False)
         self._run_specs(name)
@@ -205,9 +189,9 @@ class Job:
             pick = ProductPick.model_validate(picks[0])
             if self.phase["photo"]["status"] == "failed":          # no image from the image search: Linkup's as a fallback
                 try:
-                    path = self._download_image([pick.image_url] + pick.image_alternatives, name)
+                    path = self._download_image([pick.image_url] + pick.image_alternatives)
                     self.photo_url = f"/data/objects/{self.slug}/{path.name}"
-                    self.set("photo", "ready", url=self.photo_url); _media_pool.submit(self._guard, "twin", self.run_twin)
+                    self.set("photo", "ready", url=self.photo_url); _pool.submit(self._guard, "twin", self.run_twin)
                 except Exception as e:
                     self.set("photo", "failed", error=str(e)[:200])
             self.specs = [s.model_dump() for s in pick.specs][:6]
@@ -218,28 +202,18 @@ class Job:
             print(f"specs {name}: {str(e)[:120]}", flush=True); self.record("object_specs", t0, False)
 
     def _image_candidates(self, name: str) -> list[str]:
-        """Tavily image search with several wordings in parallel (one query often returns only lone parts or lifestyle shots):
-        the complete product on a plain background is what makes a good 3D twin."""
-        from backend.shop import _tavily
+        """Tavily image search: the product on a plain background (Linkup's structured answers rarely carry image URLs)."""
+        try:
+            from backend.shop import _tavily
 
-        queries = [f"{name} product photo white background", f"{name} official product image full product",
-                   f"{name} complete set what's in the box", f"{name} front view product shot"]
+            res = _tavily().search(f"{name} product photo white background closed", include_images=True, max_results=6)
+            imgs = [i if isinstance(i, str) else i.get("url", "") for i in res.get("images", [])]
+            return [u for u in imgs if u][:6]
+        except Exception as e:
+            print(f"tavily images: {str(e)[:100]}", flush=True)
+            return []
 
-        def one(q):
-            try:
-                res = _tavily().search(q, include_images=True, max_results=6)
-                return [i if isinstance(i, str) else i.get("url", "") for i in res.get("images", [])]
-            except Exception as e:
-                print(f"tavily images: {str(e)[:100]}", flush=True)
-                return []
-        seen, out = set(), []
-        for imgs in _fetch_pool.map(one, queries):
-            for u in imgs:
-                if u and u not in seen:
-                    seen.add(u); out.append(u)
-        return out[:16]
-
-    def _download_image(self, urls: list[str], name: str = "") -> Path:
+    def _download_image(self, urls: list[str]) -> Path:
         """Fetch the candidates in parallel, then let Claude choose the one that will make a good 3D twin: the whole
         product alone, plain background, nothing floating beside it, no text. One image-to-3D run from the wrong photo
         makes nonsense, so the choice is worth ~1.5 s."""
@@ -257,7 +231,7 @@ class Job:
                 return (u, img) if img.width >= 300 and img.height >= 300 else None
             except Exception:
                 return None
-        cands = [c for c in _fetch_pool.map(fetch, [u for u in urls if str(u).startswith("http")]) if c]
+        cands = [c for c in _pool.map(fetch, [u for u in urls[:8] if str(u).startswith("http")]) if c]
         if not cands:
             raise RuntimeError("no usable product photo (none of the candidates loaded)")
         pick = 0
@@ -266,22 +240,22 @@ class Job:
                 import anthropic
 
                 content = []
-                for i, (_, img) in enumerate(cands[:10]):
-                    t = img.copy(); t.thumbnail((384, 384)); buf = io.BytesIO(); t.save(buf, "JPEG", quality=78)
+                for i, (_, img) in enumerate(cands[:6]):
+                    t = img.copy(); t.thumbnail((512, 512)); buf = io.BytesIO(); t.save(buf, "JPEG", quality=80)
                     content += [{"type": "text", "text": f"Image {i}:"},
                                 {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.standard_b64encode(buf.getvalue()).decode()}}]
-                content.append({"type": "text", "text": f"The product is: {name or 'the object'}. Which image is best for turning THIS product into ONE solid 3D "
-                                "model? Hard rules, in order: (1) it must show the complete product as it is sold, not a single component on its own "
-                                "(for earbuds: the charging case with the earbuds in it, never one lone earbud or only the case lid; for a vacuum: the whole "
-                                "vacuum), (2) every part touches the main body, nothing floating in the air beside or above it, (3) plain or white background, "
-                                "no hands, no people, no text, no collage, sharp, (4) a three-quarter or front view. If several qualify prefer the simplest "
-                                "outline. If NO image qualifies, answer NONE. Otherwise answer with the image number only."})
-                r = anthropic.Anthropic(timeout=25, max_retries=1).messages.create(model=PLAN_MODEL, max_tokens=5, messages=[{"role": "user", "content": content}])
+                content.append({"type": "text", "text": "Which image is best for turning this product into ONE solid 3D model? Hard rules: "
+                                "it must show the COMPLETE product as it is sold (for earbuds: the case with both earbuds sitting in it or the "
+                                "case closed; for a vacuum: the whole vacuum), never a single component on its own (one earbud, one cable, "
+                                "one tip). Every part must touch the main body: NEVER parts floating in the air beside or above the product. "
+                                "Plain or white background, no hands, no text, no collage, sharp. If several qualify, prefer the one with "
+                                "the simplest outline. If NO image qualifies, answer NONE. Otherwise answer with the image number only."})
+                r = anthropic.Anthropic(timeout=20, max_retries=1).messages.create(model=INTAKE_MODEL, max_tokens=5, messages=[{"role": "user", "content": content}])
                 verdict = r.content[0].text.strip().upper()
                 if "NONE" in verdict:
                     raise RuntimeError("no clean single-object photo among the candidates; no twin (the step pictures carry the visuals)")
                 digits = "".join(ch for ch in verdict if ch.isdigit())
-                if digits and int(digits) < len(cands[:10]):
+                if digits and int(digits) < len(cands[:6]):
                     pick = int(digits)
             except RuntimeError:
                 raise
@@ -376,7 +350,7 @@ class Job:
             srcs = [{"title": p.get("title") or p["url"], "url": p["url"], "kind": "web"} for p in pages if p["url"] in guides]
             self._install_plan(proc, srcs, "web guides")
             self.set("plan_web", "ready", guides=len(guides), steps=len(proc.steps)); self.record("object_plan_web", t0, True)
-            _media_pool.submit(self._guard, "pictures", self.run_pictures)
+            _pool.submit(self._guard, "pictures", self.run_pictures)
         except Exception as e:
             self.set("plan_web", "failed", error=str(e)[:200]); self.record("object_plan_web", t0, False)
 
@@ -498,7 +472,7 @@ class Job:
         self.set("intake", "ready")
         if self.intake.is_keyboard:
             return {"say": "", **self.public()}        # the viewer hands over to the keyboard flow
-        self.slug = canonical_slug(slug_of(self.intake.model or self.intake.object))      # the object; the fault picks the plan inside it
+        self.slug = slug_of(self.intake.model or self.intake.object)      # the object; the fault picks the plan inside it
         self.fault_slug = slug_of(self.intake.fault or self.first_text)
         self.dir = OBJECTS / self.slug; self.dir.mkdir(parents=True, exist_ok=True)
         if self.intake.model_question and not self.intake.model:
@@ -640,14 +614,14 @@ class Job:
             if self.phase["plan_web"]["status"] != "pending":
                 return
             if self.phase["photo"]["status"] == "pending":
-                _media_pool.submit(self._guard, "photo", self.run_photo)
+                _pool.submit(self._guard, "photo", self.run_photo)
             elif self.phase["twin"]["status"] == "pending" and self.photo_url:
-                _media_pool.submit(self._guard, "twin", self.run_twin)          # photo reused from an earlier run, twin still missing
+                _pool.submit(self._guard, "twin", self.run_twin)          # photo reused from an earlier run, twin still missing
             _pool.submit(self._guard, "plan_web", self.run_plan_web)
         elif self.phase["photo"]["status"] == "pending":                 # plan reused, but no photo yet: fetch it (the twin follows)
-            _media_pool.submit(self._guard, "photo", self.run_photo)
+            _pool.submit(self._guard, "photo", self.run_photo)
         elif self.phase["twin"]["status"] == "pending" and self.photo_url:
-            _media_pool.submit(self._guard, "twin", self.run_twin)
+            _pool.submit(self._guard, "twin", self.run_twin)
         if os.getenv("GEMINI_API_KEY"):
             _pool.submit(self._guard, "plan_video", self.run_plan_video)
         else:
