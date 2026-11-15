@@ -55,6 +55,7 @@ def _client():
 
 _http = None
 _jobs: dict[str, "Job"] = {}
+KEYBOARD_RE = re.compile(r"\bkey ?boards?\b|\brk ?\d+\b|\bkey ?caps?\b|\bspace ?bar\b|\bkeys?\b", re.I)   # same words as training/viewer/route.js
 
 
 # ---------------------------------------------------------------- Claude output shapes
@@ -566,6 +567,10 @@ class Job:
     # -- entry points
     def start(self, text: str) -> dict:
         self.set("intake", "running")
+        if KEYBOARD_RE.search(text):       # the keyboard has its own flow: no photo, no twin, no questions from here
+            self.intake = Intake(object="mechanical keyboard", model="", fault="", is_keyboard=True)
+            self.set("intake", "ready")
+            return {"say": "", **self.public()}
         try:
             self.intake = self.run_intake(text)
         except Exception as e:

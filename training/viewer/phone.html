@@ -85,6 +85,7 @@ function startLight() {
   light = watchLight({
     getTrack: () => v.srcObject && v.srcObject.getVideoTracks()[0],
     sampleLuma: () => { if (!streaming()) return null; try { lastLuma = videoLuma(v, lc); } catch { return null; } return lastLuma; },
+    getExposure: () => { const st = v.srcObject && v.srcObject.getVideoTracks()[0]?.getSettings?.(); return st && typeof st.exposureTime === "number" ? st.exposureTime : null; },
     onChange: (i) => { tl.textContent = i.label ? "🔦 " + i.label : ""; },
     opts,
   });

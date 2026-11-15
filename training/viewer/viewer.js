@@ -7,6 +7,7 @@
 //             ?instant=1 (no animation, for screenshots)  ?fx=0 (no post-processing)  ?key=SPACE
 // For P1: applyCommand() plays contracts.SceneCommand; applyState() is the world-state model the app's
 // 3D panel needs; both port directly into a react-three-fiber scene.
+import { deviceFor, routePlanRepair, KEYBOARD_WORDS } from "./route.js";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
@@ -1122,10 +1123,11 @@ function spokenClean(text) {
   const keep = [];
   for (const sen of text.match(/[^.!?]+[.!?]*/g) || []) {
     const t = sen.trim(); if (!t) continue;
-    if (LOOKUP_RE.test(t) || recentSpoken.some((r) => samePoint(t, r.s)) || keep.some((k) => samePoint(t, k))) { if (QP.get("debug")) console.log("DROPPED", t); continue; }
+    const guard = objectFlow.on || pickOpen;                              // the keyboard flow keeps its own wording ("Nice. On to the next step.")
+    if (LOOKUP_RE.test(t) || (guard && (recentSpoken.some((r) => samePoint(t, r.s)) || keep.some((k) => samePoint(t, k))))) { if (QP.get("debug")) console.log("DROPPED", t); continue; }
     keep.push(t);
   }
-  for (const k of keep) recentSpoken.push({ s: k, t: now }); while (recentSpoken.length > 24) recentSpoken.shift();
+  if (objectFlow.on || pickOpen) for (const k of keep) recentSpoken.push({ s: k, t: now }); while (recentSpoken.length > 24) recentSpoken.shift();
   return keep.join(" ");
 }
 const FILLER_SET = new Set(["Mm-hm.", "Okay.", "Let me see.", "Right."]);
@@ -1225,7 +1227,7 @@ async function command(raw) {
   else if (/x.?ray|see through|hologram/.test(t)) { setXray(!xray); say(xray ? "X-ray on." : "X-ray off."); }
   else if (/\b(reset|from the top)\b/.test(t)) { $("reset").onclick(); say("Reset."); }
   else if (/\b(tour|play|walk me through|show me the repair|start the repair)\b/.test(t)) { if (!touring) tour(); say("Walking you through the repair."); }
-  else if (/(stop|pause|hold on|quiet|shut up|stop talking|be quiet|silence|enough)/.test(t)) { if (/pause/.test(t) && !motionPaused) $("btnPause").onclick(); quiet(raw); return; }
+  else if (/\b(stop|pause|hold on|quiet|shut up|stop talking|be quiet|silence|enough)\b/.test(t)) { if (/pause/.test(t) && !motionPaused) $("btnPause").onclick(); quiet(raw); return; }
   else if (/rewind|reverse|undo/.test(t)) { rewind(); say("Rewinding."); }
   else if (/mistake|go wrong|wrong way|what not to do/.test(t)) { showMistake(); said = "showing the mistake"; }
   else if (/fix it|that's wrong|correct it/.test(t)) { fixMistake(); say("Fixed."); }
@@ -1252,7 +1254,7 @@ async function command(raw) {
   heard(raw, said);
 }
 // ---- every spoken sentence, from the laptop mic or the phone mic, comes in here
-const QUICK = /^(?:\s*(?:ok(?:ay)?|hey|spanner|please|and|now|just)[,\s]*)*(close|stop|quiet|shut up|stop talking|be quiet|enough|pause|next|back|calibrate|reset|rewind|x-?ray|lights (?:on|off)|take it apart|put it back|zoom (?:in|out))/i;
+const QUICK = /^(?:\s*(?:ok(?:ay)?|hey|spanner|please|and|now|just)[,\s]*)*(close|stop|quiet|shut up|stop talking|be quiet|enough|pause|next|back|calibrate|reset|rewind|x-?ray|lights (?:on|off)|take it apart|put it back|zoom (?:in|out))\b/i;
 const echoWords = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter((w) => w.length > 2));
 const STOCK = /what do you want to fix|i'm spanner|i am spanner|show it to me|step by step|replacement parts or other keyboards|heads up|people often|searching live|taking it apart|putting it back|starting over|let me work out the fix|scan the code|finding it and reading|reading the repair guides|already learned this repair|say start when|still reading the guides|written guides were|usable repair guide|the steps are ready|watched two repair videos/i;
 /** Spanner hearing its own voice: its stock phrases, or most of the words are in what it is saying (or just said). */
@@ -1715,8 +1717,14 @@ async function onReply(r) {
   const viaCommand = { take_apart: "take it apart", reassemble: "put it back together", xray: "x-ray", zoom_in: "zoom in",
     zoom_out: "zoom out", show_mistake: "show me the mistake", specs: "specs", sources: "sources" };
   switch (r.action) {
-    case "pick_device": if (pickOpen && r.device) return chooseDevice(r.device, ""); break;
-    case "plan_repair": if (objectFlow.asking) return answerObject(r.text); if (!KEYBOARD_WORDS.test(r.complaint || r.text)) return startObject(r.complaint || r.text); closePicker(); return requestRepair(r.complaint || r.text);
+    case "pick_device": if (pickOpen) { const d = deviceFor(r.text); return d ? chooseDevice(d, r.text) : startObject(r.text); } break;
+    case "plan_repair": {
+      const text = r.complaint || r.text, route = routePlanRepair({ text, pickOpen, objectOn: objectFlow.on, asking: objectFlow.asking });
+      if (route === "answer") return answerObject(r.text);
+      if (route === "object") return startObject(text);
+      if (route === "keyboard") { closePicker(); return requestRepair(text); }
+      return chooseDevice(route, text);
+    }
     case "none": if (objectFlow.asking) return answerObject(r.text); break;
     case "start": stopTour(); return goStep(0);
     case "next": stopTour(); return advance();
@@ -1917,7 +1925,6 @@ setXray(true); setMode("scanning");
 // ------------------------------------------------------------------ any object, live: photo + specs (Linkup/Tavily), twin (fal),
 // sourced plan (web guides, then YouTube), diagnostic questions meanwhile. The keyboard keeps its own hologram; everything
 // else is "object mode": the keyboard hides, the twin stands in its place, the steps play as text + picture + voice.
-const KEYBOARD_WORDS = /key ?board|rk ?6[18]|rk ?84|keycap|space ?bar|\bkeys?\b/i;
 function setObjectMode(on) {
   for (const p of Object.values(parts)) p.obj.visible = !on;
   $("fx").classList.toggle("on", !on);         // the bloom is tuned for the keyboard's RGB; a white product twin would blow out
@@ -2044,7 +2051,7 @@ function showPicker() {
   pickOpen = true; $("pick").style.display = "flex"; $("pick").style.opacity = 1; $("pickecho").textContent = ""; $("pickq").textContent = "What do you want to fix?"; $("pickhint").textContent = "listening · just say it";
   narrate("What do you want to fix?");
 }
-const FAULT_WORDS = /(\bkeys?\b|keycaps?|space ?bar|enter|shift|backspace|switch(es)?|cable|charg\w*|power|lights?|backlight|led|dead|broken|stuck|sticky|rattl\w*|wobbl\w*|loose|missing|cracked|flicker\w*|double|chatter\w*|not (working|registering|typing)|doesn'?t|won'?t)/i;
+const FAULT_WORDS = /\b(\bkeys?\b|keycaps?|space ?bar|enter|shift|backspace|switch(es)?|cable|charg\w*|power|lights?|backlight|led|dead|broken|stuck|sticky|rattl\w*|wobbl\w*|loose|missing|cracked|flicker\w*|double|chatter\w*|not (working|registering|typing)|doesn'?t|won'?t)\b/i;
 async function chooseDevice(dev, raw = "") {
   if (!pickOpen) return;
   pickOpen = false; $("pick").style.opacity = 0; setTimeout(() => { $("pick").style.display = "none"; }, 600);
@@ -2055,7 +2062,7 @@ async function chooseDevice(dev, raw = "") {
 }
 async function pickByVoice(raw) {   // free speech -> which device; Claude decides when the words aren't obvious
   const t = raw.toLowerCase();
-  let dev = /key ?board|rk ?61|keys?|keycap|space ?bar/.test(t) ? "keyboard" : /i ?phone/.test(t) ? "iphone15" : /head ?phone|momentum|sennheiser|ear ?phone/.test(t) ? "momentum4" : /i ?pad|tablet/.test(t) ? "ipad11" : null;
+  const dev = deviceFor(t);
   $("pickecho").textContent = "“" + raw.trim() + "”";
   if (objectFlow.asking) return answerObject(raw);          // mid-conversation about an object: this is an answer
   if (!dev) return startObject(raw);                        // anything else: Spanner learns it live
@@ -2063,7 +2070,7 @@ async function pickByVoice(raw) {   // free speech -> which device; Claude decid
 }
 if (QP.get("pick") === "1" && INSTANT) { pickOpen = true; $("pick").style.display = "flex"; }
 if (QP.get("kb")) fetchLayout();
-if (QP.get("debug")) window.__spanner = { narrate, stopSpeech, spokenClean, speech: () => ({ playing, queue: speechQ.map((x) => x.text), current: currentSpeech }) };   // test hook
+if (QP.get("debug")) window.__spanner = { narrate, stopSpeech, spokenClean, pickByVoice, onReply, speech: () => ({ playing, queue: speechQ.map((x) => x.text), current: currentSpeech }) };   // test hook
 if (QP.get("twin")) { objectFlow.on = true; setObjectMode(true); twinFromGlb(QP.get("twin")); }   // test hook: ?twin=/data/objects/... shows any mesh
 if (QP.get("say")) { const seq = QP.get("say").split("|"); let i = 0; const go = () => { if (i < seq.length) { hearSpeech(seq[i++]); setTimeout(go, 2500); } }; setTimeout(go, 5000); }   // test hook: ?say=a|b|c feeds heard sentences
 // wake: browsers need one gesture before mic + speech; after that it's voice only
