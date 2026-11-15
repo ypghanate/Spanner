@@ -4,7 +4,7 @@ Imports RAG knowledge retrieval and integrates Claude Vision analysis.
 
 Integration:
   Set session.brain_state["repair_demo"] before starting:
-    "keyboard_character", "keyboard_chassis", or "mouse_chassis".
+    "keyboard_character", "keyboard_chassis", "mouse_chassis", or "fuse_replacement".
   Load the matching procedure into session.plan and set phase="guiding".
   The original _plan() still reads training/repair.json; this file does not
   create or select the three demo procedures automatically.
@@ -32,7 +32,7 @@ import anthropic
 import cv2
 
 from backend.contracts import Alert, BrainResponse, RepairPlan, SituationReport
-from backend.brain.rag import retrieve_repair_knowledge
+from backend.brain.rag import ALWAYS_INCLUDE_BY_DEMO, retrieve_repair_knowledge
 
 ROOT = Path(__file__).resolve().parents[2]
 MODEL = os.getenv("PASS2_MODEL", "claude-sonnet-5-5")
@@ -54,7 +54,24 @@ DEMO_WARNINGS = {
         "wrong_tool": "Stop. That tool is unsuitable for this step. Use the tool specified in the repair instructions.",
         "too_much_force": "Stop pressing. Too much force can break the mouse clips or shell. Release pressure and check the alignment.",
     },
+    "fuse_replacement": {
+        "power_connected": "Stop. The device still looks connected to power. Unplug it and remove batteries before touching the fuse.",
+        "wrong_fuse_rating": "Stop. That fuse does not match the required rating or type. Check the amps, voltage, and fast or slow type first.",
+        "fuse_bridged": "Stop. Never bridge a fuse with wire or foil. Remove it and fit a correct rated fuse.",
+        "wrong_tool": "Stop. Do not use a metal tool near the fuse holder. Use plastic tweezers or a fuse puller.",
+        "too_much_force": "Stop pushing. Forcing a fuse can bend the clips or crack the holder. Remove it and check the fit.",
+    },
 }
+
+# Retrieval hint per demo so the query matches the right guides even when the step text is short
+# ("Remove the old one"), and an optional metadata category to search first.
+RAG_HINTS = {
+    "keyboard_character": "keyboard keycap switch",
+    "keyboard_chassis": "keyboard case screws opening",
+    "mouse_chassis": "mouse case skates screws opening",
+    "fuse_replacement": "fuse replacement blown fuse rating",
+}
+RAG_CATEGORY = {"fuse_replacement": "fuses"}
 
 
 def _repair_demo(session: Any) -> str | None:
@@ -83,7 +100,7 @@ def _checks_clear(demo: str, analysis: dict) -> bool:
   )
 
 
-SYSTEM = """You are an expert hardware repair technician and assistant watching a live camera feed of a keyboard or mouse repair.
+SYSTEM = """You are an expert hardware repair technician and assistant watching a live camera feed of a keyboard, mouse, or small-electronics repair (including fuse replacement).
 You guide users safely and precisely. You incorporate retrieved technical documentation context to provide exact hardware instructions.
 
 You receive:
@@ -99,6 +116,23 @@ YOLO labels can be noisy; rely primarily on visual evidence in the frames.
 CRITICAL SAFETY RULES:
 1. Always advise unplugging cables or removing batteries before opening electronics.
 2. Warn against forcing plastic clips or pulling ribbon cables abruptly.
+3. Never suggest bridging a fuse holder, or fitting a fuse with a higher rating than the one specified.
+4. Never guide mains-voltage internals, boilers or gas appliances, microwaves, or swollen or punctured lithium batteries. Tell the user to stop and call a qualified professional.
+
+FUSE KNOWLEDGE (use together with the retrieved guides; the retrieved guides win if they differ):
+- A blown fuse is a symptom. Look for the cause (burnt smell, scorching, bulging capacitors, damaged cable, liquid) before and after replacing it. If the new fuse blows again at once, stop: the device has a fault a fuse cannot fix.
+- A valid replacement matches physical size, current (amps), voltage (equal or higher), speed (F fast, T slow-blow), and breaking capacity where marked. Matching size alone is not enough.
+- Test with the device unplugged, using a multimeter in continuity mode: a good fuse beeps or reads near 0 ohms; a blown one reads open. Ceramic and SMD fuses look fine when blown, so they must be tested.
+- Remove and fit fuses with plastic tweezers or a fuse puller, never a metal screwdriver. Seat the fuse gently and centered. Do not force it.
+- Car blade fuses: ignition off first; use the same amp rating and same blade size. Colour codes: 5 A tan, 7.5 A brown, 10 A red, 15 A blue, 20 A yellow, 25 A clear, 30 A green.
+- UK plug fuses (BS 1362): unplug the plug from the wall first; 3 A for appliances up to about 700 W, 13 A above that, or the value in the appliance instructions.
+- A tripped resettable polyfuse on a USB keyboard or mouse recovers after unplugging and cooling for a few minutes; repeated tripping points to a cable, connector, or board short.
+
+GENERAL REPAIR KNOWLEDGE:
+- Disconnect power first, wait for capacitors to discharge, keep screws sorted by location, and photograph the layout before disassembly.
+- Use plastic spudgers on shells and clips, and hold boards by the edges to avoid static damage.
+- Close the case fully and refit every screw before reconnecting power. After repair, watch for heat, smell, or smoke and disconnect at once if any appear.
+- If a step cannot be done safely with what the user has, say so and recommend stopping.
 
 Respond with ONLY a valid JSON object matching this exact schema:
 {
@@ -122,6 +156,10 @@ Repair interruption rules:
 - Chassis: screws_left means screws still secure the shell during an attempted lift, not spare screws sitting nearby.
 - wrong_alignment means mating edges, clips, or mounting points do not line up during fitting.
 - wrong_tool means the visible tool is unsuitable for the current step according to the retrieved instructions.
+- Fuse replacement: power_connected means the device or its cable is visibly plugged into power, or a battery is installed, while the fuse area is open or being touched.
+- wrong_fuse_rating means the fuse in hand or being fitted visibly has a rating, size, or type that differs from the required one. If the markings are not legible, use "unclear", never guess.
+- fuse_bridged means foil, wire, a paperclip, a coin, or similar is visibly placed across the fuse holder or in place of a fuse.
+- For the fuse demo, wrong_tool also means a metal screwdriver or metal pliers used to pry a fuse out of a holder; plastic tweezers or a fuse puller are correct.
 - too_much_force needs observable evidence such as bending, deformation, or forced movement. Do not claim to measure force from images.
 - "safe" means the relevant condition is visibly resolved or demonstrably not applicable to this step.
 - Use "unclear" for occluded parts, uncertain layouts/tools, or inadequate frames. Never invent visual evidence from YOLO labels.
@@ -182,7 +220,7 @@ def _object_in_view(report: SituationReport, session: Any) -> bool:
       report.suspected_fault or "",
       *([last.object, *last.visible_parts, *last.tools_visible] if last else [])
   ]).lower()
-  vocab = {"mouse", "keyboard", "keycap", "switch", *(w.lower() for w in _cfg()["parts"] + _cfg()["tools"])}
+  vocab = {"mouse", "keyboard", "keycap", "switch", "fuse", "multimeter", *(w.lower() for w in _cfg()["parts"] + _cfg()["tools"])}
   return any(w in seen for w in vocab)
 
 
@@ -205,8 +243,14 @@ def _img(frame):
 
 def analyze(frames, scene_text, hand_motion, current_step, issue, repair_demo=None) -> dict:
   """Queries the external RAG module and passes retrieved context + frames to Claude Vision."""
-  rag_query_text = f"{issue or ''} {current_step or ''}".strip()
-  rag_context = retrieve_repair_knowledge(rag_query_text, top_k=2)
+  hint = RAG_HINTS.get(repair_demo, "")
+  rag_query_text = f"{hint} {issue or ''} {current_step or ''}".strip()
+  rag_context = retrieve_repair_knowledge(
+      rag_query_text,
+      top_k=3,
+      always_include=ALWAYS_INCLUDE_BY_DEMO.get(repair_demo),
+      category=RAG_CATEGORY.get(repair_demo),
+  )
 
   content = [_img(f) for f in frames] if frames else []
   content.append({
@@ -225,7 +269,7 @@ def analyze(frames, scene_text, hand_motion, current_step, issue, repair_demo=No
   try:
     resp = _client().messages.create(
         model=MODEL,
-        max_tokens=600,
+        max_tokens=800,
         system=SYSTEM,
         messages=[{"role": "user", "content": content}],
     )
@@ -259,7 +303,7 @@ async def respond(report: SituationReport, session: Any) -> BrainResponse:
     return BrainResponse(phase="identifying", say="Okay, stopped. Say start when you want to go again.")
   demo = _repair_demo(session)
   if demo is None:
-    return BrainResponse(phase="identifying", say="Choose mouse chassis, keyboard chassis, or keyboard key and bar replacement before starting.")
+    return BrainResponse(phase="identifying", say="Choose mouse chassis, keyboard chassis, keyboard key and bar replacement, or fuse replacement before starting.")
   pending = session.brain_state.get("repair_warning")
   if session.phase == "safety_stop" and not pending and intent != "start":
     return BrainResponse(phase="safety_stop", say="")
@@ -281,7 +325,7 @@ async def respond(report: SituationReport, session: Any) -> BrainResponse:
           scene3d=list(plan.steps[0].scene3d),
           plan=plan
       )
-    return BrainResponse(phase="identifying", say="" if intent == "none" else "Show me the keyboard or mouse.")
+    return BrainResponse(phase="identifying", say="" if intent == "none" else "Show me the device or fuse you are repairing.")
 
   if session.phase == "done":
     return BrainResponse(phase="done", step_status="done", say="The repair is complete. Reconnect power only after reassembly, then test the device.")
@@ -351,7 +395,7 @@ async def respond(report: SituationReport, session: Any) -> BrainResponse:
     )
 
   if not _checks_clear(demo, analysis):
-    message = "Pause. I cannot confirm this step is safe. Show the key position, shell alignment, and tool clearly."
+    message = "Pause. I cannot confirm this step is safe. Show the device, fuse markings, and tool clearly."
     return BrainResponse(
         phase="guiding", current_step=step.index, step_status="in_progress",
         say=message, alert=Alert(severity="warn", message=message)

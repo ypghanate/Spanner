@@ -607,6 +607,17 @@ async def plan(session: str = ""):
     then this is only the canned demo plan, as a fallback for old clients, and nothing should start from it."""
     return {**_demo(session), "chosen": session in _plans}
 
+_utt_lock: dict[str, asyncio.Lock] = {}
+_utt_seq: dict[str, int] = {}
+_utt_carry: dict[str, tuple[str, float]] = {}     # text of clips that were superseded (a sentence the phone split)
+CARRY_S = 4.0
+
+
+def _say_seconds(text: str) -> float:
+    """Rough speaking time: about 145 words a minute plus a second. The laptop's /speaking call refines it."""
+    return len(text.split()) / 2.4 + 1.0
+
+
 
 class UtteranceReq(BaseModel):
     session: str
