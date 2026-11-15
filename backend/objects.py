@@ -738,7 +738,7 @@ class Job:
     def _opening(self) -> str:
         name = self.intake.model or self.intake.object
         q = self.next_question()
-        return f"Okay, the {name}. I'm finding it and reading the repair guides now." + (f" Meanwhile: {q}" if q else "")
+        return f"Okay, the {name}." + (f" While I get that ready: {q}" if q else " Give me a moment.")
 
     def _waiting_line(self) -> str:
         p = self.phase

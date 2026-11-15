@@ -1063,6 +1063,7 @@ async def say(text: str):
     text = text.strip()[:600]
     if not text:
         raise HTTPException(400, "empty text")
+    print(f"SAY: {text[:160]}", flush=True)          # every spoken line, so a bad one can be traced to where it came from
     from fastapi.responses import FileResponse
 
     name = tts.start(text)

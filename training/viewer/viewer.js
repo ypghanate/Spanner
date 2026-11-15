@@ -1101,6 +1101,33 @@ function reportSpeaking(ms) {
 // dropped instead of queued). Only the person can stop it: stop, the palm, or speaking over it (stopSpeech). Every way a clip can
 // end (finished, error, stall) goes through speechDone, and a watchdog frees the queue if a clip never reports back.
 const speechQ = []; let playing = false, playGuard = 0;
+// The last thing in the chain, whatever wrote the line (Claude on the call, the camera coach, the object flow): a sentence that
+// announces looking something up in a manual/guide/instructions is never spoken or captioned, and neither is a sentence that
+// repeats one said in the last few minutes, even reworded. (The same rule as backend/speech.py; step read-outs are verbatim.)
+const SRC = "(?:manuals?|guides?|instructions?|documentation|docs|handbook|service notes|repair (?:info|steps|procedure)|walkthroughs?)";
+const LOOKUP_VERB = "(?:consult\\w*|check\\w*|look\\w*\\s+(?:it\\s+|that\\s+|this\\s+)?(?:up|into|through|at)|refer\\w*|pull\\w*\\s+up|go\\w*\\s+(?:through|over)|read\\w*|review\\w*|search\\w*|dig\\w*|scan\\w*|browse\\w*|open\\w*)";
+const LOOKUP_RE = new RegExp(`\\b${LOOKUP_VERB}\\b[^.!?]{0,60}\\b${SRC}\\b|\\b${SRC}\\s+(?:for|on)\\s+(?:that|this)\\b|\\b(?:consult|check)\\w*\\s+(?:the\\s+|my\\s+|our\\s+)?(?:manual|guide)`, "i");
+const SAY_STOP = new Set("the a an is are was were be to of and or it its that this for on in at with your you i me my we so then now just okay ok right well let lets will can do does did have has about from as by if not no yes".split(" "));
+const contentWords = (t) => new Set((t.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/)).filter((w) => w.length > 2 && !SAY_STOP.has(w)));
+function samePoint(a, b) {
+  const x = contentWords(a), y = contentWords(b);
+  if (Math.min(x.size, y.size) < 3) return a.trim().toLowerCase() === b.trim().toLowerCase();
+  let n = 0; for (const w of x) if (y.has(w)) n++;
+  return n / Math.min(x.size, y.size) >= 0.6;
+}
+const recentSpoken = [];   // [{ s: sentence, t: time }]
+function spokenClean(text) {
+  if (/^Step \d+\b/.test(text.trim())) return text;                       // a step read-out is the plan, word for word
+  const now = performance.now(); while (recentSpoken.length && now - recentSpoken[0].t > 300000) recentSpoken.shift();
+  const keep = [];
+  for (const sen of text.match(/[^.!?]+[.!?]*/g) || []) {
+    const t = sen.trim(); if (!t) continue;
+    if (LOOKUP_RE.test(t) || recentSpoken.some((r) => samePoint(t, r.s)) || keep.some((k) => samePoint(t, k))) { if (QP.get("debug")) console.log("DROPPED", t); continue; }
+    keep.push(t);
+  }
+  for (const k of keep) recentSpoken.push({ s: k, t: now }); while (recentSpoken.length > 24) recentSpoken.shift();
+  return keep.join(" ");
+}
 const FILLER_SET = new Set(["Mm-hm.", "Okay.", "Let me see.", "Right."]);
 const isFiller = (t) => FILLER_SET.has((t || "").trim());
 function stopSpeech() {
@@ -1136,6 +1163,7 @@ function speakNow(text, show) {
 }
 function narrate(text, show = true) {
   if (!text) return;
+  if (!isFiller(text)) { text = spokenClean(text); if (!text) return; }
   if (!voiceOn || INSTANT) { if (show) caption(text); return; }
   if (playing || speechQ.length) {
     if (isFiller(text)) return;                                              // a filler never waits behind real speech
@@ -2035,7 +2063,7 @@ async function pickByVoice(raw) {   // free speech -> which device; Claude decid
 }
 if (QP.get("pick") === "1" && INSTANT) { pickOpen = true; $("pick").style.display = "flex"; }
 if (QP.get("kb")) fetchLayout();
-if (QP.get("debug")) window.__spanner = { narrate, stopSpeech, speech: () => ({ playing, queue: speechQ.map((x) => x.text), current: currentSpeech }) };   // test hook
+if (QP.get("debug")) window.__spanner = { narrate, stopSpeech, spokenClean, speech: () => ({ playing, queue: speechQ.map((x) => x.text), current: currentSpeech }) };   // test hook
 if (QP.get("twin")) { objectFlow.on = true; setObjectMode(true); twinFromGlb(QP.get("twin")); }   // test hook: ?twin=/data/objects/... shows any mesh
 if (QP.get("say")) { const seq = QP.get("say").split("|"); let i = 0; const go = () => { if (i < seq.length) { hearSpeech(seq[i++]); setTimeout(go, 2500); } }; setTimeout(go, 5000); }   // test hook: ?say=a|b|c feeds heard sentences
 // wake: browsers need one gesture before mic + speech; after that it's voice only
