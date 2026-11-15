@@ -348,7 +348,7 @@ def test_shop_route_passes_the_session_and_the_clarifying_question(monkeypatch):
 
 # ---------------------------------------------------------------- the UK 13 A plug (demo repair: swapping its fuse)
 PLUG_PARTS = [{"name": n, "label": n.replace("_", " ").title(), "desc": f"the {n}", "group": "plug"}
-              for n in ("body", "cover", "cover_screw", "fuse", "fuse_clips", "cord_grip", "live_terminal", "earth_pin")]
+              for n in ("body", "fuse_door", "fuse_holder", "fuse", "live_pin", "neutral_pin", "earth_pin", "cable_boot", "cable")]
 
 
 def test_plug_is_a_known_device_with_its_faults():
@@ -356,7 +356,7 @@ def test_plug_is_a_known_device_with_its_faults():
 
     assert "mains plug" in dp.DEVICE_NAMES["plug13a"]
     assert dp.classify("plug13a", "the fuse in my plug has blown") == "fuse"
-    assert dp.classify("plug13a", "the cable is loose") == "cable"
+    assert dp.classify("plug13a", "the cable is loose") is None   # a moulded plug's cable is not a home repair
 
 
 def test_a_plug_fuse_swap_is_not_refused_but_a_burnt_plug_is():
@@ -378,13 +378,14 @@ def test_plug_plan_uses_plug_parts_and_starts_by_unplugging(monkeypatch, tmp_pat
         assert device == "plug13a"
         return dp.DevPlan(status="ready", title="Plug fuse replacement", fault="blown fuse", diagnosis="The fuse has blown.",
                           steps=[dp.DevStep(title="Unplug it", instruction="Pull the plug out of the wall.", expected_visual_state="The plug is in your hand, not in a socket."),
-                                 dp.DevStep(title="Open", instruction="Undo the cover screw and lift the cover.", expected_visual_state="The cover is off.", focus=["cover_screw", "cover"], view="apart"),
-                                 dp.DevStep(title="Swap the fuse", instruction="Pop out the old fuse and press in a new one of the same rating.", expected_visual_state="A new fuse sits in the clips.", focus=["fuse", "fuse_clips"]),
-                                 dp.DevStep(title="Close", instruction="Refit the cover and tighten the screw.", expected_visual_state="The cover is on.", focus=["cover"], view="together")])
+                                 dp.DevStep(title="Open", instruction="Prise the fuse door open with a flat screwdriver.", expected_visual_state="The fuse door is open.", focus=["fuse_door"], view="apart"),
+                                 dp.DevStep(title="Swap the fuse", instruction="Pop out the old fuse and press in a new one of the same rating.", expected_visual_state="A new fuse sits in the clips.", focus=["fuse", "fuse_holder"]),
+                                 dp.DevStep(title="Close", instruction="Press the fuse door shut until it clicks.", expected_visual_state="The fuse door is closed.", focus=["fuse_door"], view="together")])
 
     monkeypatch.setattr(dp, "_generate_claude", fake)
     monkeypatch.setattr(dp, "CACHE_DIR", tmp_path / "plans")
     r = dp.plan_device_repair("the fuse in my plug blew", "plug13a", PLUG_PARTS)
     assert r["status"] == "ready" and r["plan"]["device"] == "plug13a" and "mains plug" in r["plan"]["object"]
-    assert [c["part"] for c in r["plan"]["steps"][2]["scene3d"] if c.get("part")] == ["fuse", "fuse_clips"]
+    assert [c["part"] for c in r["plan"]["steps"][2]["scene3d"] if c.get("part")] == ["fuse", "fuse_holder"]
+    assert "plug" in r["plan"]["steps"][0]["instruction"].lower() and "unplug" in r["plan"]["steps"][0]["title"].lower()
     assert (tmp_path / "plans" / "device-plug13a-class-fuse.json").exists()

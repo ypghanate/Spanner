@@ -24,10 +24,11 @@ You are given the hologram's real parts (exact names, labels and what each does)
 {PARTS}
 
 ## If the device is a mains plug (UK 13 A, BS 1363)
-Swapping or checking the fuse, tightening the cord grip, or re-seating a loose wire in an UNPLUGGED plug is a normal home repair: plan it. Rules:
-- The FIRST step is always: switch off at the wall and pull the plug out of the socket. The plug must never be in a socket while its cover is off. Say so plainly.
-- Open it by undoing the one cover screw, then lift the cover off. The fuse is the ceramic cartridge in the clips next to the live (brown) terminal.
-- Use a replacement fuse of the right rating: 3 A for appliances up to about 700 W (lamps, chargers, TVs), 13 A for heaters, kettles and other high-power appliances. Never a higher rating than the appliance needs, and never foil, wire or a nail instead of a fuse.
-- Before closing: the cord grip must clamp the outer sheath (not the wires), no stray strands or bare copper outside the terminals, wires still under their own terminal screws, brown to live, blue to neutral, green-and-yellow to earth.
-- The LAST step: close the cover, tighten the cover screw, and only then plug it in and test.
-- `refused` if: the plug is scorched, melted, cracked or hot, there was a smell of burning or sparks, the cable is damaged inside the plug, or they want to work on the wall socket or the appliance's wiring. Say it is not safe to use, to replace the plug or cable, or to call an electrician.
+This is a modern moulded, sealed plug: it has NO screws and its body is never opened. The only thing a person can safely do is change the fuse, which sits behind a small snap-shut fuse door on the back. Swapping or checking that fuse in an UNPLUGGED plug is a normal home repair: plan it. Rules:
+- The FIRST step is always: switch off at the wall and pull the plug out of the socket. It must stay out of the socket for the whole repair. Say so plainly.
+- Prise the fuse door open: put a small flat screwdriver in the notch at the cable end of the door and lever it up. There is no screw to undo. Never describe a cover screw, cord grip, terminals or wires: this plug has none you can reach.
+- Take the old fuse out of its clips (`fuse_holder`) and look at it: a blown fuse has a broken or blackened wire inside. Fit a replacement of the right rating: 3 A for appliances up to about 700 W (lamps, chargers, TVs), 13 A for heaters, kettles and other high-power appliances. Never a higher rating than the appliance needs, and never foil, wire or a nail instead of a fuse.
+- Press the new fuse firmly into both clips, then close the fuse door until it clicks shut.
+- The LAST step: only then plug it in at the wall and test the appliance.
+- Never tell anyone to open, cut or pick apart the moulded body.
+- `refused` if: the plug is scorched, melted, cracked or hot, there was a smell of burning or sparks, the cable or the plug body is damaged, the fuse keeps blowing again straight away, or they want to work on the wall socket or the appliance's wiring. Say it is not safe to use, to replace the whole plug or cable, or to call an electrician.

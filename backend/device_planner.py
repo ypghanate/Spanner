@@ -31,7 +31,7 @@ PROMPT = Path(__file__).parent / "brain" / "prompts" / "planner_device.md"
 
 DEVICE_NAMES = {"iphone15": "Apple iPhone 15", "ipad11": "Apple iPad (11th generation)",
                 "momentum4": "Sennheiser Momentum 4 wireless headphones",
-                "plug13a": "UK 13 A three-pin mains plug (BS 1363)"}
+                "plug13a": "UK 13 A moulded three-pin mains plug (BS 1363, sealed, no screws)"}
 # which knowledge-base procedures are about which kind of device (their `object` text is matched against these)
 KB_WORDS = {"iphone15": r"iphone", "ipad11": r"ipad|tablet", "momentum4": r"head ?phones?|wh-1000|momentum|ear ?cups?|earbuds?", "plug13a": r"\bplug\b|fuse|mains|13 ?a\b"}
 MIN_STEPS, MAX_STEPS = 3, 10
@@ -49,8 +49,7 @@ FAULTS = {"iphone15": _PHONE, "ipad11": _PHONE,
                         ("charging", r"charg|port|usb", "it won't charge"),
                         ("sound", r"sound|audio|driver|speaker|crackl|one side|noise|quiet", "one side has no sound"),
                         ("headband", r"headband|snap|hinge|yoke|broken band|creak", "the headband is cracked")],
-          "plug13a": [("fuse", r"fuse|blown|blew|no power|dead|stopped working|not working|tripp", "the fuse in my plug has blown"),
-                      ("cable", r"cable|cord|wire|loose|frayed|pulled|grip", "the cable is loose in my plug")]}
+          "plug13a": [("fuse", r"fuse|blown|blew|no power|dead|stopped working|not working|tripp", "the fuse in my plug has blown")]}   # a moulded plug has nothing else a person can repair
 
 
 def classify(device: str, complaint: str) -> str | None:
