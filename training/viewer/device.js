@@ -359,12 +359,16 @@ function needTap(text) {
 let healthKnown = false;
 const healthP = fetch(API + "/coach/health", { signal: AbortSignal.timeout(4000) }).then((r) => r.json()).then((j) => { elevenOK = !!j.tts; }).catch(() => {}).finally(() => { healthKnown = true; });
 function stopSpeaking() { reportSpeaking(0); if ("speechSynthesis" in window) speechSynthesis.cancel(); if (sayAudio) { sayAudio.pause(); sayAudio = null; } speakingUntil = 0; }
-function narrate(text) {
+function narrate(text, tries = 0) {
   if (!voiceOn || INSTANT || !text) return;
-  if (!healthKnown) { healthP.then(() => narrate(text)); return; }
+  if (!healthKnown) { healthP.then(() => narrate(text, tries)); return; }
   stopSpeaking(); currentSpeech = text; speakingUntil = performance.now() + 60000;
   caption(text); reportSpeaking(Math.min(45000, 2500 + text.split(/\s+/).length * 450) + 1000);
-  if (elevenOK) { const a = new Audio(API + "/coach/say?text=" + encodeURIComponent(text)); sayAudio = a; a.onended = () => { speakingUntil = performance.now() + 300; reportSpeaking(0); }; a.play().catch((e) => { if (e && e.name === "NotAllowedError") needTap(text); else browserSay(text); }); return; }
+  if (elevenOK) { const a = new Audio(API + "/coach/say?text=" + encodeURIComponent(text)); sayAudio = a; a.onended = () => { speakingUntil = performance.now() + 300; reportSpeaking(0); };
+    // always Spanner's own (ElevenLabs) voice: one retry on a real failure, then silent (the caption still shows the line)
+    const retry = () => { if (sayAudio !== a) return; sayAudio = null; if (tries < 1) setTimeout(() => { if (!sayAudio) narrate(text, tries + 1); }, 400); else { speakingUntil = performance.now() + 300; reportSpeaking(0); } };
+    a.onerror = retry; setTimeout(() => { if (sayAudio === a && a.paused && a.currentTime === 0) retry(); }, 12000);
+    a.play().catch((e) => { if (e && e.name === "NotAllowedError") needTap(text); else retry(); }); return; }
   browserSay(text);
 }
 function browserSay(text) { if (!("speechSynthesis" in window)) return; const u = new SpeechSynthesisUtterance(text); u.rate = 1.03; u.pitch = 0.92; u.onend = () => { speakingUntil = performance.now() + 300; reportSpeaking(0); }; speechSynthesis.speak(u); }

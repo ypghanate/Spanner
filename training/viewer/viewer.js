@@ -1106,7 +1106,7 @@ function browserSay(text) {
   u.onend = done; u.onerror = done;
   speakingUntil = performance.now() + speechMs(text); currentSpeech = text; reportSpeaking(speechMs(text)); speechSynthesis.speak(u);
 }
-function narrate(text, show = true) {
+function narrate(text, show = true, tries = 0) {
   if (!text) return;
   if (show) caption(text);
   if (!voiceOn || INSTANT) return;
@@ -1114,11 +1114,18 @@ function narrate(text, show = true) {
   if (!elevenOK) return browserSay(text);
   const a = new Audio(API + "/coach/say?text=" + encodeURIComponent(text));
   sayAudio = a; speakingUntil = performance.now() + speechMs(text) + 4000; currentSpeech = text; reportSpeaking(speechMs(text) + 1000);
-  const fallback = () => { if (sayAudio === a) { sayAudio = null; browserSay(text); } };
+  // Spanner always speaks with its own (ElevenLabs) voice, never the browser's default one, which is a different voice.
+  // A slow start is normal for a line it has not said before (it is still being generated), so a stall is not a failure.
+  // A real failure retries once; after that the line stays silent (the caption still shows it).
+  const retry = () => {
+    if (sayAudio !== a) return; sayAudio = null;
+    if (tries < 1) setTimeout(() => { if (!sayAudio) narrate(text, false, tries + 1); }, 400);
+    else { speakingUntil = performance.now() + 400; reportSpeaking(0); }
+  };
   a.onended = () => { if (sayAudio === a) { sayAudio = null; speakingUntil = performance.now() + 400; reportSpeaking(0); } };
-  a.onerror = a.onstalled = a.onabort = fallback;
-  setTimeout(() => { if (sayAudio === a && a.paused && a.currentTime === 0) fallback(); }, 5000);   // never started playing
-  a.play().catch(fallback);
+  a.onerror = retry;
+  setTimeout(() => { if (sayAudio === a && a.paused && a.currentTime === 0) retry(); }, 12000);   // never started playing
+  a.play().catch(retry);
 }
 $("voice").onclick = () => { voiceOn = !voiceOn; $("voice").classList.toggle("on", voiceOn); if (voiceOn) narrate("Voice on. I'm Spanner. Say next, take it apart, or show me the socket."); else stopSpeech(); };
 // the voice pill in the guidance card: who is talking right now
