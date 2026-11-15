@@ -329,6 +329,37 @@ complete by submission, say so and show what exists.]
 
 ---
 
+## 11. Why fal
+
+**Spoken (30 s):** "Spanner knows which key you pulled. So we asked fal to draw the next step on *your*
+keyboard, not a stock one. This is a real RK61 photo; this is Nano Banana lifting the J keycap off it, every
+other legend untouched, in twelve seconds; and this is Kling animating that still so you see the motion. One
+photo in, the step on your own board out."
+
+**What fal does in the design.** The camera frame that the coach already crops to the keyboard is the input.
+A magenta ring marks the key the coach located; the edit model acts on that key and removes the ring. The
+still arrives in about 12 s, the 5-second clip about two minutes later. Both are generated in the background
+when a step starts and shown only when the user asks ("show me on mine"), so nothing covers the hologram
+uninvited. Timings go to the same Databricks `stage_timings` table as every other live decision.
+
+**What we measured** (all on a real RK61 photo, `fal/`):
+
+| Job | Model | Time | Verdict |
+|---|---|---|---|
+| Edit the photo | Nano Banana edit | 12.6 s | chosen: right key, legends intact |
+| Edit the photo | Nano Banana Pro edit | 17.7 s | same quality, slower |
+| Edit the photo | FLUX Kontext Pro | 6.9 s | rejected: redrew the board, garbled legends |
+| Animate the still | Kling 2.1 standard | 117 s | chosen: board still, hand moves |
+| Animate the still | Hailuo 02 | 156 s | rejected: the board drifts |
+| Photo to 3D | Trellis | one mesh, no parts | kept as the "any device" idea, not for repair steps |
+
+**Where it stands.** Built end to end, run on a real frame, then taken out of the demo build the same night:
+two minutes for the clip is too long for a two-minute demo, and the venue network dropped fal's queue domain
+for long stretches. The outputs are in `fal/`, the wiring is in git history (`d0dc745`), and the honest line
+on stage is "prototype, real outputs, not in the live loop".
+
+---
+
 ## Close
 
 "Spanner turns *I don't know if I can fix this* into *show me.* It watches, it guides, it warns, it shops,

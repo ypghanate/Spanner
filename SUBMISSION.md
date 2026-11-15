@@ -29,7 +29,25 @@ replacement part the moment you need one.
 
 ---
 
-## Main track: Autonomous Agents
+## Main track: Voice, Vision & Generative Media (the track we entered, 15 Nov)
+
+Spanner is a product you talk to and that watches you. One tap, then voice only: it hears any phrasing (fast
+word rules, then Claude for the rest), it stops when you say stop or raise a palm to the camera, and it never
+reacts to its own voice (ElevenLabs out, echo filter in). The phone camera is its eyes: it names the key you
+pulled by reading the legends around the gap, follows you from step to step and warns you when it sees a
+mistake. What it shows is a 255-part hologram of the device that plays the exact motion of each step. Generated
+media: Claude writes the repair plan and the hologram choreography for whatever the person says is broken;
+ElevenLabs speaks it; and the fal prototype draws the step on the user's own keyboard (`fal/`).
+
+## Best use of fal (prototype)
+
+The camera frame of the user's keyboard, edited by fal to show the current step being done on *that* board,
+then animated. Real RK61 photo in, Nano Banana edit out in 12.6 s with the right key lifted and every other
+legend intact, Kling 2.1 clip in 117 s. Six models compared, two chosen (`fal/README.md`). Wired end to end
+(`/coach/visualize`, commit `d0dc745`), then taken out of the demo build because the clip takes two minutes
+and the venue network dropped fal's queue domain. Outputs and timings in `fal/`.
+
+## Main track (previous entry): Autonomous Agents
 
 Spanner is an agent that looks, decides, acts and checks, step after step, without being driven.
 
