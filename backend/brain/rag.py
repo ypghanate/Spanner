@@ -1,19 +1,18 @@
-import os
-import chromadb
-from chromadb.utils import embedding_functions
-import anthropic
+"""Repair knowledge for Pass 2: a small ChromaDB collection of hardware repair guides, searched by meaning.
 
-# 1. Initialize ChromaDB Persistent Client & Default Embedding Function
+Everything heavy is lazy: chromadb, its embedding model and the Claude client are only created on first use (warm() pays that
+cost in the background). If chromadb is not installed, retrieval returns no extra context instead of breaking the import of
+everything that depends on this module (CI installs a light set of packages on purpose)."""
+import logging
+import os
+import threading
 from pathlib import Path
 
+log = logging.getLogger("spanner.rag")
 # kept under data/ (not wherever the server happened to be started)
-db_client = chromadb.PersistentClient(path=str(Path(__file__).resolve().parents[2] / "data" / "rag_chroma_db"))
-embedding_fn = embedding_functions.DefaultEmbeddingFunction()
-
-collection = db_client.get_or_create_collection(
-    name="comprehensive_hardware_repair_kb",
-    embedding_function=embedding_fn
-)
+DB_PATH = Path(__file__).resolve().parents[2] / "data" / "rag_chroma_db"
+_lock = threading.Lock()
+_state: dict = {}
 
 # 2. Define an Extensive Knowledge Base (8+ Detailed Repair Guides)
 repair_documents = [
@@ -148,12 +147,31 @@ repair_documents = [
 ALWAYS_INCLUDE_BY_DEMO = {
     "fuse_replacement": ["doc_fuse_replace"],
 }
-# 3. Add Documents to ChromaDB. upsert so guides added later (e.g. the fuse guides) reach an existing database.
-collection.upsert(
-    ids=[doc["id"] for doc in repair_documents],
-    documents=[doc["text"] for doc in repair_documents],
-    metadatas=[doc["metadata"] for doc in repair_documents]
-)
+def _collection():
+    """The collection, created (and filled) on first use. Raises ImportError if chromadb is not installed."""
+    with _lock:
+        if "collection" in _state:
+            return _state["collection"]
+        import chromadb
+        from chromadb.utils import embedding_functions
+
+        client = chromadb.PersistentClient(path=str(DB_PATH))
+        coll = client.get_or_create_collection(name="comprehensive_hardware_repair_kb",
+                                               embedding_function=embedding_functions.DefaultEmbeddingFunction())
+        coll.upsert(ids=[d["id"] for d in repair_documents], documents=[d["text"] for d in repair_documents],
+                    metadatas=[d["metadata"] for d in repair_documents])
+        _state["collection"] = coll
+        return coll
+
+
+def warm() -> bool:
+    """Build the store and load the embedding model now (a first query otherwise pays for it). False if unavailable."""
+    try:
+        _collection().query(query_texts=["warm up"], n_results=1)
+        return True
+    except Exception as e:
+        log.warning("RAG unavailable (%s): Pass 2 runs without the extra guides", type(e).__name__)
+        return False
 
 
 def retrieve_repair_knowledge(query: str, top_k: int = 2, always_include: list[str] | None = None,
@@ -162,6 +180,13 @@ def retrieve_repair_knowledge(query: str, top_k: int = 2, always_include: list[s
 
     `always_include`: guide ids that are always added first. `category`: search that metadata category first,
     then fill any remaining slots from the whole collection (so a category with few guides never returns nothing)."""
+    try:
+        collection = _collection()
+    except Exception as e:                      # chromadb missing, model download failed...: the live loop must not break on it
+        if not _state.get("warned"):
+            _state["warned"] = True
+            log.warning("RAG unavailable (%s): continuing without the extra guides", type(e).__name__)
+        return ""
     chunks: list[str] = []
     seen: set[str] = set()
 
@@ -188,13 +213,13 @@ def retrieve_repair_knowledge(query: str, top_k: int = 2, always_include: list[s
 
 
 # 4. Setup RAG Query Function with Claude
-anthropic_client = anthropic.Anthropic()
-
 def query_repair_rag(user_question: str, top_k: int = 3):
     """Searches ChromaDB for relevant repair instructions, builds prompt context, and queries Claude."""
     
+    import anthropic
+
     # Query ChromaDB for semantically similar chunks
-    results = collection.query(
+    results = _collection().query(
         query_texts=[user_question],
         n_results=top_k
     )
@@ -218,7 +243,7 @@ def query_repair_rag(user_question: str, top_k: int = 3):
 User Question: {user_question}"""
 
     # Call Claude API
-    response = anthropic_client.messages.create(
+    response = anthropic.Anthropic().messages.create(
         model=os.getenv("RAG_MODEL", "claude-sonnet-5-5"),
         max_tokens=600,
         system=system_prompt,

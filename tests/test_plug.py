@@ -113,3 +113,16 @@ def test_a_failed_plan_for_a_plug_never_says_standard_switch_repair(monkeypatch)
     monkeypatch.setattr("backend.planner.plan_repair", boom)
     out = asyncio.run(coach.generate_plan(coach.PlanReq(session="s", complaint="my plug is dead", device="plug13a")))
     assert out["status"] == "fallback" and "switch" not in out["say"].lower()
+
+
+def test_pass2_imports_and_runs_without_chromadb():
+    """CI installs a light set of packages (no chromadb). Importing Pass 2 must not need it, and retrieval then adds nothing."""
+    import subprocess
+    import sys
+
+    code = ("import sys; sys.modules['chromadb'] = None; sys.path.insert(0, %r);"
+            "import backend.brain.pass2, backend.brain.rag as r;"
+            "assert r.retrieve_repair_knowledge('blown fuse', always_include=['doc_fuse_replace']) == '';"
+            "assert 'doc_fuse_replace' in [d['id'] for d in r.repair_documents]; print('ok')" % str(ROOT))
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60, cwd=str(ROOT))
+    assert out.returncode == 0 and "ok" in out.stdout, out.stdout + out.stderr
