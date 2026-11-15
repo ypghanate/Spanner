@@ -6,7 +6,6 @@ import mediapipe as mp
 import numpy as np
 from ultralytics import YOLO
 
-<<<<<<< HEAD
 # ---------------------------------------------------------------- CONFIG
 CONF_THRESHOLD = 0.35        # General confidence threshold
 PERIPHERAL_CONF_THRESHOLD = 0.02  # Extremely low threshold: if there's even a small chance, keep it!
@@ -15,10 +14,6 @@ MOVEMENT_THRESHOLD = 20      # Filter out micro-jitters; only large movements tr
 FONT_SCALE = 1.0             # Large, highly readable text scale
 FONT_THICKNESS = 2           # Thicker font lines
 WINDOW = "Mechanic AI - YOLO-World + Hand Vectors"
-=======
-# 1. LOAD MODEL
-model = YOLO(Path(__file__).with_name('yolov8n.pt'))
->>>>>>> 359eed8a407473b06a758f81e3c092940bdce55c
 
 # NEW: mouse/keyboard protection
 PERIPHERAL_KEYWORDS = ("mouse", "keyboard")
