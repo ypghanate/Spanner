@@ -184,6 +184,7 @@ Also include "step_complete": bool in the response.
 
 Guidelines for `say_to_user`:
 - Must be under 25 words.
+- Never read out step numbers, step counts, or the list of steps. Talk only about what the user is doing now.
 - Optimized for Text-to-Speech (TTS): Conversational, warm, direct, and completely free of markdown, bullet symbols, or special characters.
 - Use "unclear" when frames do not show enough detail."""
 
@@ -312,6 +313,23 @@ def analyze(frames, scene_text, hand_motion, current_step, issue, repair_demo=No
     }
 
 
+DONE_SAY = "That's the last step, the repair is done. Close everything up before reconnecting power, then test it. Ending the call now."
+
+
+def _finish(session: Any) -> BrainResponse:
+  """All steps finished: say it once, flag the call to end, and stay quiet afterwards."""
+  session.brain_state["steps_done"] = True
+  session.brain_state["end_call"] = True   # the session runner hangs up after speaking `say`
+  return BrainResponse(phase="done", step_status="done", say=DONE_SAY)
+
+
+def _new_repair(session: Any) -> None:
+  """A fresh repair: clear the finished / hang-up flags from any earlier one.
+  The plan itself lives in session.plan (main.py strips it before replies reach the phone)."""
+  session.brain_state.pop("steps_done", None)
+  session.brain_state.pop("end_call", None)
+
+
 async def respond(report: SituationReport, session: Any) -> BrainResponse:
   resp = await _respond(report, session)
   # remember what the assistant is about to say, so Pass 1 can drop it if the mic hears it back
@@ -342,18 +360,19 @@ async def _respond(report: SituationReport, session: Any) -> BrainResponse:
         return BrainResponse(phase="identifying", say="No repair steps are available for this demo.")
       learned = _learned_warning()
       warning = f"Users often {learned}. " if learned else ""
+      _new_repair(session)
       return BrainResponse(
           phase="guiding",
           current_step=plan.steps[0].index,
           step_status="in_progress",
-          say=f"{warning}I see the repair item. {len(plan.steps)} steps, about {plan.time_min} minutes. Step 1: {plan.steps[0].instruction}",
+          say=f"{warning}I see it. First, {plan.steps[0].instruction}",
           scene3d=list(plan.steps[0].scene3d),
-          plan=plan
+          plan=plan,   # kept by the session for tracking; never sent to the phone
       )
     return BrainResponse(phase="identifying", say="" if intent == "none" else "Show me the device or fuse you are repairing.")
 
-  if session.phase == "done":
-    return BrainResponse(phase="done", step_status="done", say="The repair is complete. Reconnect power only after reassembly, then test the device.")
+  if session.phase == "done" or session.brain_state.get("steps_done"):
+    return BrainResponse(phase="done", step_status="done", say="")
 
   plan = session.plan
   pos = session.current_step_index or 0
@@ -407,7 +426,7 @@ async def _respond(report: SituationReport, session: Any) -> BrainResponse:
   session.brain_state["fault_detected"] = analysis.get("fault")
 
   check = session.last_step_check
-  spoken_response = analysis.get("say_to_user") or f"Step {step.index}: {step.instruction}"
+  spoken_response = analysis.get("say_to_user") or step.instruction
 
   if check.get("doing_correct_step") == "no" or check.get("movement_ok") == "no":
     correction_msg = check.get("correction") or "that's not quite right"
@@ -429,13 +448,13 @@ async def _respond(report: SituationReport, session: Any) -> BrainResponse:
   if intent == "step_done" or analysis.get("step_complete") is True:
     next_pos = pos + 1
     if next_pos >= len(plan.steps):
-      return BrainResponse(phase="done", step_status="done", say="The repair is complete. Reconnect power only after reassembly, then test the device.")
+      return _finish(session)
     next_step = plan.steps[next_pos]
     return BrainResponse(
         phase="guiding",
         current_step=next_step.index,
         step_status="in_progress",
-        say=spoken_response,
+        say=f"Good. Next, {next_step.instruction}",
         scene3d=list(next_step.scene3d)
     )
 

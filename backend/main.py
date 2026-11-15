@@ -463,6 +463,8 @@ class LiveConnection:
         self._pending_frame: tuple[bytes, float | None] | None = None
         self._frame_task: asyncio.Task | None = None
         self._clip_tasks: set[asyncio.Task] = set()
+        self._hanging_up = False
+        self._hangup_task: asyncio.Task | None = None
 
     # -- outbound -------------------------------------------------------------
 
@@ -510,12 +512,41 @@ class LiveConnection:
     async def _send_reply(self, response: BrainResponse, speak: bool) -> None:
         """Send the answer to something the user said, and speak it unless it is stale."""
         speak = speak and bool(response.say)
+        # The step list stays on the server (session.plan tracks it); the phone never gets it.
+        if response.plan is not None:
+            response = response.model_copy(update={"plan": None})
         if speak and self.tts_mode == "url":
             response.tts_url = tts_url_for(response.say)        # None when TTS is off: the phone speaks `say`
             self.spoken_text, self.spoken_at = response.say, time.monotonic()
         await self.send(LiveResponse(response=response, speak=speak or not response.say))
         if speak and self.tts_mode == "stream":
             self._start_speaking(response.say)
+        if self.session.brain_state.get("end_call") and not self._hanging_up:
+            # every step is done: let the closing line finish playing, then end the call
+            self._hanging_up = True
+            self._hangup_task = asyncio.create_task(self._hang_up(spoke=speak))
+
+    HANGUP_WAIT_S = 20.0    # longest we wait for the closing line to finish playing
+
+    async def _hang_up(self, spoke: bool) -> None:
+        deadline = time.monotonic() + self.HANGUP_WAIT_S
+        try:
+            if spoke and self.tts_mode == "stream":
+                if self.speaking_task is not None:
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await asyncio.wait_for(asyncio.shield(self.speaking_task), self.HANGUP_WAIT_S)
+            elif spoke:
+                # url mode: the phone plays the reply and reports playback start / end
+                sent_at = time.monotonic()
+                while time.monotonic() < deadline and not self.closed:
+                    if not self.playback and self.playback_ended_at > sent_at:
+                        break
+                    await asyncio.sleep(0.2)
+            await asyncio.sleep(0.5)
+            if not self.closed:
+                await self.orch.end_session(self.session.id)
+        except Exception:
+            log.warning("could not end the call after the last step", exc_info=True)
 
     def _start_speaking(self, text: str) -> None:
         if not tts_mod.available():
