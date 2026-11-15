@@ -277,6 +277,9 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
         record_live_mistake(session, current_repair_id(), view.step_index, view.mistake, view.what_i_see)
     out = {**view.model_dump(), "latency_ms": latency, "model": COACH_MODEL, "ts": time.time(), "crop": crop}
     _latest.setdefault(session, {})["view"] = out
+    from .fal_media import remember_frame
+
+    remember_frame(session, data, view)      # fal draws the next step on THIS frame of the user's keyboard
     return out
 
 
@@ -312,7 +315,7 @@ class Intent(BaseModel):
     command: Literal["next", "back", "close", "take_apart", "reassemble", "xray", "reset", "tour", "stop", "rewind",
                      "show_mistake", "fix_it", "shop_parts", "shop_keyboards", "camera_on", "camera_off",
                      "calibrate", "show_part", "zoom_in", "zoom_out", "lights_on", "lights_off", "specs",
-                     "sources", "ask", "none"]
+                     "sources", "show_mine", "ask", "none"]
     part: str = Field(default="", description="For show_part: socket, switch, keycap, pcb, plate, case, battery, usb, led, stabilizer, spring")
     shop_query: str = Field(default="", description="For shop_*: what to search for, in the user's words")
 
@@ -332,7 +335,8 @@ async def intent(req: IntentReq):
                 "shop_parts (buy/replace/price of a part: keycaps, switches, stabilizers, cable), shop_keyboards "
                 "(other/alternative/new keyboards to buy instead), camera_on (watch me), camera_off, calibrate (align the "
                 "hologram with the real keyboard, set as zero), show_part (look at a part: fill part), zoom_in, zoom_out, "
-                "lights_on, lights_off, specs, sources, ask (a real question about the repair that needs an answer), "
+                "lights_on, lights_off, specs, sources, show_mine (show the step on MY keyboard / on mine / in a picture "
+                "or video / what should it look like / show me how to do it), ask (a real question about the repair that needs an answer), "
                 "none (noise, not addressed to Spanner). Fillers like ok, please, hey Spanner are ignored.")
     def run() -> Intent:
         resp = _client().beta.messages.parse(
@@ -499,10 +503,13 @@ async def say(text: str):
 
 def mount(app) -> None:
     """Serve the coach API, the hologram viewer and its 3D assets from the backend (one URL, one server)."""
+    from .fal_media import MEDIA
+    from .fal_media import router as fal_router
     from .shop import router as shop_router
 
     app.include_router(router)
     app.include_router(shop_router)
+    app.include_router(fal_router)
 
     @app.on_event("startup")
     async def _warm_shop() -> None:   # (main.py already warms the YOLO detector)
@@ -511,4 +518,6 @@ def mount(app) -> None:
 
             asyncio.get_running_loop().run_in_executor(None, warm_shop)
     app.mount("/data/models", StaticFiles(directory=ROOT / "data" / "models"), name="models")
+    MEDIA.mkdir(parents=True, exist_ok=True)
+    app.mount("/data/media", StaticFiles(directory=MEDIA), name="media")      # fal stills + clips, served locally
     app.mount("/training/viewer", StaticFiles(directory=ROOT / "training" / "viewer", html=True), name="viewer")

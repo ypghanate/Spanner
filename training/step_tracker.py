@@ -116,7 +116,7 @@ def _base(user: str) -> StepStatus:
 
 
 def local_available() -> bool:
-    return os.path.isfile(os.path.join(LOCAL_ADAPTER, "adapter_model.safetensors")) and os.getenv("STEP_TRACKER_LOCAL", "1") != "0"
+    return os.path.isfile(os.path.join(LOCAL_ADAPTER, "adapter_model.safetensors")) and os.getenv("STEP_TRACKER_LOCAL", "0") == "1"   # opt-in: 9 s and 7 GB on this CPU
 
 
 def _rule(user: str) -> StepStatus:
