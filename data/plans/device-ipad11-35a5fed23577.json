@@ -1,0 +1,124 @@
+{
+ "status": "ready",
+ "say": "",
+ "title": "iPad (11th gen) won't power on: diagnose and fix",
+ "fault": "",
+ "diagnosis": "A completely dead iPad is most often a drained battery, a faulty cable or charger, or dirt in the USB-C port. I'll walk you through the no-tools checks first, then the port cleaning, which fixes most cases.",
+ "difficulty": "easy",
+ "time_min": 45,
+ "tools_needed": [
+  "Known-good USB-C cable",
+  "Known-good wall charger (20W or higher)",
+  "Wooden toothpick or plastic spudger",
+  "Flashlight"
+ ],
+ "safety_notes": [
+  "Never open the iPad if it is swollen, hot or the screen is lifting; stop and take it to a repair shop.",
+  "Do not use metal tools or liquids inside the USB-C port."
+ ],
+ "steps": [
+  {
+   "title": "Unplug and remove accessories",
+   "instruction": "Disconnect everything from the iPad and take it out of any keyboard case. Place it on a clear table.",
+   "expected_visual_state": "The iPad lies alone on the table with no cables, case or keyboard attached.",
+   "common_mistakes": [
+    "Leaving the keyboard case on, which hides the Smart Connector",
+    "Troubleshooting with a damaged cable still attached"
+   ],
+   "focus": [],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Check the USB-C port for lint",
+   "instruction": "Shine a flashlight into the USB-C port. Gently scrape out any lint with a wooden toothpick or plastic spudger.",
+   "expected_visual_state": "The USB-C port shows a clean, empty slot with the tongue visible and no lint packed in.",
+   "common_mistakes": [
+    "Using a metal pin that can short the contacts",
+    "Pushing lint deeper instead of scooping it out",
+    "Bending the centre tongue"
+   ],
+   "focus": [
+    "usb_c"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Connect a known-good charger",
+   "instruction": "Plug a known-good cable into a wall charger of 20W or more, then into the iPad. Use a different outlet from any you suspect.",
+   "expected_visual_state": "The iPad is connected by cable to a wall charger that is plugged into a wall outlet.",
+   "common_mistakes": [
+    "Charging from a laptop USB port, which may be too weak",
+    "Using a frayed or non-certified cable",
+    "Not pushing the plug fully into the port"
+   ],
+   "focus": [
+    "usb_c",
+    "battery_flex"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Charge for at least 30 minutes",
+   "instruction": "Leave the iPad plugged in untouched for 30 minutes. A deeply drained battery needs time before the screen reacts.",
+   "expected_visual_state": "The iPad is still plugged in, and the screen may show the charging battery or Apple logo.",
+   "common_mistakes": [
+    "Giving up after a few minutes",
+    "Pressing buttons repeatedly while charging"
+   ],
+   "focus": [
+    "battery_left",
+    "battery_right"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Force restart",
+   "instruction": "While still plugged in, press and release volume up, then volume down. Then hold the top button for 10 seconds or until the Apple logo appears.",
+   "expected_visual_state": "The screen lights up and the Apple logo appears.",
+   "common_mistakes": [
+    "Pressing the buttons in the wrong order",
+    "Releasing the top button too early",
+    "Holding the wrong edge button"
+   ],
+   "focus": [
+    "volume",
+    "top_button"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Try another cable and charger",
+   "instruction": "If the screen is still black, swap in a different cable and charger and wait 15 more minutes. Then repeat the force restart.",
+   "expected_visual_state": "A different cable and charger are plugged into the iPad, and the screen is either on or still black.",
+   "common_mistakes": [
+    "Changing only the cable but not the charger",
+    "Not repeating the force restart after swapping"
+   ],
+   "focus": [
+    "usb_c"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Confirm the fix",
+   "instruction": "Unplug the iPad and hold the top button to power it on. Check that it boots and charges normally.",
+   "expected_visual_state": "The iPad shows the Apple logo, reaches the lock screen and shows a charging icon when plugged in.",
+   "common_mistakes": [
+    "Assuming it is fixed without testing on battery",
+    "Ignoring a screen that stays black, which means a service visit for the battery or logic board"
+   ],
+   "focus": [
+    "display",
+    "top_button"
+   ],
+   "view": "together",
+   "source_ids": []
+  }
+ ]
+}

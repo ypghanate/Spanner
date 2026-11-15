@@ -288,88 +288,68 @@ function momentum4() {
   const hotspots = [["Touch control (right cup)", [11.2, -1.0, 0]], ["Power · Bluetooth", [9.9, -8.0, 0.3]], ["USB-C", [9.9, -8.0, 1.6]], ["3.5 mm jack", [9.9, -8.0, -1.0]], ["Noise-cancelling mics", [-11.0, -0.4, 2.6]], ["Cushion: twists off", [-7.3, -7.2, 0]], ["Size slider", [-8.8, 4.6, 0]]];
   return { name: "Sennheiser Momentum 4", parts, spread: 1, hotspots, views: { iso: [18, 14, 26] }, fact: "60-hour battery, adaptive noise cancelling, fabric headband and touch control on the right cup. The ear cushions twist off and are the usual wear part." };
 }
-// UK 13 A mains plug (BS 1363): the demo repair is swapping its fuse. Cm, y up; the plug stands on its pins, cover up.
-// Real size: 5.0 x 6.3 cm footprint, ~3.4 cm deep, pins 1.75 cm (earth 2.3 cm). Every part is its own named node so the
-// repair can take it apart and point at the cover screw, the fuse, the terminals, the cord grip.
+// UK 13 A moulded mains plug (BS 1363): the modern, sealed type with no screws. The demo repair is swapping its fuse:
+// the fuse sits behind a small snap-shut door on the back, prised open with a flat screwdriver at the notch.
+// Cm, y up; the plug stands on its pins, back up. Real size: ~5 x 6.2 cm footprint, ~3.2 cm deep, pins 1.75 cm (earth 2.3 cm).
 function plug13a() {
   const parts = [];
   const add = (name, label, desc, obj, pos, dir, group = "plug", callout = false) => parts.push({ name, label, desc, obj: edgesOn(obj, 40), pos, dir, group, callout });
-  const W = 5.0, D = 6.3, H = 3.0, wall = 0.38, floorT = 0.5;
-  const white = new THREE.MeshPhysicalMaterial({ color: 0x4b4f58, roughness: 0.42, clearcoat: 0.45, clearcoatRoughness: 0.4 });   // the plug's plastic: mid grey so it reads on both themes
-  const brass = M.gold, steel = M.silver;
-  const brown = new THREE.MeshStandardMaterial({ color: 0x7a431c, roughness: 0.55 }), blue = new THREE.MeshStandardMaterial({ color: 0x2160c4, roughness: 0.55 });
-  const stripes = canvasTex(256, 16, (g, w, h) => { g.fillStyle = "#3a9a3f"; g.fillRect(0, 0, w, h); g.fillStyle = "#f0d21c"; for (let i = 0; i < 4; i++) g.fillRect(i * 64 + 16, 0, 32, h); });
-  stripes.wrapS = THREE.RepeatWrapping; stripes.repeat.set(3, 1);
-  const greenYellow = new THREE.MeshStandardMaterial({ map: stripes, roughness: 0.55 });
-  const ceramic = new THREE.MeshStandardMaterial({ color: 0xe6d9ba, roughness: 0.7 }), flexMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd1, roughness: 0.6 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x15171b, roughness: 0.6 });
-  const wire = (pts, mat, r = 0.13) => mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => V3(...p))), 40, r, 10, false), mat);
+  const W = 5.0, D = 6.2, T = 3.2, cavDepth = 1.2, floorY = T - cavDepth;
+  const cx0 = -1.4, cx1 = 1.4, cz0 = 0.85, cz1 = 2.35, cz = (cz0 + cz1) / 2;   // the fuse cavity under the door
+  const shell = new THREE.MeshPhysicalMaterial({ color: 0x4b4f58, roughness: 0.5, clearcoat: 0.3, clearcoatRoughness: 0.5 });   // moulded plastic: mid grey so it reads on both themes
+  const doorMat = new THREE.MeshPhysicalMaterial({ color: 0x5d626d, roughness: 0.45, clearcoat: 0.3 });
+  const steel = M.silver, brass = M.gold;
+  const ceramic = new THREE.MeshStandardMaterial({ color: 0xe6d9ba, roughness: 0.7 }), rubber = new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: 0.8 });
+  const flexMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd1, roughness: 0.6 }), dark = new THREE.MeshStandardMaterial({ color: 0x15171b, roughness: 0.6 });
 
-  // body: the tray (floor and four walls; a notch in the cable wall for the flex)
-  const body = new THREE.Group(); const wallH = H - floorT, wy = floorT + wallH / 2;
-  const floor = mesh(box(W, floorT, D, 0.3, 3), white); floor.position.y = floorT / 2; body.add(floor);
-  const back = mesh(box(W, wallH, wall, 0.1, 2), white); back.position.set(0, wy, -D / 2 + wall / 2); body.add(back);
-  for (const sx of [-1, 1]) {
-    const gap = 0.55, segW = W / 2 - gap, seg = mesh(box(segW, wallH, wall, 0.1, 2), white); seg.position.set(sx * (gap + segW / 2), wy, D / 2 - wall / 2); body.add(seg);
-    const side = mesh(box(wall, wallH, D - 2 * wall, 0.1, 2), white); side.position.set(sx * (W / 2 - wall / 2), wy, 0); body.add(side);
-  }
-  add("body", "Plug body", "White plastic base of the plug: the three pins come out of its front, and the terminals, fuse and cord grip sit in its tray under the cover.", body, [0, 0, 0], [0, 0, 0], "plug");
+  // moulded body: a solid block with a rectangular cavity in the back (a slab plus a frame of blocks around the cavity)
+  const body = new THREE.Group();
+  const slab = mesh(box(W, floorY, D, 0.55, 4), shell); slab.position.y = floorY / 2; body.add(slab);
+  const frame = (w, d, x, z) => { const b = mesh(box(w, cavDepth, d, 0.18, 2), shell); b.position.set(x, floorY + cavDepth / 2, z); body.add(b); };
+  frame(W - 0.06, D / 2 + cz0 - 0.03, 0, (-D / 2 + cz0) / 2);              // the back, beyond the cavity
+  frame(W - 0.06, D / 2 - cz1 - 0.03, 0, (cz1 + D / 2) / 2);               // the cable end
+  for (const sx of [-1, 1]) frame(W / 2 + cx0 - 0.03, cz1 - cz0, sx * (cx1 + (W / 2 - cx1) / 2), cz);   // the two sides of the cavity
+  add("body", "Moulded plug body", "The sealed, moulded plastic body of the plug. It has no screws and is not meant to be opened: the only way in is the small fuse door on the back.", body, [0, 0, 0], [0, 0, 0], "plug");
 
-  // cover and its screw
-  const cover = new THREE.Group(); const slab = mesh(box(W - 0.04, 0.4, D - 0.04, 0.3, 3), white); cover.add(slab);
-  const lip = mesh(box(W - 2 * wall - 0.14, 0.35, D - 2 * wall - 0.14, 0.1, 1), white); lip.position.y = -0.36; cover.add(lip);
-  const printTex = canvasTex(512, 320, (g, w, h) => { g.fillStyle = "#4b4f58"; g.fillRect(0, 0, w, h); g.fillStyle = "#e7e9ee"; g.textAlign = "center"; g.font = "700 64px system-ui,sans-serif"; g.fillText("13A", w / 2, 110); g.font = "600 40px system-ui,sans-serif"; g.fillText("250V ~  BS 1363", w / 2, 190); g.font = "500 28px system-ui,sans-serif"; g.fillText("FUSED PLUG", w / 2, 250); });
-  const label = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.1), new THREE.MeshStandardMaterial({ map: printTex, roughness: 0.5 })); label.rotation.x = -Math.PI / 2; label.position.set(0, 0.203, -1.35); cover.add(label);
-  add("cover", "Back cover", "The cover that closes the tray. One central screw holds it; lift it off to reach the terminals and the fuse.", cover, [0, H + 0.2, 0], [0, 5.6, 0], "plug");
-  const cs = new THREE.Group(); const head = mesh(cyl(0.36, 0.16, 28), steel); head.position.y = 0.08; cs.add(head);
-  for (const r of [0, Math.PI / 2]) { const slot = mesh(box(0.56, 0.05, 0.08, 0.01, 1), dark); slot.position.y = 0.17; slot.rotation.y = r; cs.add(slot); }
-  const shank = mesh(cyl(0.11, 1.5, 14), steel); shank.position.y = -0.75; cs.add(shank);
-  add("cover_screw", "Cover screw", "The single cross-head screw in the middle of the cover. Undo it fully before lifting the cover.", cs, [0, H + 0.4, 0], [0, 9.4, 0], "plug", true);
+  // fuse door: the snap-fit cover over the fuse, with a notch to prise it open
+  const door = new THREE.Group(); const dp = mesh(box(cx1 - cx0 + 0.1, 0.25, cz1 - cz0 + 0.1, 0.08, 2), doorMat); door.add(dp);
+  const doorTex = canvasTex(256, 128, (g, w, h) => { g.fillStyle = "#5d626d"; g.fillRect(0, 0, w, h); g.fillStyle = "#e7e9ee"; g.textAlign = "center"; g.font = "700 46px system-ui,sans-serif"; g.fillText("13A", w / 2, 62); g.font = "600 22px system-ui,sans-serif"; g.fillText("FUSE", w / 2, 98); });
+  const mark = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.95), new THREE.MeshStandardMaterial({ map: doorTex, roughness: 0.5 })); mark.rotation.x = -Math.PI / 2; mark.position.set(0, 0.128, -0.12); door.add(mark);
+  const notch = mesh(box(0.9, 0.12, 0.16, 0.02, 1), dark); notch.position.set(0, 0.1, (cz1 - cz0) / 2 + 0.02); door.add(notch);          // the slot to prise it open
+  for (const x of [-0.45, 0, 0.45]) { const rib = mesh(box(0.1, 0.06, 0.22, 0.01, 1), doorMat); rib.position.set(x, 0.15, (cz1 - cz0) / 2 - 0.2); door.add(rib); }
+  add("fuse_door", "Fuse door", "The small snap-fit door on the back that covers the fuse. There is no screw: put a small flat screwdriver in the notch at the cable end and prise it up. It clicks shut again.", door, [0, T - 0.125, cz], [0, 4.6, 1.6], "plug", true);
+
+  // fuse holder and fuse
+  const holder = new THREE.Group(); const cradle = mesh(box(3.0, 0.16, 1.1, 0.05, 1), rubber); cradle.position.y = -0.08; holder.add(cradle);
+  for (const sx of [-1, 1]) { const clip = mesh(box(0.26, 0.55, 0.72, 0.05, 1), brass); clip.position.set(sx * 1.35, 0.2, 0); holder.add(clip); }
+  add("fuse_holder", "Fuse holder (clips)", "The two spring brass clips the cartridge fuse is held in. The current passes from the live pin through the fuse into the cable.", holder, [0, floorY + 0.16, cz], [0, 2.4, 0], "fuse");
+  const fuse = new THREE.Group(); const fb = mesh(cyl(0.32, 2.54, 28), ceramic); fb.rotation.z = Math.PI / 2; fuse.add(fb);
+  for (const sx of [-1, 1]) { const cap = mesh(cyl(0.34, 0.42, 28), steel); cap.rotation.z = Math.PI / 2; cap.position.x = sx * 1.06; fuse.add(cap); }
+  const band = mesh(cyl(0.325, 0.5, 28), new THREE.MeshStandardMaterial({ color: 0x7a431c, roughness: 0.6 })); band.rotation.z = Math.PI / 2; fuse.add(band);   // a 13 A fuse's colour band is brown (3 A red, 5 A black)
+  add("fuse", "Cartridge fuse (13 A)", "The 13 A (BS 1362) ceramic cartridge fuse, 25.4 x 6.3 mm. When it blows the plug stops working. Replace it with the same rating: 3 A for lamps and small devices, 13 A for heaters and kettles.", fuse, [0, floorY + 0.7, cz], [0, 6.4, 0.6], "fuse", true);
 
   // pins (front face): earth on top and longest, live and neutral below, each with an insulating sleeve at the base
   const earth = new THREE.Group(); const ep = mesh(box(0.42, 2.3, 0.17, 0.03, 1), steel); ep.position.y = -1.15; earth.add(ep);
   const ehole = mesh(box(0.1, 0.5, 0.2, 0.01, 1), dark); ehole.position.y = -1.9; earth.add(ehole);
   add("earth_pin", "Earth pin", "The longest, top pin. It is what opens the shutters in a socket so the live and neutral pins can go in.", earth, [0, 0, -1.55], [0, -3.4, -0.6], "contacts");
-  for (const [nm, lb, sx, ds] of [["live_pin", "Live pin", 1, "The lower right pin (looking at the front). It carries the current in and is protected by the fuse behind it."], ["neutral_pin", "Neutral pin", -1, "The lower left pin. It is the return path for the current."]]) {
+  for (const [nm, lb, sx, ds] of [["live_pin", "Live pin", 1, "The lower right pin (looking at the front). It carries the current in through the fuse."], ["neutral_pin", "Neutral pin", -1, "The lower left pin. It is the return path for the current."]]) {
     const pin = new THREE.Group(); const pp = mesh(box(0.17, 1.75, 0.42, 0.03, 1), steel); pp.position.y = -0.875; pin.add(pp);
-    const sleeve = mesh(box(0.32, 0.9, 0.62, 0.05, 1), white); sleeve.position.y = -0.45; pin.add(sleeve);
+    const sleeve = mesh(box(0.32, 0.9, 0.62, 0.05, 1), shell); sleeve.position.y = -0.45; pin.add(sleeve);
     add(nm, lb, ds, pin, [sx * 1.1, 0, 0.65], [sx * 1.4, -3.0, 0.5], "contacts");
   }
 
-  // terminals: brass blocks with a clamp screw each (live right, neutral left, earth top, as seen from the back)
-  const terminal = (screwSlots) => { const g = new THREE.Group(); const blk = mesh(box(0.95, 0.72, 0.8, 0.08, 1), brass); g.add(blk); const sh = mesh(cyl(0.21, 0.12, 20), steel); sh.position.y = 0.42; g.add(sh); for (const r of [0, Math.PI / 2]) { const sl = mesh(box(0.34, 0.04, 0.06, 0.01, 1), dark); sl.position.y = 0.49; sl.rotation.y = r; g.add(sl); } return g; };
-  add("earth_terminal", "Earth terminal", "Top terminal: the green-and-yellow wire clamps here. Its wire is the longest so it is the last to pull out if the cable is yanked.", terminal(), [0, floorT + 0.4, -2.0], [0, 3.0, -1.4], "contacts");
-  add("neutral_terminal", "Neutral terminal", "Left terminal: the blue wire clamps here.", terminal(), [-1.7, floorT + 0.4, -0.1], [-1.6, 3.0, 0], "contacts");
-  add("live_terminal", "Live terminal", "Right terminal: the brown wire clamps here, on the same side as the fuse.", terminal(), [1.7, floorT + 0.4, -0.1], [1.6, 3.0, 0], "contacts");
+  // cable boot (the moulded strain relief) and the flex, which is part of the plug and cannot be taken out
+  const boot = new THREE.Group(); const cone = mesh(new THREE.CylinderGeometry(0.42, 0.78, 1.7, 28), rubber); cone.rotation.x = Math.PI / 2; boot.add(cone);
+  for (const z of [-0.45, -0.1, 0.25, 0.6]) { const ring = mesh(new THREE.TorusGeometry(0.62 - (0.6 - z) * 0.12, 0.05, 8, 24), rubber); ring.position.z = z; boot.add(ring); }
+  add("cable_boot", "Cable boot", "The moulded rubber sleeve where the cable leaves the plug. It stops the cable bending sharply and being pulled off the wires inside.", boot, [0, T / 2 - 0.2, D / 2 + 0.75], [0, 0, 2.0], "cable");
+  const cable = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V3(0, T / 2 - 0.2, D / 2 + 1.5), V3(0, T / 2 - 0.25, D / 2 + 2.8), V3(0.2, T / 2 - 0.4, D / 2 + 5.2), V3(0.6, T / 2 - 0.6, D / 2 + 7.2)]), 40, 0.36, 12, false), flexMat); cable.castShadow = cable.receiveShadow = true;
+  add("cable", "Cable (flex)", "The mains flex, moulded permanently into the plug. If it is damaged, the whole plug or cable has to be replaced; it cannot be repaired from outside.", cable, [0, 0, 0], [0, 0, 4.2], "cable");
 
-  // wires from the cord grip to the terminals (the earth wire arcs over the fuse)
-  add("live_wire", "Live wire (brown)", "Brown core of the flex, stripped and clamped under the live terminal screw.", wire([[0.2, 1.0, 2.5], [0.9, 1.0, 2.0], [1.7, 1.15, 1.1], [1.7, 1.0, 0.3]], brown), [0, 0, 0], [1.0, 2.0, 0], "cable");
-  add("neutral_wire", "Neutral wire (blue)", "Blue core of the flex, clamped under the neutral terminal screw.", wire([[-0.2, 1.0, 2.5], [-0.9, 1.0, 2.0], [-1.7, 1.15, 1.1], [-1.7, 1.0, 0.3]], blue), [0, 0, 0], [-1.0, 2.0, 0], "cable");
-  add("earth_wire", "Earth wire (green and yellow)", "Green-and-yellow core of the flex, left a little longer than the others, clamped under the earth terminal screw.", wire([[0, 1.0, 2.5], [0, 2.0, 1.5], [0, 2.1, 0.2], [0, 1.5, -1.4], [0, 1.15, -1.95]], greenYellow), [0, 0, 0], [0, 3.4, -0.6], "cable");
-
-  // fuse and its clips
-  const clips = new THREE.Group(); const cradle = mesh(box(3.4, 0.16, 0.95, 0.05, 1), white); cradle.position.y = -0.2; clips.add(cradle);
-  for (const sx of [-1, 1]) { const clip = mesh(box(0.26, 0.62, 0.72, 0.05, 1), brass); clip.position.set(sx * 1.45, 0.1, 0); clips.add(clip); }
-  add("fuse_clips", "Fuse clips", "The two spring brass clips the cartridge fuse snaps into; they connect the live pin to the live terminal through the fuse.", clips, [-0.1, floorT + 0.45, 1.25], [0, 1.6, 0], "fuse");
-  const fuse = new THREE.Group(); const fb = mesh(cyl(0.32, 2.54, 28), ceramic); fb.rotation.z = Math.PI / 2; fuse.add(fb);
-  for (const sx of [-1, 1]) { const cap = mesh(cyl(0.34, 0.42, 28), steel); cap.rotation.z = Math.PI / 2; cap.position.x = sx * 1.06; fuse.add(cap); }
-  const band = mesh(cyl(0.325, 0.5, 28), new THREE.MeshStandardMaterial({ color: 0x7a431c, roughness: 0.6 })); band.rotation.z = Math.PI / 2; fuse.add(band);   // the colour band of a 13 A fuse is brown (3 A red, 5 A black)
-  add("fuse", "Cartridge fuse (13 A)", "The 13 A (BS 1362) ceramic cartridge fuse, 25.4 x 6.3 mm. When it blows the plug dies. Replace it with the same rating, 3 A for lamps and small devices, 13 A for heaters and kettles.", fuse, [-0.1, floorT + 0.8, 1.25], [0, 4.4, 0.0], "fuse", true);
-
-  // cord grip: the bar that clamps the outer sheath of the flex so a pull on the cable never reaches the terminals
-  const grip = new THREE.Group(); const bar = mesh(box(2.7, 0.5, 0.75, 0.1, 2), white); grip.add(bar);
-  for (const sx of [-1, 1]) { const gh = mesh(cyl(0.2, 0.1, 18), steel); gh.position.set(sx * 1.0, 0.3, 0); grip.add(gh); const sl = mesh(box(0.3, 0.04, 0.05, 0.01, 1), dark); sl.position.set(sx * 1.0, 0.36, 0); grip.add(sl); }
-  add("cord_grip", "Cord grip", "The clamp bar that grips the cable's outer sheath. Its two screws must be tight so a tug on the cable never pulls on the wires.", grip, [0, 1.75, 2.35], [0, 3.2, 1.6], "cable", true);
-
-  // the flex
-  const flex_ = wire([[0, 1.0, 2.2], [0, 1.0, 3.3], [0, 0.95, 5.2], [0.4, 0.8, 7.6]], flexMat, 0.38);
-  add("cable", "Cable (flex)", "The mains flex: brown, blue and green-and-yellow cores inside a grey sheath, entering through the notch at the bottom of the plug.", flex_, [0, 0, 0], [0, 0.2, 5.5], "cable");
-
-  const hotspots = [["Earth pin (longest)", [0, -2.5, -1.55]], ["Live pin", [1.1, -2.0, 0.65]], ["Neutral pin", [-1.1, -2.0, 0.65]], ["Cover screw", [0, 4.1, 0]], ["Cable", [0, 1.6, 6.4]]];
+  const hotspots = [["Earth pin (longest)", [0, -2.5, -1.55]], ["Live pin", [1.1, -2.0, 0.65]], ["Neutral pin", [-1.1, -2.0, 0.65]], ["Fuse door", [0, T + 0.5, cz]], ["Cable boot", [0, 1.7, D / 2 + 1.6]]];
   const K = 2.6;   // real size is 6 cm; shown at the scale of the phone and headphones so it fills the view
   for (const p of parts) { p.obj.scale.setScalar(K); p.pos = p.pos.map((v) => v * K); p.dir = p.dir.map((v) => v * K); }
   for (const h of hotspots) h[1] = h[1].map((v) => v * K);
-  return { name: "UK 3-pin plug", parts, spread: 1, hotspots, views: { iso: [10, 9, 14] }, fact: "A UK 13-amp plug (BS 1363). The cartridge fuse in it is the safety link: 13 A for most appliances, 3 A for lamps and small devices. Always unplug it from the wall before you open it." };
+  return { name: "UK 3-pin plug", parts, spread: 1, hotspots, views: { iso: [10, 9, 14] }, fact: "A modern UK 13-amp moulded plug (BS 1363). It has no screws: the fuse is behind a small snap-shut door on the back that you prise open with a flat screwdriver. The fuse is the safety link: 13 A for most appliances, 3 A for lamps and small devices. Always unplug it from the wall first." };
 }
 
 const DEVICES = { iphone15: iphone15, ipad11: ipad11, momentum4: momentum4, plug13a: plug13a };
