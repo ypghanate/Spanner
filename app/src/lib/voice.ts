@@ -57,12 +57,14 @@ export class VoiceListener {
     if (this.muted === m) return;
     this.muted = m;
     if (!this.running) return;
+    // The recorder keeps running (stopping and restarting it lost the first words after Spanner spoke). While muted
+    // the levels are ignored; on unmute the stretch recorded meanwhile (Spanner's own voice) is dropped and a fresh
+    // clip starts at once.
     if (m) {
-      await this.release();
-      try { await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }); } catch {}
+      this.speechAt = 0;
+    } else if (this.rec) {
+      await this.cycle(false);
     } else {
-      try { await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true }); } catch {}
-      await new Promise((r) => setTimeout(r, 500)); // let the room tail off before listening again
       await this.begin();
     }
   }

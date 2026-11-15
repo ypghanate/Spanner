@@ -1530,7 +1530,40 @@ function endFromPhone() {
   setTimeout(() => { location.href = location.pathname + location.search.replace(/([?&])s=[^&]*&?/, "$1"); }, 300);
 }
 function stopRemote() { remoteOn = false; hidePair(); $("cam").style.display = "none"; setLink(camOn ? "webcam" : "idle"); }
-let remoteLoop = false, lastDataAt = 0, pollFails = 0, lastUtterId = "";
+let remoteLoop = false, lastDataAt = 0, pollFails = 0, lastUtterId = "", lastReplyId = "", lastStateSent = "";
+// ---- the phone is the microphone: the server transcribes, decides what to do and what to say (one Claude turn with
+// the conversation so far and what is on screen); this laptop just does it and speaks.
+function screenState() {
+  return { session: SESSION, screen: linkState !== "live" ? "pairing" : pickOpen ? "picking" : finished ? "done" : stepIdx >= 0 ? "step" : "ready",
+    step: stepIdx + 1, total: plan?.steps?.length || 0, title: plan?.title || "" };
+}
+function reportState() {
+  const st = screenState(), key = JSON.stringify(st); if (key === lastStateSent) return; lastStateSent = key;
+  fetch(API + "/coach/state", { method: "POST", headers: { "content-type": "application/json" }, body: key }).catch(() => { lastStateSent = ""; });
+}
+const ACKS = ["Mm-hm.", "Okay.", "Let me see.", "Right."];
+function closePicker() { if (!pickOpen) return; pickOpen = false; $("pick").style.opacity = 0; setTimeout(() => { $("pick").style.display = "none"; }, 600); }
+async function onReply(r) {
+  if (!r.addressed || isEcho(r.text, 6000)) { heard(r.text, "not for me"); return; }
+  heard(r.text, r.action === "none" ? "talking" : r.action.replace(/_/g, " "));
+  if (r.action !== "stop" && performance.now() < speakingUntil) stopSpeech();
+  const viaCommand = { take_apart: "take it apart", reassemble: "put it back together", xray: "x-ray", zoom_in: "zoom in",
+    zoom_out: "zoom out", show_mistake: "show me the mistake", specs: "specs", sources: "sources" };
+  switch (r.action) {
+    case "pick_device": if (pickOpen && r.device) return chooseDevice(r.device, ""); break;
+    case "plan_repair": closePicker(); return requestRepair(r.complaint || r.text);
+    case "start": stopTour(); return goStep(0);
+    case "next": stopTour(); return advance();
+    case "back": stopTour(); return goStep(stepIdx - 1);
+    case "repeat": return $("say").onclick();
+    case "stop": return quiet("voice");
+    case "show_part": return command("show me the " + (r.part || "switch"));
+    case "shop_parts": return openShop(r.text);
+    case "shop_keyboards": return openShop("show me other keyboards " + r.text);
+    default: if (viaCommand[r.action]) return command(viaCommand[r.action]);
+  }
+  if (r.say) narrate(r.say);   // a conversational answer (or the picker asking again)
+}
 async function remoteTick() {
   if (remoteLoop) return; remoteLoop = true;
   while (remoteOn) {
@@ -1542,9 +1575,14 @@ async function remoteTick() {
       }
       // speech from the phone's microphone (transcribed on the laptop): the phone listens, this laptop speaks back
       if (d.utterance && d.utterance.id !== lastUtterId) {
-        lastUtterId = d.utterance.id;
-        hearSpeech(d.utterance.text, 6000);   // the phone may have heard our own voice: transcription arrives a few seconds late
+        lastUtterId = d.utterance.id; heard(d.utterance.text, "…");
+        // a real reply usually lands within a second or two: if it hasn't after 0.7 s, acknowledge right away
+        const id = d.utterance.id, words = d.utterance.text.trim().split(/\s+/).length;
+        if (words >= 3 && !pickOpen && linkState === "live" && !isEcho(d.utterance.text, 6000))
+          setTimeout(() => { if (lastReplyId !== id && performance.now() > speakingUntil) narrate(ACKS[Math.floor(Math.random() * ACKS.length)], false); }, 700);
       }
+      if (d.reply && d.reply.id !== lastReplyId) { lastReplyId = d.reply.id; onReply(d.reply); }
+      reportState();
       if (d.signal && d.signal.ts !== lastSignalTs) { lastSignalTs = d.signal.ts; if (d.signal.signal === "stop") quiet("✋"); else if (d.signal.signal === "end") endFromPhone(); }
       if (poseTrack.on && d.pose && d.pose.ts !== lastPoseTs) { lastPoseTs = d.pose.ts; applyPose(d.pose); }
       if (fresh) { lastDataAt = performance.now(); if (linkState !== "live") hidePair(); }

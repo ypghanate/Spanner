@@ -16,6 +16,7 @@ import asyncio
 import base64
 import json
 import os
+import re
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -559,9 +560,112 @@ async def utterance(req: UtteranceReq):
             raise HTTPException(502, "the ElevenLabs key needs the Speech to Text permission turned on")
         raise HTTPException(502, f"couldn't transcribe: {str(e)[:200]}")
     text = tr.text.strip()
-    if text:
-        _latest.setdefault(req.session, {})["utterance"] = {"text": text, "id": f"{time.time():.3f}", "ts": time.time()}
-    return {"text": text}
+    if not text:
+        return {"text": ""}
+    turn_id = f"{time.time():.3f}"
+    _latest.setdefault(req.session, {})["utterance"] = {"text": text, "id": turn_id, "ts": time.time()}
+    # Straight on to the reply (no waiting for the laptop to notice the words): what to do + what to say, in one go.
+    turn = _quick_turn(text, req.session) or await asyncio.to_thread(_converse, text, req.session)
+    _latest[req.session]["reply"] = {**turn.model_dump(), "text": text, "id": turn_id, "ts": time.time()}
+    return {"text": text, "reply": turn.model_dump()}
+
+
+# ---------------------------------------------------------------- conversation (phone mic -> one reply + action)
+class Turn(BaseModel):
+    addressed: bool = Field(description="False if the words were background talk or not meant for Spanner.")
+    say: str = Field(default="", description="One or two short spoken sentences, or empty.")
+    action: Literal["none", "pick_device", "plan_repair", "start", "next", "back", "repeat", "stop", "show_part",
+                    "take_apart", "reassemble", "xray", "zoom_in", "zoom_out", "show_mistake", "specs", "sources",
+                    "shop_parts", "shop_keyboards"] = "none"
+    part: str = Field(default="", description="For show_part: socket, switch, keycap, pcb, plate, case, battery, usb, led, stabilizer, spring")
+    device: Literal["", "keyboard", "iphone15", "momentum4", "ipad11"] = ""
+    complaint: str = Field(default="", description="For plan_repair: the fault, in the person's words.")
+
+
+class ViewState(BaseModel):
+    session: str
+    screen: Literal["pairing", "picking", "ready", "step", "done"] = "ready"
+    step: int = 0                  # 1-based step on screen, 0 = none
+    total: int = 0
+    title: str = ""
+
+
+_view_state: dict[str, ViewState] = {}
+_history: dict[str, list[dict]] = {}      # recent conversation per session (user / assistant turns)
+CONVERSE_MODEL = os.getenv("CONVERSE_MODEL", "claude-haiku-5-5")
+
+
+@router.post("/state")
+async def view_state(st: ViewState):
+    """The laptop viewer reports what is on screen, so a spoken turn is answered in context."""
+    _view_state[st.session] = st
+    return {"ok": True}
+
+
+# Unmistakable short commands skip Claude entirely (instant).
+_QUICK = [(r"(next|continue|go on|done|finished|got it|ok next)", "next"), (r"(back|previous|go back)", "back"),
+          (r"(stop|quiet|shut up|be quiet|pause|hold on|enough)", "stop"), (r"(repeat|say (that|it) again|again)", "repeat"),
+          (r"(zoom in|closer)", "zoom_in"), (r"(zoom out|further)", "zoom_out"), (r"(take it apart|explode)", "take_apart"),
+          (r"(put it back( together)?|reassemble)", "reassemble"), (r"(x-?ray)", "xray"), (r"(start|let'?s (go|start|begin)|begin)", "start")]
+
+
+def _quick_turn(text: str, session: str) -> Turn | None:
+    t = re.sub(r"[^a-z' -]", "", text.lower()).strip()
+    t = re.sub(r"^(ok(ay)?|hey|spanner|please|um+|uh+|so|and|now)[ ,]+", "", t).strip()
+    if not t or len(t.split()) > 4 or _view_state.get(session, ViewState(session=session)).screen in ("pairing", "picking"):
+        return None
+    for rx, action in _QUICK:
+        if re.fullmatch(rf"{rx}( please)?", t):
+            return Turn(addressed=True, action=action)
+    return None
+
+
+def _plan_text(session: str) -> str:
+    """The repair plan as text. It only changes when a new plan is made, so it sits in the cached part of the prompt."""
+    if session not in _plans:
+        return "No repair chosen yet: they haven't said what is wrong."
+    plan = _plans[session]["plan"]
+    lines = [f"The repair: {plan.get('title') or plan['fault']} ({len(plan['steps'])} steps). Diagnosis: {plan.get('diagnosis', '')}"]
+    for s in plan["steps"]:
+        lines.append(f"{s['index']}. {s['instruction']} (done when: {s['expected_visual_state']}; mistakes: "
+                     f"{'; '.join(s.get('common_mistakes', [])[:2])})")
+    return "\n".join(lines)
+
+
+def _context(session: str) -> str:
+    """What changes every turn: the screen, the step on it, what the camera saw."""
+    st = _view_state.get(session, ViewState(session=session))
+    lines = [f"Screen: {st.screen}." + (f" Step {st.step} of {st.total} is on screen." if st.screen == "step" else "")]
+    v = _latest.get(session, {}).get("view")
+    if v and v.get("what_i_see"):
+        lines.append(f"Camera ({max(0, round(time.time() - v['ts']))} s ago): {v['what_i_see']}"
+                     + (f" Possible mistake: {v['mistake']}" if v.get("mistake") else ""))
+    return "\n".join(lines)
+
+
+@lru_cache(maxsize=1)
+def _converse_prompt() -> str:
+    return (Path(__file__).parent / "brain" / "prompts" / "converse.md").read_text(encoding="utf-8")
+
+
+def _converse(text: str, session: str) -> Turn:
+    hist = _history.setdefault(session, [])
+    messages = hist[-8:] + [{"role": "user", "content": f"[live state]\n{_context(session)}\n\n[they said] {text}"}]
+    try:
+        resp = _client().beta.messages.parse(
+            model=CONVERSE_MODEL, max_tokens=400, thinking=_thinking(CONVERSE_MODEL), output_config={"effort": "low"},
+            system=[{"type": "text", "text": _converse_prompt()},
+                    {"type": "text", "text": _plan_text(session), "cache_control": {"type": "ephemeral"}}],
+            messages=messages, output_format=Turn)
+        turn = resp.parsed_output or Turn(addressed=False)
+    except Exception as e:
+        print(f"converse failed: {e}", flush=True)
+        return Turn(addressed=True, say="Sorry, I didn't catch that. Say it again?")
+    if turn.addressed:        # remember the exchange (plain text, so later turns don't carry old state)
+        hist += [{"role": "user", "content": text},
+                 {"role": "assistant", "content": turn.say or f"({turn.action.replace('_', ' ')})"}]
+        del hist[:-12]
+    return turn
 
 
 class PlanReq(BaseModel):
