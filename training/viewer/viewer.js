@@ -1456,7 +1456,7 @@ function onCoach(c) {
   // follow the user: jump to the step they're doing (two frames agree, or one very confident frame)
   agree = c.step_index === lastDetect ? agree + 1 : 1; lastDetect = c.step_index;
   if (c.confidence >= 0.6) maybeAutoShop(c);
-  const target = c.step_index - 1, sure = agree >= 2 || c.confidence >= 0.85;
+  const target = c.step_index - 1, sure = agree >= 2 || c.confidence >= 0.75;   // one confident frame is enough: every frame costs ~2-3 s
   if (sure && target !== stepIdx && c.confidence >= 0.5) {
     stopTour(); goStep(target, " · detected");
   } else if (sure && target === stepIdx && c.step_status === "done" && lastDoneStep !== target) {

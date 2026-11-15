@@ -113,7 +113,7 @@ def _client():
     return anthropic.Anthropic(timeout=float(os.getenv("COACH_TIMEOUT_S", "20")), max_retries=1)
 
 
-def _keyboard_crop(data: bytes) -> tuple[bytes, dict]:
+def _keyboard_crop(data: bytes, max_w: int = 1280) -> tuple[bytes, dict]:
     """The frame, cropped to the keyboard (YOLO box + padding) and resized to <= 1280 px, so key legends are readable.
     Falls back to the full frame when no keyboard is found."""
     import cv2
@@ -136,8 +136,8 @@ def _keyboard_crop(data: bytes) -> tuple[bytes, dict]:
             img = img[y1:y2, x1:x2]
             info = {"cropped": True, "box": [x1, y1, x2, y2], "frame": [w, h]}
     ch, cw = img.shape[:2]
-    if cw > 1280:
-        img = cv2.resize(img, (1280, int(ch * 1280 / cw)), interpolation=cv2.INTER_AREA)
+    if cw > max_w:
+        img = cv2.resize(img, (max_w, int(ch * max_w / cw)), interpolation=cv2.INTER_AREA)
     ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 88])
     return (buf.tobytes() if ok else data), info
 
@@ -239,19 +239,27 @@ def verify_gap(data: bytes, view: "CoachView") -> str | None:
     return None
 
 
-def _ask(image_b64: str, current_step: int, session: str = "") -> CoachView:
+def _key_confirmed(session: str) -> bool:
+    g = _gap_cache.get(session)
+    return bool(g and g["n"] >= 2 and time.time() - g["ts"] < GAP_CACHE_TTL_S)
+
+
+def _ask(image_b64: str, current_step: int, session: str = "", model: str | None = None) -> CoachView:
+    """One frame -> the step. Measured 15 Nov on real frames: Sonnet 2.6 s at 1280 px, 2.2 s at 1024 px; Haiku 1.8 s but it
+    misread the missing key on 2 of 3 frames. Sonnet stays; the image shrinks once the key is confirmed (no legends to read)."""
+    model = model or COACH_MODEL
     demo = _demo(session)
     hint = (f"The screen currently shows step {current_step}." if current_step > 0
             else "The repair has not started on screen yet.")
     resp = _client().beta.messages.parse(
-        model=COACH_MODEL, max_tokens=2048,
+        model=model, max_tokens=2048,
         system=[{"type": "text", "text": _system(demo), "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": image_b64}},
             {"type": "text", "text": hint + " Which step is the user on?"}]}],
         output_format=CoachView, output_config={"effort": "low"},
-        thinking=_thinking(COACH_MODEL),   # one frame -> one label: thinking only adds latency
-        **({"betas": [FALLBACK_BETA], "fallbacks": "default"} if "haiku" not in COACH_MODEL else {}))
+        thinking=_thinking(model),   # one frame -> one label: thinking only adds latency
+        **({"betas": [FALLBACK_BETA], "fallbacks": "default"} if "haiku" not in model else {}))
     if resp.parsed_output is None:
         raise HTTPException(502, f"vision model gave no answer (stop_reason={resp.stop_reason})")
     out = resp.parsed_output
@@ -286,7 +294,8 @@ def _cached_gap(session: str, first_pass: str | None) -> str | None:
 def _remember_gap(session: str, key: str) -> None:
     g = _gap_cache.get(session)
     _gap_cache[session] = {"key": key, "n": g["n"] + 1 if g and g["key"] == key else 1, "ts": time.time()}
-    _verify_miss.pop(session, None)
+    if _gap_cache[session]["n"] >= 2:            # confirmed: the second look is no longer needed, so its misses are forgotten
+        _verify_miss.pop(session, None)
 
 
 # When neither pass can name the key, the second look fails frame after frame (a hand over the gap, a bad angle) and
@@ -338,15 +347,17 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
     t0 = time.perf_counter()
     timing: dict[str, int] = {}
     try:
-        data, crop = await asyncio.to_thread(_keyboard_crop, data)
+        confirmed = _key_confirmed(session)
+        data, crop = await asyncio.to_thread(_keyboard_crop, data, 1024 if confirmed else 1280)
         timing["crop"] = round((time.perf_counter() - t0) * 1000)
+        crop["model"] = COACH_MODEL
         t1 = time.perf_counter()
         view = await asyncio.to_thread(_ask, base64.standard_b64encode(data).decode(), current_step, session)
         timing["ask"] = round((time.perf_counter() - t1) * 1000)
         gap_suspected = bool(view.missing_keys or view.gap_left or view.gap_right or view.gap_x is not None)
         first_pass = resolve_gap(view)               # a layout-validated read (both neighbours in one row) counts
-        if first_pass:
-            _remember_gap(session, first_pass)
+        if first_pass and (not confirmed or first_pass == _gap_cache[session]["key"]):
+            _remember_gap(session, first_pass)       # a confirmed key is only ever changed by the zoomed second look
         cached = _cached_gap(session, first_pass) if gap_suspected else None
         verified = None
         if gap_suspected and not cached and not _verify_resting(session):
@@ -379,7 +390,7 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
         plan = _demo(session)["plan"]          # generated plans have their own step numbering: log them under their own id
         rid = f"{current_repair_id()}:{plan['fault_signature']}" if plan.get("generated") else current_repair_id()
         record_live_mistake(session, rid, view.step_index, view.mistake, view.what_i_see)
-    out = {**view.model_dump(), "latency_ms": latency, "model": COACH_MODEL, "ts": time.time(), "crop": crop}
+    out = {**view.model_dump(), "latency_ms": latency, "model": crop.get("model", COACH_MODEL), "ts": time.time(), "crop": crop}
     _latest.setdefault(session, {})["view"] = out
     return out
 
