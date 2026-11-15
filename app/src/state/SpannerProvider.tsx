@@ -409,8 +409,16 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
   // The repair is over: close the call and show the summary.
   useEffect(() => {
     if (s.status === "live" && s.phase === "done") {
-      const t = setTimeout(() => void endCall(), 6000); // let the closing line be spoken
-      return () => clearTimeout(t);
+      // let the closing line be spoken (at least 1.5 s, at most 10 s), then hang up
+      const t0 = Date.now();
+      const t = setInterval(() => {
+        const waited = Date.now() - t0;
+        if (waited > 10000 || (waited > 1500 && !stateRef.current.speaking && !laptopSpeaking.current)) {
+          clearInterval(t);
+          void endCall();
+        }
+      }, 300);
+      return () => clearInterval(t);
     }
   }, [s.status, s.phase, endCall]);
 
