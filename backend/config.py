@@ -47,6 +47,7 @@ class Settings:
     eleven_stt_model: str = "scribe_v1"            # one-shot /audio fallback
     eleven_stt_live_model: str = "scribe_v2_realtime"
     eleven_tts_format: str = "mp3_44100_64"         # cached files and live stream
+    eleven_tts_speed: float = 1.15                  # speaking pace; ElevenLabs allows 0.7-1.2 (part of the cache key)
     live_sample_rate: int = 16000                   # phone mic PCM16 mono
     live_vad_silence_s: float = 0.7                 # silence that ends an utterance
     # timeouts (seconds)
@@ -78,6 +79,7 @@ def get_settings() -> Settings:
         use_mocks=_flag("USE_MOCKS", "1"),
         store_backend=os.getenv("STORE_BACKEND", "sqlite").strip().lower(),
         mock_latency_ms=int(os.getenv("MOCK_LATENCY_MS", "0") or 0),
+        eleven_tts_speed=min(1.2, max(0.7, float(os.getenv("ELEVEN_TTS_SPEED", "1.15") or 1.15))),
         media_cache_dir=Path(os.getenv("MEDIA_CACHE_DIR") or ROOT / "backend" / "media_cache"),
         training_data_dir=Path(os.getenv("TRAINING_DATA_DIR") or ROOT / "training" / "data"),
     )

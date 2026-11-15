@@ -340,8 +340,25 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
         on_keyboard = _demo(session)["plan"].get("device", "keyboard") == "keyboard"
         data, crop = await asyncio.to_thread(_keyboard_crop, data) if on_keyboard else (data, {"cropped": False})
         view = await asyncio.to_thread(_ask, base64.standard_b64encode(data).decode(), current_step, session)
-        gap_suspected = on_keyboard and bool(view.missing_keys or view.gap_left or view.gap_right or view.gap_x is not None)
-        verified = await asyncio.to_thread(verify_gap, data, view) if gap_suspected else None
+        timing["ask"] = round((time.perf_counter() - t1) * 1000)
+        if view.keyboard_visible or crop.get("cropped"):      # Claude sees a keyboard, or the detector found one
+            _start_layout_read(session, data)        # the first good frame of the keyboard: read its layout in the background
+        gap_suspected = bool(view.missing_keys or view.gap_left or view.gap_right or view.gap_x is not None)
+        first_pass = resolve_gap(view)               # a layout-validated read (both neighbours in one row) counts
+        if first_pass and (not confirmed or first_pass == _gap_cache[session]["key"]):
+            _remember_gap(session, first_pass)       # a confirmed key is only ever changed by the zoomed second look
+        cached = _cached_gap(session, first_pass) if gap_suspected else None
+        verified = None
+        if gap_suspected and not cached and not _verify_resting(session):
+            t2 = time.perf_counter()
+            verified = await asyncio.to_thread(verify_gap, data, view)
+            timing["verify"] = round((time.perf_counter() - t2) * 1000)
+            if verified:
+                _remember_gap(session, verified)
+            else:
+                _verify_missed(session)
+        elif gap_suspected and not cached:
+            crop["verify_resting"] = True
     finally:
         _frame_inflight.discard(session)
     if verified:
@@ -625,6 +642,18 @@ class UtteranceReq(BaseModel):
     filename: str = "clip.m4a"
 
 
+async def _warm_voice(text: str) -> None:
+    """Generate and cache the spoken line now, so /coach/say answers from disk when the laptop asks for it."""
+    from .voice import tts
+
+    try:
+        if tts.available():
+            async for _ in tts.stream(text):
+                pass
+    except Exception:
+        pass
+
+
 @router.post("/utterance")
 async def utterance(req: UtteranceReq):
     """Speech from the phone's microphone (one m4a clip per utterance). It is transcribed here (ElevenLabs Scribe) and
@@ -637,6 +666,7 @@ async def utterance(req: UtteranceReq):
         raise HTTPException(400, "bad audio")
     if not audio or len(audio) > 8_000_000:
         raise HTTPException(400, "empty or too long")
+    t_in = time.perf_counter()
     try:
         tr = await stt.transcribe(audio, req.filename)
     except Exception as e:
@@ -649,7 +679,11 @@ async def utterance(req: UtteranceReq):
     turn_id = f"{time.time():.3f}"
     _latest.setdefault(req.session, {})["utterance"] = {"text": text, "id": turn_id, "ts": time.time()}
     # Straight on to the reply (no waiting for the laptop to notice the words): what to do + what to say, in one go.
+    t_stt = time.perf_counter()
     turn = _quick_turn(text, req.session) or await asyncio.to_thread(_converse, text, req.session)
+    print(f"utterance: stt {1000 * (t_stt - t_in):.0f} ms, reply {1000 * (time.perf_counter() - t_stt):.0f} ms", flush=True)
+    if turn.say.strip():                      # have the voice ready by the time the laptop asks for it
+        asyncio.create_task(_warm_voice(turn.say.strip()[:600]))
     _latest[req.session]["reply"] = {**turn.model_dump(), "text": text, "id": turn_id, "ts": time.time()}
     return {"text": text, "reply": turn.model_dump()}
 
@@ -743,7 +777,7 @@ def _converse(text: str, session: str) -> Turn:
             system=[{"type": "text", "text": _converse_prompt()},
                     {"type": "text", "text": _plan_text(session), "cache_control": {"type": "ephemeral"}}],
             messages=messages, output_format=Turn)
-        turn = resp.parsed_output or Turn(addressed=False)
+        turn = resp.parsed_output or Turn(addressed=True, say="Say that once more?")
     except Exception as e:
         print(f"converse failed: {e}", flush=True)
         return Turn(addressed=True, say="Sorry, I didn't catch that. Say it again?")

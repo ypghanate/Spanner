@@ -1104,7 +1104,7 @@ function stopSpeech() {
 }
 function browserSay(text) {
   if (!("speechSynthesis" in window)) { speakingUntil = 0; return; }
-  const u = new SpeechSynthesisUtterance(text); if (voice) u.voice = voice; u.rate = 1.03; u.pitch = 0.92;
+  const u = new SpeechSynthesisUtterance(text); if (voice) u.voice = voice; u.rate = 1.15; u.pitch = 0.92;
   const done = () => { speakingUntil = performance.now() + 400; reportSpeaking(0); };
   u.onend = done; u.onerror = done;
   speakingUntil = performance.now() + speechMs(text); currentSpeech = text; reportSpeaking(speechMs(text)); speechSynthesis.speak(u);
@@ -1239,8 +1239,9 @@ function isEcho(text, graceMs = 1500) {
   if (STOCK.test(text)) return true;
   if (performance.now() > speakingUntil + graceMs || !currentSpeech) return false;
   const a = echoWords(text), b = echoWords(currentSpeech); if (!a.size) return true;
-  if (a.size < 3) return false;          // "start", "next", "stop": a short command is you, even if Spanner just said the word
-  let n = 0; for (const w of a) if (b.has(w)) n++; return n / a.size >= 0.6;
+  if (a.size < 4) return false;          // a short line is you, even if Spanner just said the word
+  if (/\b(i|i'm|i've|i'll|my|me|mine|we|there's|there is|it's not|isn't|can't|cannot|don't|won't)\b/.test(text.toLowerCase())) return false;   // first person: the user, never an echo
+  let n = 0; for (const w of a) if (b.has(w)) n++; return n / a.size >= 0.8;
 }
 let lastActed = { text: "", t: 0 };
 /** While Spanner talks only a clean short command gets through (barge-in); its own voice is dropped.
@@ -1616,7 +1617,7 @@ function reportState() {
 const ACKS = ["Mm-hm.", "Okay.", "Let me see.", "Right."];
 function closePicker() { if (!pickOpen) return; pickOpen = false; $("pick").style.opacity = 0; setTimeout(() => { $("pick").style.display = "none"; }, 600); }
 async function onReply(r) {
-  if (!r.addressed || isEcho(r.text, 6000)) { heard(r.text, "not for me"); return; }
+  if (!r.addressed || isEcho(r.text, 2500)) { heard(r.text, "not for me"); return; }
   heard(r.text, r.action === "none" ? "talking" : r.action.replace(/_/g, " "));
   if (r.action !== "stop" && performance.now() < speakingUntil) stopSpeech();
   const viaCommand = { take_apart: "take it apart", reassemble: "put it back together", xray: "x-ray", zoom_in: "zoom in",
@@ -1672,7 +1673,7 @@ async function remoteTick() {
         // a real reply usually lands within a second or two: if it hasn't after 0.7 s, acknowledge right away
         const id = d.utterance.id, words = d.utterance.text.trim().split(/\s+/).length;
         if (words >= 3 && !pickOpen && linkState === "live" && !isEcho(d.utterance.text, 6000))
-          setTimeout(() => { if (lastReplyId !== id && performance.now() > speakingUntil) narrate(ACKS[Math.floor(Math.random() * ACKS.length)], false); }, 700);
+          setTimeout(() => { if (lastReplyId !== id && performance.now() > speakingUntil) narrate(ACKS[Math.floor(Math.random() * ACKS.length)], false); }, 450);
       }
       if (d.reply && d.reply.id !== lastReplyId) { lastReplyId = d.reply.id; onReply(d.reply); }
       reportState();
@@ -1684,7 +1685,7 @@ async function remoteTick() {
       else if (performance.now() - lastDataAt > 6000) { if (linkState !== "lost") { setLink("lost"); showPair(); } }
       else setLink("live");
     } catch { if (++pollFails >= 3) setLink("offline"); }
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 120));
   }
   remoteLoop = false;
 }
