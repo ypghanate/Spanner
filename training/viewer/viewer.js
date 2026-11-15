@@ -1508,7 +1508,7 @@ function startRemote() {
   if (camOn) toggleCamera();
   if (micOn) $("mic").onclick();   // the phone listens; this laptop's mic would only hear its own speaker
   setMode("live · phone camera");
-  $("cam").style.display = "block"; $("video").style.display = "none"; $("remoteImg").style.display = "block";
+  $("cam").style.display = "block"; $("video").style.display = "none";
   if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); }
   if (!remoteOn) { remoteOn = true; lastDataAt = 0; pollFails = 0; seen("Phone camera: waiting for frames."); setLink("waiting"); }
   if (linkState !== "live") showPair();
@@ -1524,7 +1524,6 @@ async function remoteTick() {
       pollFails = 0; let fresh = false;
       if (d.view && d.view.ts !== lastViewTs) {
         lastViewTs = d.view.ts; fresh = true; onCoach(d.view);
-        const img = $("remoteImg"); img.style.display = "block"; img.src = API + "/coach/preview.jpg?session=" + SESSION + "&t=" + d.view.ts;   // what the phone sees
       }
       // speech from the phone's microphone (transcribed on the laptop): the phone listens, this laptop speaks back
       if (d.utterance && d.utterance.id !== lastUtterId) {
@@ -1571,7 +1570,7 @@ async function toggleCamera() {
     camStream = await Promise.race([navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }),
       new Promise((_, no) => setTimeout(() => no(new Error("no answer to the camera prompt")), 20000))]);
   } catch (e) { heard("", "camera unavailable: " + (e.message || e)); return; }
-  remoteOn = false; hidePair(); $("video").style.display = ""; $("remoteImg").style.display = "none";
+  remoteOn = false; hidePair(); $("video").style.display = "";
   $("video").srcObject = camStream; $("cam").style.display = "block"; setLink("webcam");
   camStream.getVideoTracks()[0]?.addEventListener("ended", () => { if (camOn) { heard("", "camera stopped"); toggleCamera(); } });
   $("camera").classList.add("on"); camOn = true; agree = 0; lastDetect = 0;

@@ -1,0 +1,100 @@
+{
+ "fault": "The keycap on the G key is missing, leaving the bare switch and its cross-shaped stem exposed.",
+ "diagnosis": "The G keycap has come off, so the switch underneath is bare. I'll have you power the board down, check the switch and socket are fine, and press a matching keycap back on.",
+ "difficulty": "easy",
+ "time_min": 10,
+ "tools_needed": [
+  "compressed air"
+ ],
+ "safety_notes": [
+  "Unplug the USB-C cable before touching the exposed switch.",
+  "Touch grounded metal first to discharge static before handling the board.",
+  "Do not force the keycap on if it does not line up with the stem."
+ ],
+ "steps": [
+  {
+   "title": "Unplug the keyboard",
+   "instruction": "Unplug the USB-C cable from the back of the keyboard. Touch grounded metal first.",
+   "kind": "cable-out",
+   "parts": [
+    "USB-C port"
+   ],
+   "expected_visual_state": "No cable is plugged into the USB-C port and the backlight is off.",
+   "common_mistakes": [
+    "Leaving the cable plugged in while working on the key.",
+    "Reaching for the board without grounding yourself first."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#1"
+   ]
+  },
+  {
+   "title": "Check the bare G switch",
+   "instruction": "Look at the G position and check the switch is seated flat with its cross-shaped stem upright. Press the stem a few times.",
+   "kind": "switch-test",
+   "parts": [
+    "mechanical switch",
+    "plate"
+   ],
+   "expected_visual_state": "The bare G switch sits flush with neighbouring switches and its stem springs back after each press.",
+   "common_mistakes": [
+    "Not noticing a cracked or tilted switch.",
+    "Pressing the stem sideways instead of straight down."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#9"
+   ]
+  },
+  {
+   "title": "Clear dust from the G switch",
+   "instruction": "Blow around the exposed G switch with compressed air. Keep the can upright.",
+   "kind": "socket-inspect",
+   "parts": [
+    "mechanical switch",
+    "plate"
+   ],
+   "expected_visual_state": "The G switch and the plate around it are free of dust and debris.",
+   "common_mistakes": [
+    "Tilting the compressed air can so liquid sprays out.",
+    "Leaving debris around the stem that stops the keycap seating."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#5"
+   ]
+  },
+  {
+   "title": "Place the G keycap",
+   "instruction": "Line up the G keycap with the cross-shaped stem, with the legend facing you. Press it straight down until it is fully seated.",
+   "kind": "keycap-place",
+   "parts": [
+    "keycap",
+    "mechanical switch"
+   ],
+   "expected_visual_state": "The G keycap is on the G position at the same height and angle as the surrounding keycaps.",
+   "common_mistakes": [
+    "Putting the keycap on rotated so it will not seat.",
+    "Not pressing fully so it sits higher than the others."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#10"
+   ]
+  },
+  {
+   "title": "Reconnect and test G",
+   "instruction": "Plug the USB-C cable back in. Press the G key three times in a text editor.",
+   "kind": "cable-in-test",
+   "parts": [
+    "USB-C port",
+    "keycap"
+   ],
+   "expected_visual_state": "The cable is plugged in, the backlight is on, and G appears once per press on screen.",
+   "common_mistakes": [
+    "Not testing the G key specifically.",
+    "Not checking for double typing by pressing it repeatedly."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#11"
+   ]
+  }
+ ]
+}

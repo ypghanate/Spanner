@@ -27,7 +27,8 @@ from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIR = ROOT / "data" / "models" / "rk61"
-COACH_MODEL = os.getenv("COACH_MODEL", "claude-sonnet-5-5")  # Sonnet reads key legends far more reliably than Haiku (~3 s, thinking off)
+COACH_MODEL = os.getenv("COACH_MODEL", "claude-haiku-5-5")  # per-frame step read: ~1 s; the Sonnet second look (verify_gap) reads key legends
+INTENT_MODEL = os.getenv("INTENT_MODEL", "claude-haiku-5-5")  # spoken words -> command / device: classification, keep it fast
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
@@ -268,19 +269,6 @@ MAX_IMAGE_BYTES = 8 * 1024 * 1024
 _frame_inflight: set[str] = set()        # sessions with a vision call running: a second frame is dropped, not queued
 
 
-_previews: dict[str, bytes] = {}      # newest phone frame per session (JPEG), shown live in the viewer
-
-
-@router.get("/preview.jpg")
-async def preview(session: str):
-    from fastapi.responses import Response
-
-    data = _previews.get(session)
-    if not data:
-        raise HTTPException(404, "no frame yet")
-    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
-
-
 @router.post("/frame")
 async def frame(image: UploadFile = File(...), current_step: int = Form(0), session: str = Form("laptop")):
     data = await image.read()
@@ -290,7 +278,6 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
         raise HTTPException(413, "image too large")
     if session in _frame_inflight:       # the previous frame is still being read: never stack Claude calls behind it
         raise HTTPException(429, "still reading the previous frame")
-    _previews[session] = data            # what the phone sees, for the laptop viewer's camera panel
     if session not in _plans:
         # The person hasn't said what is wrong yet, so there is no repair to check frames against (and no Claude call
         # to pay for). Answer with an idle view so the phone link still shows as live.
@@ -385,7 +372,7 @@ async def intent(req: IntentReq):
                 "none (noise, not addressed to Spanner). Fillers like ok, please, hey Spanner are ignored.")
     def run() -> Intent:
         resp = _client().beta.messages.parse(
-            model=COACH_MODEL, max_tokens=120, thinking=_thinking(COACH_MODEL),
+            model=INTENT_MODEL, max_tokens=120, thinking=_thinking(INTENT_MODEL),
             system=[{"type": "text", "text": sys_text, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": f"Current step on screen: {req.current_step}. Spoken: {req.text!r}"}],
             output_format=Intent)
@@ -463,7 +450,7 @@ async def device(req: DeviceReq):
     """Free speech -> which device Spanner should open (keyboard repair, or a hologram of the others)."""
     def run() -> DevicePick:
         resp = _client().beta.messages.parse(
-            model=COACH_MODEL, max_tokens=120, thinking=_thinking(COACH_MODEL),
+            model=INTENT_MODEL, max_tokens=120, thinking=_thinking(INTENT_MODEL),
             system="The user was asked 'What do you want to fix?'. Map their words to one device: keyboard (a mechanical "
                    "keyboard, RK61, a dead key, typing), iphone15 (phone, mobile, iPhone), momentum4 (headphones, "
                    "Sennheiser, earcups, headset), ipad11 (iPad, tablet). If it is none of these or unclear, 'none' with "
@@ -633,6 +620,12 @@ def mount(app) -> None:
 
     app.include_router(router)
     app.include_router(shop_router)
+
+    @app.on_event("startup")
+    async def _warm_plans() -> None:   # every fault class planned before anyone asks: planning becomes instant
+        from .planner import warm
+
+        asyncio.get_running_loop().run_in_executor(None, warm)
 
     @app.on_event("startup")
     async def _warm_shop() -> None:   # (main.py already warms the YOLO detector)

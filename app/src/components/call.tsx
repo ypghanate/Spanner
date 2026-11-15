@@ -8,6 +8,10 @@ import { callFill, camera, hud as hudColors, radius, useTheme } from "../theme";
 import { useSpanner } from "../state/SpannerProvider";
 import { CallEndButton, Icon, icons, images, Txt, Waveform } from "./ui";
 
+/** Small photos: ~100-200 KB instead of multi-MB full-resolution shots, so frames reach the laptop fast. 1280 px
+ *  wide is still enough for the coach to read key legends (an iOS preset; Android picks the nearest size). */
+const PICTURE_SIZE = "1280x720";
+
 /** Live rear camera with the design's tint and top / bottom scrims. */
 export const CameraBackdrop = forwardRef<
   CameraView,
@@ -17,14 +21,14 @@ export const CameraBackdrop = forwardRef<
   if (mode === "hidden") {
     return (
       <View pointerEvents="none" style={{ position: "absolute", right: 0, top: 0, width: 64, height: 64, opacity: 0.01 }}>
-        {permitted ? <CameraView ref={ref} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} mute /> : null}
+        {permitted ? <CameraView ref={ref} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} mute pictureSize={PICTURE_SIZE} /> : null}
       </View>
     );
   }
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: camera.surface }]}>
       {permitted ? (
-        <CameraView ref={ref} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} mute />
+        <CameraView ref={ref} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} mute pictureSize={PICTURE_SIZE} />
       ) : (
         <Image source={images.liveCamera} style={StyleSheet.absoluteFill} contentFit="cover" />
       )}
@@ -48,7 +52,7 @@ export const CameraBox = forwardRef<CameraView, { permitted: boolean; variant: "
   return (
     <View pointerEvents="none" style={[{ borderRadius: radius.r12, overflow: "hidden", backgroundColor: camera.surface }, style]}>
       {permitted ? (
-        <CameraView ref={ref} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} mute />
+        <CameraView ref={ref} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} mute pictureSize={PICTURE_SIZE} />
       ) : (
         <Image source={split ? images.liveCamera : images.pip} style={StyleSheet.absoluteFill} contentFit="cover" />
       )}

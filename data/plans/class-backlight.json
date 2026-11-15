@@ -1,0 +1,80 @@
+{
+ "fault": "The whole keyboard backlight is dead, with no lighting on any key.",
+ "diagnosis": "A dead backlight on every key usually means a cable, port or lighting-mode problem, not a bad switch. We will unplug, check the cable and port, check the mode switch, then plug back in and test.",
+ "difficulty": "easy",
+ "time_min": 10,
+ "tools_needed": [
+  "USB-C cable",
+  "compressed air"
+ ],
+ "safety_notes": [
+  "Unplug the USB-C cable before touching the port or blowing air into the keyboard.",
+  "Touch grounded metal first to discharge static before handling the board."
+ ],
+ "steps": [
+  {
+   "title": "Unplug the keyboard",
+   "instruction": "Pull the USB-C cable out of the back of the keyboard. Touch grounded metal first to discharge static.",
+   "kind": "cable-out",
+   "parts": [
+    "USB-C port"
+   ],
+   "expected_visual_state": "No cable is plugged into the keyboard's USB-C port and the backlight is off.",
+   "common_mistakes": [
+    "Reaching for the board without grounding yourself first.",
+    "Leaving the cable plugged in while working on the board."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#1"
+   ]
+  },
+  {
+   "title": "Check the USB-C port",
+   "instruction": "Look into the USB-C port on the back of the keyboard. Blow out any dust with compressed air.",
+   "kind": "other",
+   "parts": [
+    "USB-C port",
+    "PCB"
+   ],
+   "expected_visual_state": "The USB-C port is open, clean and free of lint or debris, with the connector tongue visible inside.",
+   "common_mistakes": [
+    "Poking metal objects into the port.",
+    "Not noticing a bent or loose port."
+   ],
+   "source_ids": []
+  },
+  {
+   "title": "Check the mode switch",
+   "instruction": "Find the mode switch and set it to the wired (cable) position.",
+   "kind": "other",
+   "parts": [
+    "mode switch",
+    "case"
+   ],
+   "expected_visual_state": "The mode switch is slid fully to the wired position, not halfway between positions.",
+   "common_mistakes": [
+    "Leaving the switch in a wireless position.",
+    "Leaving the switch stuck halfway between positions."
+   ],
+   "source_ids": []
+  },
+  {
+   "title": "Plug in and test the backlight",
+   "instruction": "Plug the USB-C cable firmly into the keyboard, then press the key three times to test. Watch whether the backlight comes on.",
+   "kind": "cable-in-test",
+   "parts": [
+    "USB-C port",
+    "backlight",
+    "LED"
+   ],
+   "expected_visual_state": "The cable is plugged into the USB-C port and the backlight glows under the keys.",
+   "common_mistakes": [
+    "Not pushing the cable in all the way.",
+    "Using a charge-only or damaged cable."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#11"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,81 @@
+{
+ "fault": "The keyboard has an unspecified problem that is not tied to any single key.",
+ "diagnosis": "You haven't named a specific key, so I can't tell which part is faulty. I'll walk you through a safe general check: power it down, look for debris or damage, then reconnect and test.",
+ "difficulty": "easy",
+ "time_min": 10,
+ "tools_needed": [
+  "compressed air"
+ ],
+ "safety_notes": [
+  "Unplug the USB-C cable before touching anything inside the keyboard.",
+  "Touch grounded metal first to discharge static before handling the board."
+ ],
+ "steps": [
+  {
+   "title": "Unplug the keyboard",
+   "instruction": "Unplug the USB-C cable from the back of the keyboard. Touch grounded metal before you reach for the board.",
+   "kind": "cable-out",
+   "parts": [
+    "USB-C port"
+   ],
+   "expected_visual_state": "No cable is plugged into the USB-C port and the backlight is off.",
+   "common_mistakes": [
+    "Leaving the cable plugged in while handling the keyboard.",
+    "Reaching for the board without grounding yourself first."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#1"
+   ]
+  },
+  {
+   "title": "Inspect the cable port",
+   "instruction": "Look into the USB-C port at the back of the keyboard. Check that it is clean and not bent or loose.",
+   "kind": "other",
+   "parts": [
+    "USB-C port",
+    "case"
+   ],
+   "expected_visual_state": "The USB-C port is visible and the camera sees no debris, bent metal or cracks around it.",
+   "common_mistakes": [
+    "Skipping the port check and blaming the keys.",
+    "Poking inside the port with a metal object."
+   ],
+   "source_ids": []
+  },
+  {
+   "title": "Blow out dust",
+   "instruction": "Hold the keyboard level and blow compressed air across the keys and gaps. Work from one side to the other.",
+   "kind": "socket-inspect",
+   "parts": [
+    "switch",
+    "plate",
+    "PCB"
+   ],
+   "expected_visual_state": "Compressed air is aimed at the keyboard surface and no dust or crumbs remain between the keys.",
+   "common_mistakes": [
+    "Shaking the keyboard upside down and spreading debris inside.",
+    "Spraying liquid cleaner instead of using compressed air."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#5"
+   ]
+  },
+  {
+   "title": "Reconnect and test",
+   "instruction": "Plug the USB-C cable back in. Press a few keys in a text editor or online keyboard tester to see what still fails.",
+   "kind": "cable-in-test",
+   "parts": [
+    "USB-C port",
+    "backlight"
+   ],
+   "expected_visual_state": "The cable is plugged in, the backlight is on, and typed characters appear on the screen.",
+   "common_mistakes": [
+    "Not testing keys after cleaning.",
+    "Not noting which key or behavior still fails so you can tell me next."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#11"
+   ]
+  }
+ ]
+}

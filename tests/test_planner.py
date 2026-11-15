@@ -120,7 +120,7 @@ def test_good_claude_plan_is_cached(monkeypatch, tmp_path):
     second = planner.plan_repair("E key sticky again", "s")
     assert first["status"] == second["status"] == "ready"
     assert n["gen"] == 1 and second["cached"] is True
-    assert (tmp_path / "plans" / "sticky-key-e.json").exists()
+    assert (tmp_path / "plans" / "class-sticky_key.json").exists()
 
 
 def test_retrieval_only_uses_rk61_procedures():
@@ -160,3 +160,31 @@ def test_generate_endpoint_clarify_and_refuse_keep_the_old_plan():
     assert c.post("/coach/plan/generate", json={"session": "t2", "complaint": "a key is dead"}).json()["status"] == "clarify"
     assert c.post("/coach/plan/generate", json={"session": "t2", "complaint": "the battery is swollen"}).json()["status"] == "refused"
     assert "t2" not in coach._plans
+
+
+def test_class_plan_is_reused_for_any_key(monkeypatch, tmp_path):
+    """One Claude call per fault class: the plan is written with {KEY} and every key reuses it instantly."""
+    monkeypatch.setattr(planner, "_use_mock", lambda: False)
+    monkeypatch.setattr(planner, "CACHE_DIR", tmp_path / "plans")
+    monkeypatch.setattr(planner, "retrieve", lambda *a, **k: [])
+    monkeypatch.setattr(planner, "_intake_claude", lambda c: (_ for _ in ()).throw(AssertionError("clear sentences skip Claude")))
+    raw = json.loads(planner.MOCK_PLANS.read_text(encoding="utf-8"))["dead_key"]
+    n = {"gen": 0}
+
+    def gen(intake, complaint, refs, errors):
+        n["gen"] += 1
+        return GenPlan.model_validate(raw)       # still has the {KEY} placeholder, like the real model is asked to write
+
+    monkeypatch.setattr(planner, "_generate_claude", gen)
+    g = planner.plan_repair("my G key doesn't work", "s")
+    h = planner.plan_repair("the H key is dead", "s")
+    assert g["status"] == h["status"] == "ready" and n["gen"] == 1 and h["cached"]
+    assert "keycap_H" in json.dumps(h["plan"]["steps"]) and "keycap_G" not in json.dumps(h["plan"]["steps"])
+    assert "H" in h["plan"]["steps"][1]["instruction"] and "{KEY}" not in json.dumps(h["plan"])
+
+
+def test_fast_intake_only_when_sure():
+    assert planner._intake_fast("my space bar doesn't work").target_key == "SPACE"
+    assert planner._intake_fast("one of my keys is dead") is None          # which key? ask Claude
+    assert planner._intake_fast("my phone won't charge") is None           # not a keyboard
+    assert planner._intake_fast("it's being weird") is None                # no fault words

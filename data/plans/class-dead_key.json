@@ -1,0 +1,189 @@
+{
+ "fault": "The {KEY} key on the RK61 does not register when pressed.",
+ "diagnosis": "A dead key on a hot-swap board usually means a faulty switch or a dirty socket. I'll unplug the keyboard, swap the {KEY} switch for a spare, and test it.",
+ "difficulty": "easy",
+ "time_min": 15,
+ "tools_needed": [
+  "keycap puller",
+  "switch puller",
+  "compressed air",
+  "spare compatible switch",
+  "tweezers"
+ ],
+ "safety_notes": [
+  "Unplug the USB-C cable before pulling any switch.",
+  "Touch grounded metal or wear an anti-static strap before handling the board.",
+  "Never rock or yank a switch; it can damage the hot-swap socket."
+ ],
+ "steps": [
+  {
+   "title": "Unplug the keyboard",
+   "instruction": "Unplug the USB-C cable from the back of the keyboard. Touch grounded metal first.",
+   "kind": "cable-out",
+   "parts": [
+    "USB-C port"
+   ],
+   "expected_visual_state": "No cable is in the USB-C port and the backlight is off.",
+   "common_mistakes": [
+    "Leaving the cable plugged in while pulling switches.",
+    "Reaching for the board without grounding yourself first."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#1"
+   ]
+  },
+  {
+   "title": "Remove the keycap",
+   "instruction": "Hook the keycap puller under opposite edges of the {KEY} keycap and pull straight up. Set the keycap aside.",
+   "kind": "keycap-pull",
+   "parts": [
+    "keycap",
+    "switch"
+   ],
+   "expected_visual_state": "The {KEY} keycap is off and the bare switch is visible in the plate.",
+   "common_mistakes": [
+    "Pulling the wrong keycap.",
+    "Pulling at an angle, which stresses the stem or scratches the case."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#2"
+   ]
+  },
+  {
+   "title": "Place the switch puller",
+   "instruction": "Put the switch puller prongs on the top and bottom clips of the {KEY} switch, down at plate level.",
+   "kind": "puller-place",
+   "parts": [
+    "mechanical switch",
+    "plate"
+   ],
+   "expected_visual_state": "The switch puller prongs rest on the top and bottom edges of the {KEY} switch, not the sides.",
+   "common_mistakes": [
+    "Gripping the left and right sides so the switch won't release.",
+    "Placing the prongs high on the housing instead of at plate level."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#3"
+   ]
+  },
+  {
+   "title": "Pull the switch out",
+   "instruction": "Squeeze gently until the clips give, then pull the {KEY} switch straight up.",
+   "kind": "switch-pull",
+   "parts": [
+    "mechanical switch",
+    "hot-swap socket"
+   ],
+   "expected_visual_state": "The old switch is in the puller and an empty hole shows the socket below.",
+   "common_mistakes": [
+    "Rocking the switch sideways, which damages the socket.",
+    "Pulling at an angle instead of vertically."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#4"
+   ]
+  },
+  {
+   "title": "Clean the socket",
+   "instruction": "Look into the empty {KEY} hole and blow it clean with compressed air.",
+   "kind": "socket-inspect",
+   "parts": [
+    "hot-swap socket",
+    "PCB"
+   ],
+   "expected_visual_state": "The socket's two pin holes are visible, free of debris, and the socket is not lifted or damaged.",
+   "common_mistakes": [
+    "Missing a damaged or lifted socket.",
+    "Inserting the new switch over debris."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#5"
+   ]
+  },
+  {
+   "title": "Check the spare switch",
+   "instruction": "Hold up the spare switch and check both pins are straight. Straighten a bent pin gently with tweezers.",
+   "kind": "new-switch-inspect",
+   "parts": [
+    "switch",
+    "switch pins"
+   ],
+   "expected_visual_state": "The spare switch shows two straight, parallel pins pointing down.",
+   "common_mistakes": [
+    "Installing a switch with a bent pin.",
+    "Bending a pin too hard and snapping it."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#6"
+   ]
+  },
+  {
+   "title": "Align the spare switch",
+   "instruction": "Hold the spare switch over the {KEY} hole, facing like its neighbours. Line the pins up with the socket holes.",
+   "kind": "switch-align",
+   "parts": [
+    "switch",
+    "switch pins",
+    "hot-swap socket"
+   ],
+   "expected_visual_state": "The spare switch sits level over the hole, oriented like its neighbours, not yet pressed in.",
+   "common_mistakes": [
+    "Rotating the switch so the pins miss the holes.",
+    "Holding it tilted so one pin enters first."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#7"
+   ]
+  },
+  {
+   "title": "Press the switch in",
+   "instruction": "Press straight down on the top of the switch until it clicks flush.",
+   "kind": "switch-insert",
+   "parts": [
+    "switch",
+    "plate"
+   ],
+   "expected_visual_state": "The new switch sits flush in the plate at the same height as its neighbours.",
+   "common_mistakes": [
+    "Forcing a switch with crooked pins.",
+    "Pressing one corner only so it seats crooked."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#8"
+   ]
+  },
+  {
+   "title": "Replace the keycap",
+   "instruction": "Line the {KEY} keycap up with the stem and press it straight down until seated.",
+   "kind": "keycap-place",
+   "parts": [
+    "keycap"
+   ],
+   "expected_visual_state": "The {KEY} keycap is on at the same height and angle as its neighbours.",
+   "common_mistakes": [
+    "Putting the keycap on rotated.",
+    "Not seating it fully so it sits high."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#10"
+   ]
+  },
+  {
+   "title": "Reconnect and test",
+   "instruction": "Plug the USB-C cable back in. Press the {KEY} key three times in a text editor.",
+   "kind": "cable-in-test",
+   "parts": [
+    "USB-C port",
+    "backlight"
+   ],
+   "expected_visual_state": "The cable is plugged in, the backlight is on, and the {KEY} character appears once per press.",
+   "common_mistakes": [
+    "Not testing the specific repaired key.",
+    "Not checking for double-typing."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#11"
+   ]
+  }
+ ]
+}

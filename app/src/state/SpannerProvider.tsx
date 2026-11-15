@@ -120,7 +120,7 @@ const Ctx = createContext<(SpannerState & Actions) | null>(null);
 
 const POLL_MS = 300; // the laptop viewer polls /coach/latest at the same rate
 const POSE_MS = 250;
-const FRAME_MS = 1200; // frames only: the hologram no longer follows the keyboard's rotation, so there is no pose stream
+const FRAME_MS = 0; // the next frame goes as soon as the last answer lands (frameBusy is the only gate): the camera is always being read
 
 export function SpannerProvider({ children }: { children: React.ReactNode }) {
   const [s, setS] = useState<SpannerState>(initial);
