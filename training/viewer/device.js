@@ -358,7 +358,7 @@ function needTap(text) {
 }
 let healthKnown = false;
 const healthP = fetch(API + "/coach/health", { signal: AbortSignal.timeout(4000) }).then((r) => r.json()).then((j) => { elevenOK = !!j.tts; }).catch(() => {}).finally(() => { healthKnown = true; });
-function stopSpeaking() { reportSpeaking(0); if ("speechSynthesis" in window) speechSynthesis.cancel(); if (sayAudio) { sayAudio.pause(); sayAudio = null; } speakingUntil = 0; }
+function stopSpeaking() { queuedSay = null; reportSpeaking(0); if ("speechSynthesis" in window) speechSynthesis.cancel(); if (sayAudio) { sayAudio.pause(); sayAudio = null; } speakingUntil = 0; }
 // ---- smooth feedback: say a line without cutting off the one being spoken; react only to what two frames agree on
 let queuedSay = null, queueTimer = 0;
 /** Say a line when the current one has finished (only the newest waiting line is kept; too late to be useful after 12 s). */

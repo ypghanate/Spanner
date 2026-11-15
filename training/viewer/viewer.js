@@ -1096,6 +1096,7 @@ function reportSpeaking(ms) {
   fetch(API + "/coach/speaking", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: SESSION, seconds: ms / 1000 }) }).catch(() => {});
 }
 function stopSpeech() {
+  queuedSay = null;   // a stop also cancels any line waiting for its turn
   reportSpeaking(0);
   if ("speechSynthesis" in window) speechSynthesis.cancel();
   if (sayAudio) { try { sayAudio.pause(); } catch { /* already gone */ } sayAudio = null; }
