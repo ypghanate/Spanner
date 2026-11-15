@@ -1133,6 +1133,7 @@ function spokenClean(text) {
 const FILLER_SET = new Set(["Mm-hm.", "Okay.", "Let me see.", "Right."]);
 const isFiller = (t) => FILLER_SET.has((t || "").trim());
 function stopSpeech() {
+  queuedSay = null;   // a stop also cancels any line waiting for its turn
   reportSpeaking(0); speechQ.length = 0; playing = false; clearTimeout(playGuard);
   if ("speechSynthesis" in window) speechSynthesis.cancel();
   if (sayAudio) { try { sayAudio.pause(); } catch { /* already gone */ } sayAudio = null; }
@@ -1234,7 +1235,7 @@ async function command(raw) {
   else if (/calibrat|align the hologram|set (this|that) as zero|zero it/.test(t)) { calibratePose(); said = "calibrated"; }
   else if (/use (my|the) phone|phone camera|phone as (the )?camera/.test(t)) { startRemote(); said = "phone camera"; }
   else if (/(other|another|alternative|different|new|better) keyboards?|keyboards? (instead|to buy)|instead of (this|the rk|it)|upgrade|should i buy|what else could i buy/.test(t)) { openShop(raw); said = "searching other keyboards"; }
-  else if (/replace(ment)?s?|\bbuy\b|order|price|how much|where (can|do) i get|spare|new (key ?caps?|switch(es)?|stabili[sz]ers?|cable)/.test(t)) { openShop(raw); said = "searching replacements"; }
+  else if (/\b(replacements?|spares?|buy|order|purchase|price|prices|how much|where (can|do) i (get|buy|find)|get (me )?(a |an |some |the )?(new|replacement|spare))\b/.test(t)) { openShop(raw); said = "searching replacements"; }
   else if (/turn (the )?camera off|stop watching|camera off/.test(t)) { if (camOn) toggleCamera(); if (remoteOn) { stopRemote(); setMode("assembled"); } said = "camera off"; }
   else if (/camera|watch me|look at me/.test(t)) { if (!camOn) toggleCamera(); said = "camera on"; }
   else if (/\b(light|dark) (theme|mode)\b/.test(t)) { applyTheme(/light/.test(t) ? "light" : "dark"); said = "theme"; }
@@ -1372,13 +1373,12 @@ async function openShop(raw, auto = false, refresh = false) {
   const autoTag = auto ? `<span class="auto">● SPANNER STARTED THIS ON ITS OWN</span>` : "";
   el.innerHTML = `<h3>SEARCHING THE WEB LIVE${autoTag}</h3><div class="searching">LINKUP · TAVILY · “${esc(raw)}”</div>`;
   if (!auto && !refresh) narrate("Searching live.");
-  // replacement parts: the deep verification agent runs alongside the quick search
+  // replacement parts: the deep verification agent runs alongside the quick search (started once the server knows what was asked)
   let verified = null, spoken = false, verifyPolls = 0;
-  const isPart = !/(other|another|alternative|different|new|better) keyboards?|keyboards? (instead|to buy)|instead of|upgrade|should i buy|what else could i buy/i.test(raw);
-  const pollVerify = async () => {
-    if (id !== shopReq || !isPart) return;
+  const pollVerify = async (product, part) => {
+    if (id !== shopReq || !part) return;
     try {
-      const r = await fetchT(API + "/coach/shop/verified?query=" + encodeURIComponent(raw), {}, 8000);
+      const r = await fetchT(API + "/coach/shop/verified?product=" + encodeURIComponent(product) + "&part=" + encodeURIComponent(part), {}, 8000);
       if (r.ok) verified = await r.json();
     } catch { /* keep polling */ }
     if (++verifyPolls > 45) { if (verified?.status === "researching") verified = { status: "failed" }; return; }   // about 3 minutes, then stop
@@ -1387,21 +1387,22 @@ async function openShop(raw, auto = false, refresh = false) {
     if (verified?.status === "ready" && verified.card?.decision && !spoken && el.querySelector("#vbox")) {
       spoken = true; narrate(verified.card.decision.headline);
     }
-    if (!verified || verified.status === "researching" || verified.refreshing) verifyTimer = setTimeout(pollVerify, 4000);
+    if (!verified || verified.status === "researching" || verified.refreshing) verifyTimer = setTimeout(() => pollVerify(product, part), 4000);
   };
-  if (isPart) pollVerify();
   try {
-    const r = await fetchT(API + "/coach/shop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: raw }) }, 75000);
+    const r = await fetchT(API + "/coach/shop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: raw, session: SESSION }) }, 75000);
     if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 120)}`);
     const d = await r.json(); if (id !== shopReq) return;
+    if (d.kind === "clarify") { el.style.display = "none"; narrate(d.say); return; }   // not sure which part: ask, do not guess
+    if (d.kind === "part") pollVerify(d.product, d.part);
     // offers came back before every photo / price was found: the server finishes them; show the full set shortly
     if (d.partial) setTimeout(() => { if (id === shopReq) openShop(raw, auto, true); }, 5000);
     const src = `LIVE · LINKUP + TAVILY · ${(d.latency_ms / 1000).toFixed(1)} s${d.cached ? " · CACHED" : ""}`;
     const autoTag = auto ? `<span class="auto">● SPANNER STARTED THIS ON ITS OWN</span>` : "";
     const img = (u) => (u ? `<img src="${esc(u)}" referrerpolicy="no-referrer" onerror="this.remove()">` : "");
-    if (d.kind === "keyboard") {
-      const ri = d.repair_instead ? `<div class="verify"><div class="vh">BEFORE YOU BUY · FIXING YOUR KEYBOARD (LINKUP AGENT, ${esc(d.repair_instead.as_of).toUpperCase()})</div><div class="dec">${esc(d.repair_instead.headline).replace(/^(Repair it:)/, "<b>$1</b>")}</div></div>` : "";
-      el.innerHTML = `<h3>OTHER KEYBOARDS · VS YOUR KEYBOARD${autoTag}</h3><div class="sub">${src}</div>${ri}<div class="grid">${d.items.map((k, i) => `
+    if (d.kind === "alternatives") {
+      const ri = d.repair_instead ? `<div class="verify"><div class="vh">BEFORE YOU BUY · FIXING YOUR ${esc((d.product || "device").toUpperCase())} (LINKUP AGENT, ${esc(d.repair_instead.as_of).toUpperCase()})</div><div class="dec">${esc(d.repair_instead.headline).replace(/^(Repair it:)/, "<b>$1</b>")}</div></div>` : "";
+      el.innerHTML = `<h3>ALTERNATIVES TO YOUR ${esc((d.product || "device").toUpperCase())}${autoTag}</h3><div class="sub">${src}</div>${ri}<div class="grid">${d.items.map((k, i) => `
         <div class="it" style="animation-delay:${i * 70}ms">${img(k.image_url)}
           <div class="nm">${esc(k.name)}</div><div class="pr">${moneyGbp(k)}</div>
           <ul>${(k.pros || []).map((x) => `<li class="p">${esc(x)}</li>`).join("")}${(k.cons || []).map((x) => `<li class="c">${esc(x)}</li>`).join("")}</ul>
@@ -1410,15 +1411,15 @@ async function openShop(raw, auto = false, refresh = false) {
       narrate(`I found ${d.items.length} alternatives.${c ? ` The cheapest is the ${c.name} at about £${Math.round(c.price_gbp)}.` : ""}${d.repair_instead ? " But fixing yours is far cheaper." : ""}`);
     } else {
       const fit = d.items.filter((o) => o.compatible);
-      el.innerHTML = `<h3>REPLACEMENT ${esc(d.item.split(" (")[0]).toUpperCase()} · FOR YOUR KEYBOARD${autoTag}</h3><div class="sub">${src}</div><div id="vbox">${verifyBox(verified)}</div><div class="sub">MORE OPTIONS · QUICK SEARCH</div><div class="grid">${d.items.map((o, i) => `
+      el.innerHTML = `<h3>${esc(d.part.toUpperCase())}${autoTag}</h3><div class="sub">${src}</div><div id="vbox">${verifyBox(verified)}</div><div class="sub">MORE OPTIONS · QUICK SEARCH</div><div class="grid">${d.items.map((o, i) => `
         <div class="it" style="animation-delay:${i * 70}ms">${img(o.image_url)}
           <div class="nm">${esc(o.name)}</div><div class="pr">${moneyGbp(o)}</div><div class="rt">${esc(o.retailer)}</div>
-          <span class="badge ${o.compatible ? "ok" : "no"}">${o.compatible ? "✓ FITS YOUR KEYBOARD" : "✗ WON'T FIT"}</span>
+          <span class="badge ${o.compatible ? "ok" : "no"}">${o.compatible ? "✓ FITS YOUR DEVICE" : "✗ WON'T FIT"}</span>
           <div class="why">${esc(o.compatibility)}</div>
           <a href="${esc(o.url)}" target="_blank">${esc(hostOf(o.url))} ↗</a></div>`).join("")}</div>${cites(d)}`;
       if (!spoken) {
         const c = fit.filter((o) => o.price > 0).sort((a, b) => a.price - b.price)[0];
-        narrate(`${auto ? "Your old switch is out, so you'll need a new one. " : ""}${fit.length} of ${d.items.length} fit your keyboard.${c ? ` Cheapest that fits: ${money(c.price, c.currency)}, from ${c.retailer}.` : ""} I'm verifying them now.`);
+        narrate(`${fit.length} of ${d.items.length} fit.${c ? ` Cheapest that fits: ${money(c.price, c.currency)}, from ${c.retailer}.` : ""} I'm verifying them now.`);
       }
     }
   } catch (e) {
@@ -1527,16 +1528,6 @@ async function coachTick() {
   setTimeout(coachTick, 1500);
 }
 
-let autoShopped = false;
-const AUTO_PART = { dead: "replacement switch", sticky: "replacement switch",
-  missing: "replacement keycaps", spacebar: "replacement stabilizers", no: "a replacement USB-C cable" };
-function maybeAutoShop(c) {
-  const kind = plan.steps[c.step_index - 1]?.kind;
-  if (autoShopped || !kind) return;
-  if ((kind === "switch-pull" && c.step_status === "done") || ["socket-inspect", "new-switch-inspect", "stabilizer"].includes(kind)) {
-    autoShopped = true; openShop(AUTO_PART[plan?.fault_signature?.split("-")[0]] || "replacement switch", true);
-  }
-}
 // the key the camera sees missing becomes the key we repair (two frames must agree; exact legend match only)
 let missingSeen = { key: null, n: 0 };
 function keyIdForLegend(legend) {
@@ -1571,7 +1562,6 @@ function onCoach(c) {
   seen(`<b>I SEE</b> ${c.what_i_see}${stepTxt}${c.mistake ? `<br><span class="bad">⚠ ${c.mistake}</span>` : ""}`);
   if (!c.object_visible) { agree = 0; return; }
   if (performance.now() < stepHoldUntil || advancing) return;      // we just moved on (or are about to): this frame is stale
-  if (c.confidence >= 0.6) maybeAutoShop(c);
   const cur = stepIdx + 1;
   // something going wrong: needs two frames in a row (or a very sure one), then a gentle glow and a spoken heads-up that
   // waits for Spanner to finish its sentence. When it clears, the warning fades out by itself.
@@ -2028,11 +2018,11 @@ function showPicker() {
   pickOpen = true; $("pick").style.display = "flex"; $("pick").style.opacity = 1; $("pickecho").textContent = ""; $("pickq").textContent = "What do you want to fix?"; $("pickhint").textContent = "listening · just say it";
   narrate("What do you want to fix?");
 }
-const FAULT_WORDS = /\b(\bkeys?\b|keycaps?|space ?bar|enter|shift|backspace|switch(es)?|cable|charg\w*|power|lights?|backlight|led|dead|broken|stuck|sticky|rattl\w*|wobbl\w*|loose|missing|cracked|flicker\w*|double|chatter\w*|not (working|registering|typing)|doesn'?t|won'?t)\b/i;
+const FAULT_WORDS = /\b(keys?|keycaps?|space ?bar|enter|shift|backspace|switch(es)?|cable|charg\w*|power|lights?|backlight|led|dead|broken|stuck|sticky|rattl\w*|wobbl\w*|loose|missing|cracked|flicker\w*|double|chatter\w*|not (working|registering|typing)|doesn'?t|won'?t)\b/i;
 async function chooseDevice(dev, raw = "") {
   if (!pickOpen) return;
   pickOpen = false; $("pick").style.opacity = 0; setTimeout(() => { $("pick").style.display = "none"; }, 600);
-  if (dev !== "keyboard") { narrate("Opening the " + { iphone15: "iPhone 15", momentum4: "Momentum 4", ipad11: "iPad" }[dev] + "."); setTimeout(() => { location.href = `./device.html?d=${dev}&s=${encodeURIComponent(SESSION)}`; }, 900); return; }
+  if (dev !== "keyboard") { narrate("Opening the " + { iphone15: "iPhone 15", momentum4: "Momentum 4", ipad11: "iPad", plug13a: "plug" }[dev] + "."); setTimeout(() => { location.href = `./device.html?d=${dev}&s=${encodeURIComponent(SESSION)}`; }, 900); return; }
   if (!remoteOn && !camOn) { if (QP.get("camera") === "1") await toggleCamera(); else startRemote(); }
   if (FAULT_WORDS.test(raw)) return requestRepair(raw);   // they already said what's wrong: plan it now
   narrate("The keyboard. What's wrong with it?");

@@ -1,6 +1,6 @@
 // Where a spoken request goes. Three separate worlds, never mixed:
 //   keyboard      -> the keyboard pipeline (hand-built hologram, camera reads the keycaps). Untouched: no object questions.
-//   iphone15 / ipad11 / momentum4 -> their own device pages (hologram teardown).
+//   iphone15 / ipad11 / momentum4 / plug13a -> their own device pages (hologram teardown).
 //   anything else -> object mode: live photo search, fal 3D model, diagnostic questions, repair learned from the web.
 // Pure functions (no DOM), so every decision is tested in tests/route.test.mjs.
 
@@ -12,6 +12,9 @@ export const KEYBOARD_WORDS = /\bkey ?boards?\b|\brk ?\d+\b|\bkey ?caps?\b|\bspa
 export function deviceFor(text) {
   const t = String(text || "").toLowerCase();
   if (KEYBOARD_WORDS.test(t)) return "keyboard";
+  // the three-pin plug and its fuse (a built-in device). "plug" alone counts only when no model number is named, so
+  // "Dyson V8, the plug is loose" stays a Dyson.
+  if (/\b(?:three[- ]?pin|3[- ]?pin|13 ?a(?:mp)?|mains|fused?)\b/.test(t) || (/\bplug\b/.test(t) && !/\d/.test(t))) return "plug13a";
   if (/\bi ?phones?\b/.test(t)) return "iphone15";
   if (/\bmomentum\b/.test(t)) return "momentum4";
   if (/\bi ?pads?\b/.test(t)) return "ipad11";

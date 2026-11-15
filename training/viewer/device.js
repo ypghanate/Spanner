@@ -1,7 +1,7 @@
 // SPANNER // device holograms: iPhone 15, iPad (11th gen), Sennheiser Momentum 4.
 // Procedural, decomposable models in the same look as the RK61 hologram: take apart, inspect every part,
 // x-ray, voice. No repair procedure for these (the keyboard is the repair demo).
-//   device.html?d=iphone15 | ipad11 | momentum4   (&instant=1 for screenshots, &explode=1, &xray=1, &select=battery)
+//   device.html?d=iphone15 | ipad11 | momentum4 | plug13a   (&instant=1 for screenshots, &explode=1, &xray=1, &select=battery)
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
@@ -288,7 +288,91 @@ function momentum4() {
   const hotspots = [["Touch control (right cup)", [11.2, -1.0, 0]], ["Power · Bluetooth", [9.9, -8.0, 0.3]], ["USB-C", [9.9, -8.0, 1.6]], ["3.5 mm jack", [9.9, -8.0, -1.0]], ["Noise-cancelling mics", [-11.0, -0.4, 2.6]], ["Cushion: twists off", [-7.3, -7.2, 0]], ["Size slider", [-8.8, 4.6, 0]]];
   return { name: "Sennheiser Momentum 4", parts, spread: 1, hotspots, views: { iso: [18, 14, 26] }, fact: "60-hour battery, adaptive noise cancelling, fabric headband and touch control on the right cup. The ear cushions twist off and are the usual wear part." };
 }
-const DEVICES = { iphone15: iphone15, ipad11: ipad11, momentum4: momentum4 };
+// UK 13 A mains plug (BS 1363): the demo repair is swapping its fuse. Cm, y up; the plug stands on its pins, cover up.
+// Real size: 5.0 x 6.3 cm footprint, ~3.4 cm deep, pins 1.75 cm (earth 2.3 cm). Every part is its own named node so the
+// repair can take it apart and point at the cover screw, the fuse, the terminals, the cord grip.
+function plug13a() {
+  const parts = [];
+  const add = (name, label, desc, obj, pos, dir, group = "plug", callout = false) => parts.push({ name, label, desc, obj: edgesOn(obj, 40), pos, dir, group, callout });
+  const W = 5.0, D = 6.3, H = 3.0, wall = 0.38, floorT = 0.5;
+  const white = new THREE.MeshPhysicalMaterial({ color: 0x4b4f58, roughness: 0.42, clearcoat: 0.45, clearcoatRoughness: 0.4 });   // the plug's plastic: mid grey so it reads on both themes
+  const brass = M.gold, steel = M.silver;
+  const brown = new THREE.MeshStandardMaterial({ color: 0x7a431c, roughness: 0.55 }), blue = new THREE.MeshStandardMaterial({ color: 0x2160c4, roughness: 0.55 });
+  const stripes = canvasTex(256, 16, (g, w, h) => { g.fillStyle = "#3a9a3f"; g.fillRect(0, 0, w, h); g.fillStyle = "#f0d21c"; for (let i = 0; i < 4; i++) g.fillRect(i * 64 + 16, 0, 32, h); });
+  stripes.wrapS = THREE.RepeatWrapping; stripes.repeat.set(3, 1);
+  const greenYellow = new THREE.MeshStandardMaterial({ map: stripes, roughness: 0.55 });
+  const ceramic = new THREE.MeshStandardMaterial({ color: 0xe6d9ba, roughness: 0.7 }), flexMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd1, roughness: 0.6 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x15171b, roughness: 0.6 });
+  const wire = (pts, mat, r = 0.13) => mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => V3(...p))), 40, r, 10, false), mat);
+
+  // body: the tray (floor and four walls; a notch in the cable wall for the flex)
+  const body = new THREE.Group(); const wallH = H - floorT, wy = floorT + wallH / 2;
+  const floor = mesh(box(W, floorT, D, 0.3, 3), white); floor.position.y = floorT / 2; body.add(floor);
+  const back = mesh(box(W, wallH, wall, 0.1, 2), white); back.position.set(0, wy, -D / 2 + wall / 2); body.add(back);
+  for (const sx of [-1, 1]) {
+    const gap = 0.55, segW = W / 2 - gap, seg = mesh(box(segW, wallH, wall, 0.1, 2), white); seg.position.set(sx * (gap + segW / 2), wy, D / 2 - wall / 2); body.add(seg);
+    const side = mesh(box(wall, wallH, D - 2 * wall, 0.1, 2), white); side.position.set(sx * (W / 2 - wall / 2), wy, 0); body.add(side);
+  }
+  add("body", "Plug body", "White plastic base of the plug: the three pins come out of its front, and the terminals, fuse and cord grip sit in its tray under the cover.", body, [0, 0, 0], [0, 0, 0], "plug");
+
+  // cover and its screw
+  const cover = new THREE.Group(); const slab = mesh(box(W - 0.04, 0.4, D - 0.04, 0.3, 3), white); cover.add(slab);
+  const lip = mesh(box(W - 2 * wall - 0.14, 0.35, D - 2 * wall - 0.14, 0.1, 1), white); lip.position.y = -0.36; cover.add(lip);
+  const printTex = canvasTex(512, 320, (g, w, h) => { g.fillStyle = "#4b4f58"; g.fillRect(0, 0, w, h); g.fillStyle = "#e7e9ee"; g.textAlign = "center"; g.font = "700 64px system-ui,sans-serif"; g.fillText("13A", w / 2, 110); g.font = "600 40px system-ui,sans-serif"; g.fillText("250V ~  BS 1363", w / 2, 190); g.font = "500 28px system-ui,sans-serif"; g.fillText("FUSED PLUG", w / 2, 250); });
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.1), new THREE.MeshStandardMaterial({ map: printTex, roughness: 0.5 })); label.rotation.x = -Math.PI / 2; label.position.set(0, 0.203, -1.35); cover.add(label);
+  add("cover", "Back cover", "The cover that closes the tray. One central screw holds it; lift it off to reach the terminals and the fuse.", cover, [0, H + 0.2, 0], [0, 5.6, 0], "plug");
+  const cs = new THREE.Group(); const head = mesh(cyl(0.36, 0.16, 28), steel); head.position.y = 0.08; cs.add(head);
+  for (const r of [0, Math.PI / 2]) { const slot = mesh(box(0.56, 0.05, 0.08, 0.01, 1), dark); slot.position.y = 0.17; slot.rotation.y = r; cs.add(slot); }
+  const shank = mesh(cyl(0.11, 1.5, 14), steel); shank.position.y = -0.75; cs.add(shank);
+  add("cover_screw", "Cover screw", "The single cross-head screw in the middle of the cover. Undo it fully before lifting the cover.", cs, [0, H + 0.4, 0], [0, 9.4, 0], "plug", true);
+
+  // pins (front face): earth on top and longest, live and neutral below, each with an insulating sleeve at the base
+  const earth = new THREE.Group(); const ep = mesh(box(0.42, 2.3, 0.17, 0.03, 1), steel); ep.position.y = -1.15; earth.add(ep);
+  const ehole = mesh(box(0.1, 0.5, 0.2, 0.01, 1), dark); ehole.position.y = -1.9; earth.add(ehole);
+  add("earth_pin", "Earth pin", "The longest, top pin. It is what opens the shutters in a socket so the live and neutral pins can go in.", earth, [0, 0, -1.55], [0, -3.4, -0.6], "contacts");
+  for (const [nm, lb, sx, ds] of [["live_pin", "Live pin", 1, "The lower right pin (looking at the front). It carries the current in and is protected by the fuse behind it."], ["neutral_pin", "Neutral pin", -1, "The lower left pin. It is the return path for the current."]]) {
+    const pin = new THREE.Group(); const pp = mesh(box(0.17, 1.75, 0.42, 0.03, 1), steel); pp.position.y = -0.875; pin.add(pp);
+    const sleeve = mesh(box(0.32, 0.9, 0.62, 0.05, 1), white); sleeve.position.y = -0.45; pin.add(sleeve);
+    add(nm, lb, ds, pin, [sx * 1.1, 0, 0.65], [sx * 1.4, -3.0, 0.5], "contacts");
+  }
+
+  // terminals: brass blocks with a clamp screw each (live right, neutral left, earth top, as seen from the back)
+  const terminal = (screwSlots) => { const g = new THREE.Group(); const blk = mesh(box(0.95, 0.72, 0.8, 0.08, 1), brass); g.add(blk); const sh = mesh(cyl(0.21, 0.12, 20), steel); sh.position.y = 0.42; g.add(sh); for (const r of [0, Math.PI / 2]) { const sl = mesh(box(0.34, 0.04, 0.06, 0.01, 1), dark); sl.position.y = 0.49; sl.rotation.y = r; g.add(sl); } return g; };
+  add("earth_terminal", "Earth terminal", "Top terminal: the green-and-yellow wire clamps here. Its wire is the longest so it is the last to pull out if the cable is yanked.", terminal(), [0, floorT + 0.4, -2.0], [0, 3.0, -1.4], "contacts");
+  add("neutral_terminal", "Neutral terminal", "Left terminal: the blue wire clamps here.", terminal(), [-1.7, floorT + 0.4, -0.1], [-1.6, 3.0, 0], "contacts");
+  add("live_terminal", "Live terminal", "Right terminal: the brown wire clamps here, on the same side as the fuse.", terminal(), [1.7, floorT + 0.4, -0.1], [1.6, 3.0, 0], "contacts");
+
+  // wires from the cord grip to the terminals (the earth wire arcs over the fuse)
+  add("live_wire", "Live wire (brown)", "Brown core of the flex, stripped and clamped under the live terminal screw.", wire([[0.2, 1.0, 2.5], [0.9, 1.0, 2.0], [1.7, 1.15, 1.1], [1.7, 1.0, 0.3]], brown), [0, 0, 0], [1.0, 2.0, 0], "cable");
+  add("neutral_wire", "Neutral wire (blue)", "Blue core of the flex, clamped under the neutral terminal screw.", wire([[-0.2, 1.0, 2.5], [-0.9, 1.0, 2.0], [-1.7, 1.15, 1.1], [-1.7, 1.0, 0.3]], blue), [0, 0, 0], [-1.0, 2.0, 0], "cable");
+  add("earth_wire", "Earth wire (green and yellow)", "Green-and-yellow core of the flex, left a little longer than the others, clamped under the earth terminal screw.", wire([[0, 1.0, 2.5], [0, 2.0, 1.5], [0, 2.1, 0.2], [0, 1.5, -1.4], [0, 1.15, -1.95]], greenYellow), [0, 0, 0], [0, 3.4, -0.6], "cable");
+
+  // fuse and its clips
+  const clips = new THREE.Group(); const cradle = mesh(box(3.4, 0.16, 0.95, 0.05, 1), white); cradle.position.y = -0.2; clips.add(cradle);
+  for (const sx of [-1, 1]) { const clip = mesh(box(0.26, 0.62, 0.72, 0.05, 1), brass); clip.position.set(sx * 1.45, 0.1, 0); clips.add(clip); }
+  add("fuse_clips", "Fuse clips", "The two spring brass clips the cartridge fuse snaps into; they connect the live pin to the live terminal through the fuse.", clips, [-0.1, floorT + 0.45, 1.25], [0, 1.6, 0], "fuse");
+  const fuse = new THREE.Group(); const fb = mesh(cyl(0.32, 2.54, 28), ceramic); fb.rotation.z = Math.PI / 2; fuse.add(fb);
+  for (const sx of [-1, 1]) { const cap = mesh(cyl(0.34, 0.42, 28), steel); cap.rotation.z = Math.PI / 2; cap.position.x = sx * 1.06; fuse.add(cap); }
+  const band = mesh(cyl(0.325, 0.5, 28), new THREE.MeshStandardMaterial({ color: 0x7a431c, roughness: 0.6 })); band.rotation.z = Math.PI / 2; fuse.add(band);   // the colour band of a 13 A fuse is brown (3 A red, 5 A black)
+  add("fuse", "Cartridge fuse (13 A)", "The 13 A (BS 1362) ceramic cartridge fuse, 25.4 x 6.3 mm. When it blows the plug dies. Replace it with the same rating, 3 A for lamps and small devices, 13 A for heaters and kettles.", fuse, [-0.1, floorT + 0.8, 1.25], [0, 4.4, 0.0], "fuse", true);
+
+  // cord grip: the bar that clamps the outer sheath of the flex so a pull on the cable never reaches the terminals
+  const grip = new THREE.Group(); const bar = mesh(box(2.7, 0.5, 0.75, 0.1, 2), white); grip.add(bar);
+  for (const sx of [-1, 1]) { const gh = mesh(cyl(0.2, 0.1, 18), steel); gh.position.set(sx * 1.0, 0.3, 0); grip.add(gh); const sl = mesh(box(0.3, 0.04, 0.05, 0.01, 1), dark); sl.position.set(sx * 1.0, 0.36, 0); grip.add(sl); }
+  add("cord_grip", "Cord grip", "The clamp bar that grips the cable's outer sheath. Its two screws must be tight so a tug on the cable never pulls on the wires.", grip, [0, 1.75, 2.35], [0, 3.2, 1.6], "cable", true);
+
+  // the flex
+  const flex_ = wire([[0, 1.0, 2.2], [0, 1.0, 3.3], [0, 0.95, 5.2], [0.4, 0.8, 7.6]], flexMat, 0.38);
+  add("cable", "Cable (flex)", "The mains flex: brown, blue and green-and-yellow cores inside a grey sheath, entering through the notch at the bottom of the plug.", flex_, [0, 0, 0], [0, 0.2, 5.5], "cable");
+
+  const hotspots = [["Earth pin (longest)", [0, -2.5, -1.55]], ["Live pin", [1.1, -2.0, 0.65]], ["Neutral pin", [-1.1, -2.0, 0.65]], ["Cover screw", [0, 4.1, 0]], ["Cable", [0, 1.6, 6.4]]];
+  const K = 2.6;   // real size is 6 cm; shown at the scale of the phone and headphones so it fills the view
+  for (const p of parts) { p.obj.scale.setScalar(K); p.pos = p.pos.map((v) => v * K); p.dir = p.dir.map((v) => v * K); }
+  for (const h of hotspots) h[1] = h[1].map((v) => v * K);
+  return { name: "UK 3-pin plug", parts, spread: 1, hotspots, views: { iso: [10, 9, 14] }, fact: "A UK 13-amp plug (BS 1363). The cartridge fuse in it is the safety link: 13 A for most appliances, 3 A for lamps and small devices. Always unplug it from the wall before you open it." };
+}
+
+const DEVICES = { iphone15: iphone15, ipad11: ipad11, momentum4: momentum4, plug13a: plug13a };
 const d = (QP.get("d") || "iphone15").toLowerCase();
 const device = (DEVICES[d] || iphone15)();
 document.title = `Spanner · ${device.name}`; $("sessTitle").textContent = device.name + " repair"; $("sessSub").textContent = device.name + " · guided repair"; $("sceneTitle").textContent = device.name;
@@ -358,7 +442,7 @@ function needTap(text) {
 }
 let healthKnown = false;
 const healthP = fetch(API + "/coach/health", { signal: AbortSignal.timeout(4000) }).then((r) => r.json()).then((j) => { elevenOK = !!j.tts; }).catch(() => {}).finally(() => { healthKnown = true; });
-function stopSpeaking() { reportSpeaking(0); if ("speechSynthesis" in window) speechSynthesis.cancel(); if (sayAudio) { sayAudio.pause(); sayAudio = null; } speakingUntil = 0; }
+function stopSpeaking() { queuedSay = null; reportSpeaking(0); if ("speechSynthesis" in window) speechSynthesis.cancel(); if (sayAudio) { sayAudio.pause(); sayAudio = null; } speakingUntil = 0; }
 // ---- smooth feedback: say a line without cutting off the one being spoken; react only to what two frames agree on
 let queuedSay = null, queueTimer = 0;
 /** Say a line when the current one has finished (only the newest waiting line is kept; too late to be useful after 12 s). */
@@ -405,6 +489,7 @@ async function command(raw) {
   if (/iphone/.test(t) && d !== "iphone15") { location.href = "./device.html?d=iphone15"; return; }
   if (/ipad|tablet/.test(t) && d !== "ipad11") { location.href = "./device.html?d=ipad11"; return; }
   if (/headphone|momentum|sennheiser/.test(t) && d !== "momentum4") { location.href = "./device.html?d=momentum4"; return; }
+  if (/\b(plug|fuse|three[- ]?pin|3[- ]?pin)\b/.test(t) && d !== "plug13a") { location.href = "./device.html?d=plug13a"; return; }
   if (/\b(stop|quiet|shut up|stop talking|be quiet|silence|enough)\b/.test(t)) { stopSpeaking(); heard(raw, "ok, quiet"); return; }
   if (/\b(close|hide|dismiss|never ?mind)\b/.test(t)) { select(null); said = "closed"; }
   else if (/take .*apart|explode|open it up|blow it up|exploded|cut it|disassemble/.test(t)) { explodeAndFrame(1); setXray(false); say("Taking it apart."); }
@@ -592,7 +677,7 @@ function showMistake() {
 
 // ---- Claude plans the repair from what was said
 async function requestRepair(raw) {
-  if (planning) return; planning = true; clarifying = null; runId++;
+  if (planning) return; planning = true; clarifying = null; runId++; closeShop();
   heard(raw, "planning the repair"); $("mode").textContent = "PLANNING THE REPAIR";
   narrate("Okay. Let me work out the fix.");
   try {
@@ -631,7 +716,7 @@ async function onReply(r) {
     case "zoom_in": return flyTo(camera.position.clone().lerp(controls.target, 0.35), controls.target.clone(), 600);
     case "zoom_out": return flyTo(camera.position.clone().sub(controls.target).multiplyScalar(1.5).add(controls.target), controls.target.clone(), 600);
     case "show_mistake": return showMistake();
-    case "shop_parts": case "shop_keyboards": narrate("I can only look up replacement parts for the keyboard so far."); return;
+    case "shop_parts": case "shop_keyboards": return openShop(r.text);
     case "specs": case "sources": break;
   }
   if (r.say) narrate(r.say);
@@ -700,6 +785,77 @@ async function remoteLoop() {
 }
 
 if (QP.get("debug") === "1") window.__spanner = { onCoach, state: () => ({ stepIdx, advancing, speaking: performance.now() < speakingUntil, finishedDev, queued: !!queuedSay, mistakeStreak, lastMistakeAgo: Math.round(performance.now() - lastMistakeAt), hold: Math.round(stepHoldUntil - performance.now()), mistakeShown }), until: () => Math.round(speakingUntil - performance.now()) };   // for tests
+
+// ------------------------------------------------------------------ shopping on request ("order a new battery", "how much is the screen")
+// The server (backend/shop.py) works out what is meant from the words and what is on screen, searches only that, and
+// answers {kind: "part" | "alternatives" | "clarify"}. Nothing is searched unless it is asked for.
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
+const money = (p, c) => (p > 0 ? `${{ GBP: "£", USD: "$", EUR: "€" }[c] || (c ? c + " " : "")}${Number(p).toFixed(2)}` : "see price ↗");
+const moneyGbp = (i) => money(i.price, i.currency) + (i.price_gbp && i.currency !== "GBP" ? ` <small style="opacity:.6">≈ £${i.price_gbp.toFixed(2)}</small>` : "");
+const shopImg = (u) => (u ? `<img src="${esc(u)}" referrerpolicy="no-referrer" onerror="this.remove()">` : "");
+const shopCites = (d) => (d.sources?.length ? `<div class="cites">LINKUP READ ${d.sources_count} PAGES · ${d.sources.slice(0, 8).map((x) => `<a href="${esc(x.url)}" target="_blank">${esc(hostOf(x.url))} ↗</a>`).join("")}</div>` : "");
+function verifyBox(v) {
+  if (!v || v.status === "researching") return `<div class="verify pending"><div class="vh">LINKUP AGENT · VERIFYING<span class="dots"></span></div><div class="meta">checking fit on 2+ independent sites · safety recalls · price of a new one · repair or replace</div></div>`;
+  if (v.status !== "ready" || !v.card) return "";
+  const c = v.card, dec = c.decision;
+  return `<div class="verify"><div class="vh">✓ VERIFIED BY THE LINKUP AGENT${v.fresh ? "" : " · " + esc(c.as_of).toUpperCase()}</div>
+    ${dec ? `<div class="dec">${esc(dec.headline)}</div>` : ""}
+    <div class="meta">${c.recall_checked ? (c.safety ? "⚠ " + esc(c.safety.text) : "No safety recalls found in the last 2 years") : ""} · ${c.sources_count} sources read · ${esc(c.as_of)}</div>
+    <div class="vrow">${c.options.map((o) => `<div class="vo"><div class="pr">${esc(o.price)}</div><div>${esc(o.part)}</div><div class="rt">${esc(o.retailer)}</div>
+      <span class="badge ${o.verified ? "ok" : "no"}">${esc(o.badge).toUpperCase()}</span>
+      <div class="ev"><a href="${esc(o.url)}" target="_blank">buy ↗</a></div></div>`).join("")}</div></div>`;
+}
+let shopReq = 0, verifyTimer = null;
+function closeShop() { shopReq++; clearTimeout(verifyTimer); $("shop").style.display = "none"; }
+async function openShop(raw, refresh = false) {
+  const id = ++shopReq, el = $("shop"); clearTimeout(verifyTimer);
+  const head = (t) => `<h3>${t}<button class="small" id="shopx" style="float:right" aria-label="Close">✕</button></h3>`;
+  el.style.display = "block"; select(null);
+  el.innerHTML = head("SEARCHING THE WEB LIVE") + `<div class="searching">LINKUP · TAVILY · “${esc(raw)}”</div>`;
+  $("shopx").onclick = closeShop;
+  if (!refresh) narrate("Searching live.");
+  let verified = null, spoken = false, polls = 0;
+  const pollVerify = async (product, part) => {
+    if (id !== shopReq || !part) return;
+    try { const r = await fetch(API + "/coach/shop/verified?product=" + encodeURIComponent(product) + "&part=" + encodeURIComponent(part), { signal: AbortSignal.timeout(8000) }); if (r.ok) verified = await r.json(); } catch { /* keep polling */ }
+    if (++polls > 45 || id !== shopReq) return;
+    const box = el.querySelector("#vbox"); if (box) box.innerHTML = verifyBox(verified);
+    if (verified?.status === "ready" && verified.card?.decision && !spoken && box) { spoken = true; narrate(verified.card.decision.headline); }
+    if (!verified || verified.status === "researching") verifyTimer = setTimeout(() => pollVerify(product, part), 4000);
+  };
+  try {
+    const r = await jpost("/coach/shop", { query: raw, session: SESSION }, 75000);
+    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 120)}`);
+    const d = await r.json(); if (id !== shopReq) return;
+    if (d.kind === "clarify") { closeShop(); narrate(d.say); return; }              // not sure which part: ask, do not guess
+    if (d.partial) setTimeout(() => { if (id === shopReq) openShop(raw, true); }, 5000);   // photos / prices still arriving
+    const src = `LIVE · LINKUP + TAVILY · ${(d.latency_ms / 1000).toFixed(1)} s${d.cached ? " · CACHED" : ""}`;
+    if (d.kind === "alternatives") {
+      el.innerHTML = head(`ALTERNATIVES TO YOUR ${esc((d.product || "device").toUpperCase())}`) + `<div class="sub">${src}</div><div class="grid">${d.items.map((k, i) => `
+        <div class="it" style="animation-delay:${i * 70}ms">${shopImg(k.image_url)}<div class="nm">${esc(k.name)}</div><div class="pr">${moneyGbp(k)}</div>
+          <ul>${(k.pros || []).map((x) => `<li class="p">${esc(x)}</li>`).join("")}${(k.cons || []).map((x) => `<li class="c">${esc(x)}</li>`).join("")}</ul>
+          <a href="${esc(k.url)}" target="_blank">${esc(hostOf(k.url))} ↗</a></div>`).join("")}</div>${shopCites(d)}`;
+      const c = d.items.filter((k) => k.price_gbp > 0).sort((a, b) => a.price_gbp - b.price_gbp)[0];
+      narrate(`I found ${d.items.length} alternatives.${c ? ` The cheapest is the ${c.name} at about £${Math.round(c.price_gbp)}.` : ""}`);
+    } else {
+      pollVerify(d.product, d.part);
+      const fit = d.items.filter((o) => o.compatible);
+      el.innerHTML = head(esc(d.part.toUpperCase())) + `<div class="sub">${src}</div><div id="vbox">${verifyBox(verified)}</div><div class="sub">MORE OPTIONS · QUICK SEARCH</div><div class="grid">${d.items.map((o, i) => `
+        <div class="it" style="animation-delay:${i * 70}ms">${shopImg(o.image_url)}<div class="nm">${esc(o.name)}</div><div class="pr">${moneyGbp(o)}</div><div class="rt">${esc(o.retailer)}</div>
+          <span class="badge ${o.compatible ? "ok" : "no"}">${o.compatible ? "✓ FITS YOUR DEVICE" : "✗ WON'T FIT"}</span><div class="why">${esc(o.compatibility)}</div>
+          <a href="${esc(o.url)}" target="_blank">${esc(hostOf(o.url))} ↗</a></div>`).join("")}</div>${shopCites(d)}`;
+      if (!refresh) {
+        const c = fit.filter((o) => o.price > 0).sort((a, b) => a.price - b.price)[0];
+        narrate(`${fit.length} of ${d.items.length} fit.${c ? ` Cheapest that fits: ${money(c.price, c.currency)}, from ${c.retailer}.` : ""} I'm verifying the fit.`);
+      }
+    }
+    $("shopx").onclick = closeShop;
+  } catch (e) {
+    if (id !== shopReq) return;
+    el.innerHTML = head("SEARCH FAILED") + `<div class="searching bad">${esc(e.message)}</div>`; $("shopx").onclick = closeShop; narrate("The live search failed. Ask me again.");
+  }
+}
+
 // ------------------------------------------------------------------ loop + boot
 renderer.setAnimationLoop(() => {
   const now = performance.now();

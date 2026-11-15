@@ -1,13 +1,14 @@
-"""Live shopping on voice request: replacement parts for the RK61, or other keyboards. No mocks.
+"""Live shopping on request: "order a new battery", "how much is the screen", "show me other headphones". No mocks.
 
-    POST /coach/shop  {"query": "show me replacement keycaps"}   (the user's spoken words)
+    POST /coach/shop  {"query": "...the person's words...", "session": "..."}
 
-- A replaceable part (keycap, switch, stabilizer, cable...): Linkup (structured search) finds real offers
-  with price and whether they fit the RK61, and why.
-- Another keyboard ("show me other keyboards", "what else could I buy"): Linkup finds real alternatives
-  with price, pros and cons compared with the RK61.
+Nothing is hard-coded: Claude (brain/prompts/shop_intent.md) reads the words together with what is on screen (the device,
+the repair plan, its parts, the step) and decides what to buy. A clear request is searched; an unclear one comes back as a
+question. Then:
+- a replacement part: Linkup (structured search) finds real offers with price and whether they fit this product;
+- other products to buy instead: Linkup finds real alternatives with price, pros and cons;
 - Tavily finds a real product photo for every item, in parallel.
-Results are cached per request for 30 min (same question in the demo = instant answer).
+Results are cached by what was resolved (product + part) for a few hours, and nothing is searched until it is asked for.
 """
 from __future__ import annotations
 
@@ -19,14 +20,15 @@ import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 from functools import lru_cache
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/coach", tags=["shop"])
-MODEL = "Royal Kludge RK61"
 _pool = ThreadPoolExecutor(max_workers=8)
 _search_pool = ThreadPoolExecutor(max_workers=4)
+_cache: dict[str, tuple[float, dict]] = {}
 CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "shop_cache"
 CACHE_TTL_S = 6 * 3600          # web prices move slowly; the demo must survive restarts
 ENRICH_BUDGET_S = 4.0           # wait this long for photos and missing prices, then answer and finish in the background
@@ -61,32 +63,6 @@ def _cache_put(key: str, out: dict) -> None:
         print(f"shop cache write failed: {e}")
 
 
-def prefetch(text: str) -> None:
-    """Search ahead of the question (a repair was just planned): by the time they ask, the answer is cached."""
-    kind, item = classify(text)
-    key = f"{kind}|{item}"
-    if _cache_get(key) or key in _inflight:
-        return
-
-    def run():
-        try:
-            shop(text)
-        except Exception as e:
-            print(f"shop prefetch '{text}' failed: {e}")
-    _pool.submit(run)
-_cache: dict[str, tuple[float, dict]] = {}
-
-PARTS = [  # (spoken words, part to search for)
-    (r"key ?caps?|caps?\b", "keycaps (MX-compatible, 60% / 61-key set or single keycaps)"),
-    (r"switch", "mechanical switches (MX-compatible, hot-swap, 3-pin)"),
-    (r"stabili[sz]er|space ?bar", "stabilizers (2u / 6.25u, plate-mounted, 60% keyboard)"),
-    (r"cable|usb", "USB-C cable for a mechanical keyboard"),
-    (r"puller|tool", "keycap and switch puller tool"),
-    (r"battery", "replacement battery"),
-    (r"case|shell", "60% keyboard case"),
-]
-
-
 class PartOffer(BaseModel):
     name: str = Field(description="Product name as listed")
     retailer: str
@@ -94,8 +70,8 @@ class PartOffer(BaseModel):
     currency: str = Field(description="ISO code, e.g. GBP, USD, EUR")
     url: str = Field(description="Product page URL")
     image_url: str = Field(description="Direct URL of the product image if present on the page, else empty")
-    compatible: bool = Field(description=f"True if it fits the {MODEL} (hot-swap, MX-style, 60% layout)")
-    compatibility: str = Field(description="One short sentence: why it fits or doesn't fit your keyboard (say \"your keyboard\", never a model name)")
+    compatible: bool = Field(description="True if it fits the product the person is repairing")
+    compatibility: str = Field(description="One short sentence: why it fits or doesn't fit (say \"your device\", never a model name)")
 
 
 class PartSearch(BaseModel):
@@ -103,13 +79,13 @@ class PartSearch(BaseModel):
 
 
 class KeyboardOption(BaseModel):
-    name: str = Field(description="Keyboard model name")
+    name: str = Field(description="Product model name")
     price: float = Field(description="Typical price as a number, 0 if unknown")
     currency: str
     url: str = Field(description="The manufacturer's official product page URL")
     image_url: str = Field(description="Direct URL of a product image if present, else empty")
-    pros: list[str] = Field(description="2-3 short pros of the keyboard itself compared with your keyboard")
-    cons: list[str] = Field(description="1-3 short cons of the keyboard itself compared with your keyboard")
+    pros: list[str] = Field(description="2-3 short pros of this product compared with the one being repaired")
+    cons: list[str] = Field(description="1-3 short cons of this product compared with the one being repaired")
 
 
 class KeyboardSearch(BaseModel):
@@ -118,17 +94,58 @@ class KeyboardSearch(BaseModel):
 
 class ShopRequest(BaseModel):
     query: str
+    session: str = ""
 
 
-def classify(text: str) -> tuple[str, str]:
-    t = text.lower()
-    if re.search(r"other keyboards?|another keyboard|new keyboard|alternatives?|instead|upgrade|better keyboard|"
-                 r"different keyboard|buy a keyboard|keyboards", t) and not re.search(r"key ?caps?", t):
-        return "keyboard", "keyboard"
-    for rx, part in PARTS:
-        if re.search(rx, t):
-            return "part", part
-    return "part", PARTS[1][1]   # the repair is a switch swap: default to switches
+class ShopTarget(BaseModel):
+    action: Literal["part", "alternatives", "clarify"]
+    product: str = Field(default="", description="The thing being repaired, as precisely as the screen says (never an invented model).")
+    part: str = Field(default="", description="For `part`: a specific searchable replacement for THIS product, with anything the person said.")
+    question: str = Field(default="", description="For `clarify`: one short spoken question offering the likely options.")
+
+
+def _screen_context(session: str) -> str:
+    """What the person is looking at: the device, the repair plan and its parts, the step on screen."""
+    from . import coach
+
+    lines: list[str] = []
+    plan = (coach._plans.get(session) or {}).get("plan")
+    dev = coach._device_parts.get(session)
+    st = coach._view_state.get(session)
+    if plan:
+        lines.append(f"Repair: {plan.get('object')} - {plan.get('title') or plan.get('fault')} (fault: {plan.get('fault')}).")
+        if plan.get("target_key"):
+            lines.append(f"The key they are fixing: {plan['target_key']}.")
+        for step in plan.get("steps", []):
+            on = "  <- ON SCREEN NOW" if st and st.screen == "step" and st.step == step["index"] else ""
+            lines.append(f"Step {step['index']}: {step['instruction']} (parts: {', '.join(step.get('parts', [])) or 'none'}){on}")
+    else:
+        lines.append("No repair plan yet.")
+    if dev:
+        lines.append("The device's parts: " + "; ".join(f"{x['name']} ({x.get('label', '')})" for x in dev["parts"]))
+    return chr(10).join(lines)
+
+
+def resolve(text: str, session: str = "") -> ShopTarget:
+    """Spoken words + screen -> what to search for. Nothing is assumed: an unclear request becomes a question."""
+    from .planner import _client
+
+    system = (Path(__file__).parent / "brain" / "prompts" / "shop_intent.md").read_text(encoding="utf-8")
+    try:
+        resp = _client().beta.messages.parse(
+            model=os.getenv("SHOP_INTENT_MODEL", "claude-haiku-5-5"), max_tokens=400, thinking={"type": "disabled"},
+            system=[{"type": "text", "text": system}],
+            messages=[{"role": "user", "content": f"[on screen]{chr(10)}{_screen_context(session)}{chr(10)}{chr(10)}[they said] {text}"}],
+            output_format=ShopTarget)
+        t = resp.parsed_output
+    except Exception as e:
+        print(f"shop intent failed: {e}")
+        t = None
+    if t is None or (t.action == "part" and not t.part.strip()):
+        return ShopTarget(action="clarify", question="Which part would you like to order?")
+    if t.action == "clarify" and not t.question.strip():
+        t.question = "Which part would you like to order?"
+    return t
 
 
 @lru_cache(maxsize=1)
@@ -218,7 +235,7 @@ def _clean_keyboard(k: dict) -> dict:
     k["pros"] = [x for x in k.get("pros", []) if not _META.search(x)][:3]
     k["cons"] = [x for x in k.get("cons", []) if not _META.search(x)][:3]
     cur = (k.get("currency") or "").upper()
-    if cur not in _MAJOR or not 25 <= float(k.get("price") or 0) <= 600:   # a real 60% board is £25-£600
+    if cur not in _MAJOR or not 1 <= float(k.get("price") or 0) <= 5000:    # a believable price for any product
         k["price"], k["currency"] = 0.0, ""                                  # re-read from the store page below
     return k
 
@@ -272,12 +289,13 @@ def _structured(query: str, schema) -> tuple[dict, list[dict]]:
     return (data, srcs) if data else (last[0], last[1])
 
 
-def _search_parts(part: str) -> tuple[list[dict], list[dict]]:
+def _search_parts(part: str, product: str) -> tuple[list[dict], list[dict]]:
     res, sources = _structured(
-        (f"Buy {part} that fit the {MODEL} 60% hot-swappable mechanical keyboard. Find 4-6 real product "
-               "pages whose price is shown on the page: the Royal Kludge store, AliExpress, eBay UK, KBDfans, "
-               "Keychron, Akko, Epomaker, Mechanical Keyboards UK, at most 2 from Amazon. For each: name, retailer, "
-               "the listed price and currency, URL, product image URL, and whether it fits and why (call the keyboard \"your keyboard\", not by model)."),
+        (f"Buy {part}. It must fit the {product}. Find 4-6 real product pages whose price is shown on the page, from "
+         "trustworthy sellers: the manufacturer's own store or parts shop, iFixit, Amazon, eBay UK and specialist "
+         "retailers for this kind of product, at most 2 from any one retailer. For each: name, retailer, the listed "
+         "price and currency, URL, product image URL, and whether it fits the product and why (call it \"your device\", "
+         "not by model)."),
         PartSearch)
     offers = PartSearch.model_validate(res or {"offers": []}).offers
     return [o.model_dump() for o in offers if o.url.startswith("http")][:6], sources
@@ -300,38 +318,41 @@ def _structured_deep(query: str, schema) -> tuple[dict, list[dict]]:
     return {}, []
 
 
-def _search_keyboards() -> tuple[list[dict], list[dict]]:
+def _search_alternatives(product: str) -> tuple[list[dict], list[dict]]:
     res, sources = _structured_deep(
-        (f"Best alternatives to the {MODEL} 60% mechanical keyboard to buy in 2026, from reviews on sites like "
-               "RTINGS, The Verge, Tom's Hardware or PC Gamer: e.g. Keychron, Akko, Epomaker, Wooting, Royal Kludge. "
-               "Find 4-5 real current models. For each: the price on the manufacturer's official store page (USD, "
-               "GBP or EUR), that official product page URL, a product image URL, and 2-3 pros and 1-3 cons compared "
-               "with your keyboard about the keyboard itself (switches, build, connectivity, layout, software, price)."),
+        (f"Best alternatives to the {product} to buy in 2026, from reviews on reputable sites (RTINGS, The Verge, "
+         "Tom's Hardware, Wirecutter, PC Gamer or similar). Find 4-5 real current models. For each: the price on the "
+         "manufacturer's official store page (USD, GBP or EUR), that official product page URL, a product image URL, "
+         "and 2-3 pros and 1-3 cons compared with the product being repaired (build, features, price)."),
         KeyboardSearch)
     kbs = KeyboardSearch.model_validate(res or {"keyboards": []}).keyboards
     return [k.model_dump() for k in kbs if k.url.startswith("http")][:5], sources
 
 
-def shop(text: str) -> dict:
-    kind, item = classify(text)
-    key = f"{kind}|{item}"
+def shop(text: str, session: str = "") -> dict:
+    target = resolve(text, session)
+    if target.action == "clarify":
+        return {"kind": "clarify", "say": target.question}
+    kind = "alternatives" if target.action == "alternatives" else "part"
+    product, part = target.product.strip() or "the device", target.part.strip()
+    key = f"{kind}|{product}|{part}"
     hit = _cache_get(key)
-    if hit and not hit.get("partial"):
+    if hit:                       # a partial result (photos / prices still arriving) is served too: it upgrades itself in the cache
         if kind == "part":
-            verified_status(item)
+            verified_status(product, part)
         return {**hit, "cached": True}
     _inflight.add(key)
     try:
-        return _shop_live(kind, item, key)
+        return _shop_live(kind, product, part, key)
     finally:
         _inflight.discard(key)
 
 
-def _shop_live(kind: str, item: str, key: str) -> dict:
+def _shop_live(kind: str, product: str, part: str, key: str) -> dict:
     t0 = time.perf_counter()
     if kind == "part":
-        verified_status(item)          # start the deep verification agent now; it runs while we search
-    found, sources = _search_keyboards() if kind == "keyboard" else _search_parts(item)
+        verified_status(product, part)          # start the deep verification agent now; it runs while we search
+    found, sources = _search_alternatives(product) if kind == "alternatives" else _search_parts(part, product)
     names: set[str] = set()
     items = []
     for i in found:   # Linkup sometimes lists the same product twice
@@ -341,59 +362,58 @@ def _shop_live(kind: str, item: str, key: str) -> dict:
             items.append(i)
     if not items:
         raise HTTPException(502, "Linkup found nothing for that, try asking again")
-    if kind == "keyboard":
+    if kind == "alternatives":
         items = [_clean_keyboard(i) for i in items]
     # photo + price for each item, in parallel; answer after ENRICH_BUDGET_S and finish the rest in the background
     futs = [_pool.submit(_enrich, i) for i in items]
     done, pending = wait(futs, timeout=ENRICH_BUDGET_S)
-    out = _finish(kind, item, items, sources, t0, partial=bool(pending))
+    out = _finish(kind, product, part, items, sources, t0, partial=bool(pending))
     _cache_put(key, out)
     if pending:
         def complete():
             wait(pending)
-            _cache_put(key, _finish(kind, item, items, sources, t0, partial=False))
+            _cache_put(key, _finish(kind, product, part, items, sources, t0, partial=False))
         _pool.submit(complete)
     return out
 
 
-def _finish(kind: str, item: str, items: list[dict], sources: list[dict], t0: float, partial: bool) -> dict:
+def _finish(kind: str, product: str, part: str, items: list[dict], sources: list[dict], t0: float, partial: bool) -> dict:
     items = [dict(i) for i in items]
     for i in items:
         _to_gbp(i)
     items.sort(key=lambda i: (not i.get("compatible", True), i.get("price", 0) <= 0, i.get("price", 0)))
-    out = {"kind": kind, "item": item, "items": items, "model": MODEL,
+    out = {"kind": kind, "product": product, "part": part, "item": part, "items": items,
            "latency_ms": round((time.perf_counter() - t0) * 1000), "engines": ["linkup", "tavily"],
            "sources": sources[:12], "sources_count": len(sources), "partial": partial}
-    if kind == "keyboard":             # "acts": before you buy a new one, what would fixing yours cost?
-        card = _disk_card(PARTS[1][0])
+    if kind == "alternatives":             # "acts": before you buy a new one, what would fixing yours cost? (if it was researched)
+        card = _disk_card(product, "")
         if card and card.get("decision"):
             out["repair_instead"] = {"headline": card["decision"]["headline"], "as_of": card["as_of"]}
     return out
 
 
 # ---------------------------------------------------------------- verified layer (backend.parts_agent)
-FAULT = "one key no longer registers or double-types; replace the failed part"
 CARD_MAX_AGE_H = 12
 
 
-def _rx_for(item: str) -> str:
-    return next((rx for rx, part in PARTS if part == item), r"switch")
+def _words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]{3,}", text.lower()) if w not in {"the", "for", "and", "replacement", "your", "device"}}
 
 
-def _disk_card(rx: str) -> dict | None:
-    """The newest live research card for this part saved by the parts agent today (data/parts/*.json)."""
+def _disk_card(product: str, part: str) -> dict | None:
+    """The newest live research card for this product (and part, if given) saved by the parts agent recently."""
     from datetime import datetime, timezone
-    from pathlib import Path
 
     from backend.parts_agent import ReplacementCard, card_view
 
+    pw, qw = _words(product), _words(part)
     best = None
     for f in (Path(__file__).resolve().parents[1] / "data" / "parts").glob("*.json"):
         try:
             c = ReplacementCard.model_validate(json.loads(f.read_text(encoding="utf-8")))
         except Exception:
             continue
-        if c.mock or "rk61" not in c.identity.name().lower() or not re.search(rx, c.part_needed, re.I):
+        if c.mock or not pw or not (pw & _words(c.identity.name())) or (qw and not (qw & _words(c.part_needed))):
             continue
         age_h = (datetime.now(timezone.utc) - datetime.fromisoformat(c.searched_at)).total_seconds() / 3600
         if age_h <= CARD_MAX_AGE_H and (best is None or c.searched_at > best.searched_at):
@@ -404,51 +424,41 @@ def _disk_card(rx: str) -> dict | None:
 _jobs: dict[str, str] = {}
 
 
-def verified_status(item: str) -> dict:
-    """{"status": "ready"|"researching"|"failed", "card": {...}} for this part.
+def verified_status(product: str, part: str) -> dict:
+    """{"status": "ready"|"researching"|"failed", "card": {...}} for this part of this product.
     Starts the deep Linkup agent (offers -> verify fit on 2+ independent sites -> recall check -> new-unit
-    price -> repair-or-replace) once; while it runs, today's last card for the same part is shown."""
+    price -> repair-or-replace) once; while it runs, a recent card for the same product and part is shown."""
     from backend.parts_agent import get_card, start_research
 
-    if item not in _jobs:
-        _jobs[item] = start_research(item.split(" (")[0], FAULT, model_text=MODEL)["job"]
-    live = get_card(_jobs[item])
+    key = f"{product}|{part}"
+    if key not in _jobs:
+        _jobs[key] = start_research(part, f"replace the {part} on the {product}", model_text=product)["job"]
+    live = get_card(_jobs[key])
     if live.get("status") == "ready":
         return {**live, "fresh": True}
-    prev = _disk_card(_rx_for(item))
+    prev = _disk_card(product, part)
     if prev:
         return {"status": "ready", "card": prev, "fresh": False, "refreshing": live.get("status") == "researching"}
     if live.get("status") == "failed":
-        _jobs.pop(item, None)      # let the next ask retry
+        _jobs.pop(key, None)      # let the next ask retry
     return live
 
 
 @router.get("/shop/verified")
-async def verified_route(query: str):
-    kind, item = classify(query)
-    if kind != "part":
+async def verified_route(product: str, part: str):
+    if not part.strip():
         raise HTTPException(400, "verification is for replacement parts")
-    return await asyncio.to_thread(verified_status, item)
+    return await asyncio.to_thread(verified_status, product, part)
+
+
+@router.post("/shop/resolve")
+async def resolve_route(req: ShopRequest):
+    """What would be searched for these words, in this session? (No search: for checking and for the UI.)"""
+    return (await asyncio.to_thread(resolve, req.query, req.session)).model_dump()
 
 
 @router.post("/shop")
 async def shop_route(req: ShopRequest):
     if not req.query.strip():
         raise HTTPException(400, "empty query")
-    return await asyncio.to_thread(shop, req.query)
-
-
-WARM = ["show me replacement switches", "show me replacement keycaps", "show me replacement stabilizers",
-        "show me a replacement USB-C cable", "show me other keyboards"]  # parts ones also start verification
-
-
-def warm() -> None:
-    """Run the demo's likely questions live once at startup, so the first ask on stage is instant."""
-    for q in WARM:
-        kind, item = classify(q)
-        if _cache_get(f"{kind}|{item}"):
-            continue                     # already on disk from an earlier run: no need to pay for it again
-        try:
-            shop(q)
-        except Exception as e:
-            print(f"shop warm-up '{q}' failed: {e}")
+    return await asyncio.to_thread(shop, req.query, req.session)

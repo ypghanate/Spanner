@@ -12,6 +12,9 @@ for (const t of ["monkey", "turkey", "keyless entry fob", "hockey stick"])
 for (const t of ["iPhone 15", "my iPhone", "I phone", "iphone screen is cracked"]) assert.equal(deviceFor(t), "iphone15", t);
 for (const t of ["iPad", "my iPad is broken", "i pad"]) assert.equal(deviceFor(t), "ipad11", t);
 assert.equal(deviceFor("Sennheiser Momentum 4"), "momentum4");
+for (const t of ["three pin plug", "the fuse in my plug", "UK 13A plug", "mains plug is hot", "my plug is broken"]) assert.equal(deviceFor(t), "plug13a", t);
+assert.equal(deviceFor("Dyson V8, the plug is loose"), null, "a model number keeps it an object");
+assert.equal(deviceFor("keyboard plug"), "keyboard", "keyboard words win");
 
 // everything else is learned live (3D model + questions): headphones in general are NOT the Momentum
 for (const t of ["Sony WH-1000XM5 headphones", "Bose QuietComfort Ultra headphones", "wireless earphones", "AirPods Pro 2, the right earbud is quiet", "Dyson V8 won't charge",

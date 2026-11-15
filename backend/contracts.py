@@ -127,7 +127,7 @@ class RepairPlan(BaseModel):
     diagnosis: str = ""
     target_key: str | None = None       # layout id of the key the repair is about (e.g. "F", "SPACE")
     fault_signature: str = ""
-    device: str = "keyboard"            # keyboard | iphone15 | ipad11 | momentum4 (what the plan is for)
+    device: str = "keyboard"            # keyboard | iphone15 | ipad11 | momentum4 | plug13a (what the plan is for)
 
 
 # --- brain output -----------------------------------------------------------

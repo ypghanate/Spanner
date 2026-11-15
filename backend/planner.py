@@ -58,6 +58,7 @@ NEEDS_BEFORE = {
 }
 NEEDS_CABLE_OUT = {"switch-pull", "socket-inspect"}                # never open a key with the keyboard plugged in
 MIN_STEPS, MAX_STEPS = 4, 10
+_PLUG_STOP = re.compile(r"\b(gas|boiler|high[- ]voltage|electric(ally)? shock|shocked|exposed live|scorch\w*|melt\w*|burn(t|ed|ing)|sparks?|sparking|hot to the touch)\b", re.I)
 # brain/safety.py's pattern only catches "swollen battery" as a phrase; people say it many ways
 _BATTERY_DANGER = re.compile(r"\b(swoll?en|swelling|bulging|puffed|puffy|smok(e|ing)|burning smell|caught fire|on fire|"
                              r"overheat\w*|spilled (liquid|water|coffee) .*(charg|plugged))\b", re.I)
@@ -392,7 +393,10 @@ def plan_repair(complaint: str, session: str = "", device: str = "keyboard", dev
 
     if not complaint:
         return {"status": "clarify", "say": "What would you like me to help you fix?"}
-    if _STOP.search(complaint) or _BATTERY_DANGER.search(complaint):
+    # A plug fuse is a normal home repair when the plug is unplugged, so for it "mains" alone is not a reason to refuse;
+    # gas, boilers, shocks, scorching, smoke and heat still are.
+    stop = _PLUG_STOP.search(complaint) if device == "plug13a" else _STOP.search(complaint)
+    if stop or _BATTERY_DANGER.search(complaint):
         return {"status": "refused", "say": "Stop there: that's not a safe home repair. Please call a qualified professional."}
 
     mock = _use_mock()
