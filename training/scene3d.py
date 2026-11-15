@@ -1,12 +1,12 @@
-"""3D for the demo object: a procedurally generated Royal Kludge RK61 with every part separate.
+"""3D for the demo object: a procedurally generated Royal Kludge RK68 with every part separate.
 
-    python -m training.scene3d [--key F]     # writes data/models/rk61/{rk61.glb, pack.json, demo_plan.json}
+    python -m training.scene3d [--key F]     # writes data/models/rk68/{rk68.glb, pack.json, demo_plan.json}
 
-- rk61.glb       true-to-spec RK61 (289 x 103 x 39 mm, 61-key ANSI 60%): every keycap, switch, hot-swap
+- rk68.glb       true-to-spec RK68 (316 x 105 x 39 mm, 68-key ANSI 65%): every keycap, switch, hot-swap
                  socket, LED, stabilizer, the plate, PCB, battery, case, USB-C port and mode switch is its
                  own named node, so the app can highlight, explode and reassemble any of them.
 - pack.json      part vocabulary -> nodes, groups, explode offsets per layer, key rows (keycap profile),
-                 camera views, real specs with source URLs (from Linkup, data/models/rk61/specs.json).
+                 camera views, real specs with source URLs (from Linkup, data/models/rk68/specs.json).
 - demo_plan.json the knowledge-base procedure as a contracts.RepairPlan with 3D commands on every step
                  (+ the Linkup replacement card when one exists), so the brain/app can play the repair
                  step by step. training/viewer/ plays it with animated tools, voice and a Jarvis HUD.
@@ -22,30 +22,33 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-OUT = ROOT / "data" / "models" / "rk61"
+OUT = ROOT / "data" / "models" / "rk68"
 U = 1.905                      # one key unit (19.05 mm)
-WIDTH, DEPTH = 15 * U, 5 * U   # key area: 28.575 x 9.525 cm
-CASE_W, CASE_D, CASE_H = 28.9, 10.3, 2.0   # RK61 spec: 289 x 103 mm (x 39 mm with keycaps + feet)
+WIDTH, DEPTH = 16 * U, 5 * U   # key area: 30.48 x 9.525 cm (65%: 16 units wide)
+CASE_W, CASE_D, CASE_H = 31.6, 10.5, 2.0   # RK68 spec: about 316 x 105 mm (x 39 mm with keycaps + feet)
 WALL_X, WALL_Z = (CASE_W - WIDTH) / 2, (CASE_D - DEPTH) / 2
 Y = {"floor": 0.25, "battery": 0.70, "pcb": 1.00, "socket": 1.15, "led": 1.10, "plate": 1.45,
      "stab": 1.60, "switch": 1.85, "keycap": 2.90}
 
-# The RK61 (ANSI 60%) layout: (id, label, width in units), 61 keys
+# The RK68 (ANSI 65%) layout: (id, label, width in units), 68 keys, 16 units wide. The right column (Del, PgUp, PgDn,
+# End) and the arrow cluster are what the RK61 does not have; the right Shift is 1.75u to make room for the up arrow.
 LAYOUT = [
     [("ESC", "Esc", 1)] + [(c, c, 1) for c in "1234567890"] + [("MINUS", "-", 1), ("EQUAL", "=", 1),
-                                                              ("BACKSPACE", "Backspace", 2)],
+                                                              ("BACKSPACE", "Backspace", 2), ("DEL", "Del", 1)],
     [("TAB", "Tab", 1.5)] + [(c, c, 1) for c in "QWERTYUIOP"] + [("LBRACKET", "[", 1), ("RBRACKET", "]", 1),
-                                                                ("BACKSLASH", "\\", 1.5)],
+                                                                ("BACKSLASH", "\\", 1.5), ("PGUP", "PgUp", 1)],
     [("CAPS", "Caps", 1.75)] + [(c, c, 1) for c in "ASDFGHJKL"] + [("SEMICOLON", ";", 1), ("QUOTE", "'", 1),
-                                                                  ("ENTER", "Enter", 2.25)],
+                                                                  ("ENTER", "Enter", 2.25), ("PGDN", "PgDn", 1)],
     [("LSHIFT", "Shift", 2.25)] + [(c, c, 1) for c in "ZXCVBNM"] + [("COMMA", ",", 1), ("PERIOD", ".", 1),
-                                                                   ("SLASH", "/", 1), ("RSHIFT", "Shift", 2.75)],
+                                                                   ("SLASH", "/", 1), ("RSHIFT", "Shift", 1.75),
+                                                                   ("UP", "\u2191", 1), ("END", "End", 1)],
     [("LCTRL", "Ctrl", 1.25), ("WIN", "Win", 1.25), ("LALT", "Alt", 1.25), ("SPACE", "Space", 6.25),
-     ("RALT", "Alt", 1.25), ("FN", "Fn", 1.25), ("MENU", "Menu", 1.25), ("RCTRL", "Ctrl", 1.25)],
+     ("RALT", "Alt", 1), ("FN", "Fn", 1), ("RCTRL", "Ctrl", 1), ("LEFT", "\u2190", 1), ("DOWN", "\u2193", 1), ("RIGHT", "\u2192", 1)],
 ]
-assert sum(len(r) for r in LAYOUT) == 61
+assert sum(len(r) for r in LAYOUT) == 68
+assert all(abs(sum(w for _, _, w in r) - 16) < 1e-6 for r in LAYOUT), "every RK68 row is 16 units wide"
 
-COLORS = {  # RGBA 0-255: black RK61 with RK Red switches
+COLORS = {  # RGBA 0-255: black RK68 with RK Red switches
     "keycap": (38, 40, 46, 255), "switch": (20, 20, 22, 255), "stem": (210, 40, 45, 255),
     "stabilizer": (200, 200, 205, 255), "plate": (55, 58, 64, 255), "pcb": (22, 60, 40, 255),
     "socket": (30, 30, 32, 255), "led": (230, 240, 255, 255), "case": (30, 31, 35, 255),
@@ -119,12 +122,12 @@ def build() -> dict:
     add(_box(0.8, 0.3, 0.3, (WIDTH / 2 - 2.5, 1.15, back_z - 0.1), COLORS["mode"]), "mode_switch", "mode_switch")
 
     OUT.mkdir(parents=True, exist_ok=True)
-    scene.export(OUT / "rk61.glb")
+    scene.export(OUT / "rk68.glb")
     specs_file = OUT / "specs.json"
     specs = json.loads(specs_file.read_text(encoding="utf-8")) if specs_file.exists() else {}
     pack = {
-        "object": "Royal Kludge RK61", "model_file": "rk61.glb", "units": "cm",
-        "layout": "ANSI 60%, 61 keys", "dimensions_cm": [CASE_W, 3.9, CASE_D], "key_unit_cm": U,
+        "object": "Royal Kludge RK68", "model_file": "rk68.glb", "units": "cm",
+        "layout": "ANSI 65%, 68 keys", "dimensions_cm": [CASE_W, 3.9, CASE_D], "key_unit_cm": U,
         "case_cm": [CASE_W, CASE_H, CASE_D], "key_area_cm": [WIDTH, DEPTH], "wall_cm": [WALL_X, WALL_Z],
         "layers_y": Y, "ports": {"usb_c_port": [-WIDTH / 2 + 2.5, 1.15, back_z - 0.1],
                                  "mode_switch": [WIDTH / 2 - 2.5, 1.15, back_z - 0.1]},

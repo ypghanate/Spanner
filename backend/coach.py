@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL_DIR = ROOT / "data" / "models" / "rk61"
+MODEL_DIR = ROOT / "data" / "models" / "rk68"
 COACH_MODEL = os.getenv("COACH_MODEL", "claude-sonnet-5-5")  # per-frame step read. Measured 15 Nov: Sonnet 2.2-2.6 s and right about the key; Haiku 1.8 s but misread the missing key on 2 of 3 real frames
 INTENT_MODEL = os.getenv("INTENT_MODEL", "claude-haiku-5-5")  # spoken words -> command / device / short answers: classification, keep it fast
 FAST_MODEL = INTENT_MODEL
@@ -97,8 +97,9 @@ def _system(demo: dict) -> str:
         "(keycap puller = wire loops, switch puller = two prongs, tweezers). The current step shown on screen "
         "is a hint, not the answer: move forward or back only when the frame shows it.",
         "Report a mistake only if you can actually see it. Keep what_i_see and say short and concrete.",
-        "The keyboard is a 61-key ANSI 60% layout (rows: Esc 1-0 - = Backspace / Tab Q-P [ ] \\ / Caps A-L ; ' Enter / "
-        "Shift Z-M , . / Shift / Ctrl Win Alt Space Alt Fn Menu Ctrl). If a keycap is missing you will see a gap with the "
+        "The keyboard is a Royal Kludge RK68, 68-key ANSI 65% layout (rows: Esc 1-0 - = Backspace Del / Tab Q-P [ ] \\ PgUp / "
+        "Caps A-L ; ' Enter PgDn / Shift Z-M , . / Shift \u2191 End / Ctrl Win Alt Space Alt Fn Ctrl \u2190 \u2193 \u2192). "
+        "If a keycap is missing you will see a gap with the "
         "switch top or its stem. Then READ the legends of the keys immediately left and right of the gap in the same "
         "row (they are visible) into gap_left / gap_right, and the row into gap_row; the missing key is the one between "
         "them. Be precise: a wrong key is worse than none.",
@@ -143,17 +144,21 @@ def _keyboard_crop(data: bytes, max_w: int = 1280) -> tuple[bytes, dict]:
     return (buf.tobytes() if ok else data), info
 
 
-# the RK61's 61-key ANSI layout, row by row, as printed legends (the ground truth for "which key is the gap")
+# the RK68's 68-key ANSI 65% layout, row by row, as printed legends (the ground truth for "which key is the gap")
 LAYOUT = {
-    "number": ["Esc", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "Backspace"],
-    "top": ["Tab", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "[", "]", "\\"],
-    "home": ["Caps", "A", "S", "D", "F", "G", "H", "J", "K", "L", ";", "'", "Enter"],
-    "bottom": ["Shift", "Z", "X", "C", "V", "B", "N", "M", ",", ".", "/", "Shift"],
-    "space": ["Ctrl", "Win", "Alt", "Space", "Alt", "Fn", "Menu", "Ctrl"],
+    "number": ["Esc", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "Backspace", "Del"],
+    "top": ["Tab", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "[", "]", "\\", "PgUp"],
+    "home": ["Caps", "A", "S", "D", "F", "G", "H", "J", "K", "L", ";", "'", "Enter", "PgDn"],
+    "bottom": ["Shift", "Z", "X", "C", "V", "B", "N", "M", ",", ".", "/", "Shift", "\u2191", "End"],
+    "space": ["Ctrl", "Win", "Alt", "Space", "Alt", "Fn", "Ctrl", "\u2190", "\u2193", "\u2192"],
 }
 _ALIAS = {"escape": "Esc", "return": "Enter", "capslock": "Caps", "caps lock": "Caps", "backslash": "\\", "control": "Ctrl",
           "windows": "Win", "command": "Win", "spacebar": "Space", "minus": "-", "equals": "=", "semicolon": ";", "quote": "'",
-          "comma": ",", "period": ".", "slash": "/", "lbracket": "[", "rbracket": "]"}
+          "comma": ",", "period": ".", "slash": "/", "lbracket": "[", "rbracket": "]",
+          "delete": "Del", "del": "Del", "pgup": "PgUp", "page up": "PgUp", "pageup": "PgUp", "pgdn": "PgDn", "page down": "PgDn",
+          "pagedown": "PgDn", "end": "End", "up": "\u2191", "up arrow": "\u2191", "arrow up": "\u2191", "\u2191": "\u2191",
+          "down": "\u2193", "down arrow": "\u2193", "arrow down": "\u2193", "\u2193": "\u2193", "left": "\u2190", "left arrow": "\u2190",
+          "arrow left": "\u2190", "\u2190": "\u2190", "right": "\u2192", "right arrow": "\u2192", "arrow right": "\u2192", "\u2192": "\u2192"}
 
 
 def _legend(x: str) -> str:
@@ -213,8 +218,9 @@ def verify_gap(data: bytes, view: "CoachView") -> str | None:
         return None
     resp = _client().beta.messages.parse(
         model=VERIFY_MODEL, max_tokens=300, thinking=_thinking(VERIFY_MODEL),
-        system=("Close-up of part of a 61-key ANSI 60% mechanical keyboard. Rows: number (Esc 1-0 - = Backspace), top (Tab Q-P [ ] \\), "
-                "home (Caps A-L ; ' Enter), bottom (Shift Z-M , . / Shift), space (Ctrl Win Alt Space Alt Fn Menu Ctrl). "
+        system=("Close-up of part of a Royal Kludge RK68, a 68-key ANSI 65% mechanical keyboard. Rows: number (Esc 1-0 - = Backspace Del), "
+                "top (Tab Q-P [ ] \\ PgUp), home (Caps A-L ; ' Enter PgDn), bottom (Shift Z-M , . / Shift \u2191 End), "
+                "space (Ctrl Win Alt Space Alt Fn Ctrl \u2190 \u2193 \u2192). For arrow keys report the arrow symbol. "
                 "If a keycap is missing you see a gap with the switch top or stem. Read the printed legends of the keys around "
                 "the gap EXACTLY as printed. Do not infer the missing key; only report what you can read."),
         messages=[{"role": "user", "content": [
@@ -325,13 +331,8 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
     if session in _frame_inflight:       # the previous frame is still being read: never stack Claude calls behind it
         raise HTTPException(429, "still reading the previous frame")
     _latest.setdefault(session, {})["alive"] = time.time()     # the phone is sending: liveness, before any slow call
-    if session not in _plans:
-        # The person hasn't said what is wrong yet, so there is no repair to check frames against (and no Claude call
-        # to pay for). Answer with an idle view so the phone link still shows as live.
-        out = {"object_visible": False, "what_i_see": "", "step_index": 0, "step_status": "not_started", "mistake": "",
-               "confidence": 0.0, "say": "", "latency_ms": 0, "model": COACH_MODEL, "ts": time.time()}
-        _latest.setdefault(session, {})["view"] = out
-        return out
+    # No plan yet is not idle: the camera can start the repair by itself when it sees a keycap missing, so every frame is
+    # read (against the standard procedure as context). The viewer ignores step numbers until a plan exists.
     _frame_inflight.add(session)
     t0 = time.perf_counter()
     timing: dict[str, int] = {}
@@ -523,7 +524,7 @@ async def device(req: DeviceReq):
         resp = _client().beta.messages.parse(
             model=INTENT_MODEL, max_tokens=120, thinking=_thinking(INTENT_MODEL),
             system="The user was asked 'What do you want to fix?'. Map their words to one device: keyboard (a mechanical "
-                   "keyboard, RK61, a dead key, typing), iphone15 (phone, mobile, iPhone), momentum4 (headphones, "
+                   "keyboard, RK68, a dead key, typing), iphone15 (phone, mobile, iPhone), momentum4 (headphones, "
                    "Sennheiser, earcups, headset), ipad11 (iPad, tablet). If it is none of these or unclear, 'none' with "
                    "a short friendly question naming the four options.",
             messages=[{"role": "user", "content": req.text}], output_format=DevicePick)
@@ -636,7 +637,7 @@ async def generate_plan(req: PlanReq):
     try:
         out = await asyncio.to_thread(plan_repair, req.complaint, req.session)
     except Exception as e:                       # API down, bad key...: keep the session usable on the canned plan
-        out = {"status": "fallback", "say": "I couldn't plan that just now, so here is the standard switch repair.",
+        out = {"status": "fallback", "say": "I couldn't plan that. Tell me again what's wrong.",
                "errors": [f"{type(e).__name__}: {e}"]}
     if out["status"] == "ready":
         _plans[req.session] = {"broken_key": out["broken_key"], "plan": out["plan"], "parts_card": out.get("parts_card"),

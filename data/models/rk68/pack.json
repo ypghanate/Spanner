@@ -1,26 +1,26 @@
 {
- "object": "Royal Kludge RK61",
- "model_file": "rk61.glb",
+ "object": "Royal Kludge RK68",
+ "model_file": "rk68.glb",
  "units": "cm",
- "layout": "ANSI 60%, 61 keys",
+ "layout": "ANSI 65%, 68 keys",
  "dimensions_cm": [
-  28.9,
+  31.6,
   3.9,
-  10.3
+  10.5
  ],
  "key_unit_cm": 1.905,
  "case_cm": [
-  28.9,
+  31.6,
   2.0,
-  10.3
+  10.5
  ],
  "key_area_cm": [
-  28.575,
+  30.48,
   9.525
  ],
  "wall_cm": [
-  0.16249999999999964,
-  0.3875000000000002
+  0.5600000000000005,
+  0.4874999999999998
  ],
  "layers_y": {
   "floor": 0.25,
@@ -35,14 +35,14 @@
  },
  "ports": {
   "usb_c_port": [
-   -11.7875,
+   -12.74,
    1.15,
-   -5.25
+   -5.35
   ],
   "mode_switch": [
-   11.7875,
+   12.74,
    1.15,
-   -5.25
+   -5.35
   ]
  },
  "groups": {
@@ -61,6 +61,7 @@
    "keycap_MINUS",
    "keycap_EQUAL",
    "keycap_BACKSPACE",
+   "keycap_DEL",
    "keycap_TAB",
    "keycap_Q",
    "keycap_W",
@@ -75,6 +76,7 @@
    "keycap_LBRACKET",
    "keycap_RBRACKET",
    "keycap_BACKSLASH",
+   "keycap_PGUP",
    "keycap_CAPS",
    "keycap_A",
    "keycap_S",
@@ -88,6 +90,7 @@
    "keycap_SEMICOLON",
    "keycap_QUOTE",
    "keycap_ENTER",
+   "keycap_PGDN",
    "keycap_LSHIFT",
    "keycap_Z",
    "keycap_X",
@@ -100,20 +103,23 @@
    "keycap_PERIOD",
    "keycap_SLASH",
    "keycap_RSHIFT",
+   "keycap_UP",
+   "keycap_END",
    "keycap_LCTRL",
    "keycap_WIN",
    "keycap_LALT",
    "keycap_SPACE",
    "keycap_RALT",
    "keycap_FN",
-   "keycap_MENU",
-   "keycap_RCTRL"
+   "keycap_RCTRL",
+   "keycap_LEFT",
+   "keycap_DOWN",
+   "keycap_RIGHT"
   ],
   "stabilizers": [
    "stabilizer_BACKSPACE",
    "stabilizer_ENTER",
    "stabilizer_LSHIFT",
-   "stabilizer_RSHIFT",
    "stabilizer_SPACE"
   ],
   "switches": [
@@ -131,6 +137,7 @@
    "switch_MINUS",
    "switch_EQUAL",
    "switch_BACKSPACE",
+   "switch_DEL",
    "switch_TAB",
    "switch_Q",
    "switch_W",
@@ -145,6 +152,7 @@
    "switch_LBRACKET",
    "switch_RBRACKET",
    "switch_BACKSLASH",
+   "switch_PGUP",
    "switch_CAPS",
    "switch_A",
    "switch_S",
@@ -158,6 +166,7 @@
    "switch_SEMICOLON",
    "switch_QUOTE",
    "switch_ENTER",
+   "switch_PGDN",
    "switch_LSHIFT",
    "switch_Z",
    "switch_X",
@@ -170,14 +179,18 @@
    "switch_PERIOD",
    "switch_SLASH",
    "switch_RSHIFT",
+   "switch_UP",
+   "switch_END",
    "switch_LCTRL",
    "switch_WIN",
    "switch_LALT",
    "switch_SPACE",
    "switch_RALT",
    "switch_FN",
-   "switch_MENU",
-   "switch_RCTRL"
+   "switch_RCTRL",
+   "switch_LEFT",
+   "switch_DOWN",
+   "switch_RIGHT"
   ],
   "plate": [
    "plate"
@@ -197,6 +210,7 @@
    "socket_MINUS",
    "socket_EQUAL",
    "socket_BACKSPACE",
+   "socket_DEL",
    "socket_TAB",
    "socket_Q",
    "socket_W",
@@ -211,6 +225,7 @@
    "socket_LBRACKET",
    "socket_RBRACKET",
    "socket_BACKSLASH",
+   "socket_PGUP",
    "socket_CAPS",
    "socket_A",
    "socket_S",
@@ -224,6 +239,7 @@
    "socket_SEMICOLON",
    "socket_QUOTE",
    "socket_ENTER",
+   "socket_PGDN",
    "socket_LSHIFT",
    "socket_Z",
    "socket_X",
@@ -236,14 +252,18 @@
    "socket_PERIOD",
    "socket_SLASH",
    "socket_RSHIFT",
+   "socket_UP",
+   "socket_END",
    "socket_LCTRL",
    "socket_WIN",
    "socket_LALT",
    "socket_SPACE",
    "socket_RALT",
    "socket_FN",
-   "socket_MENU",
-   "socket_RCTRL"
+   "socket_RCTRL",
+   "socket_LEFT",
+   "socket_DOWN",
+   "socket_RIGHT"
   ],
   "leds": [
    "led_ESC",
@@ -260,6 +280,7 @@
    "led_MINUS",
    "led_EQUAL",
    "led_BACKSPACE",
+   "led_DEL",
    "led_TAB",
    "led_Q",
    "led_W",
@@ -274,6 +295,7 @@
    "led_LBRACKET",
    "led_RBRACKET",
    "led_BACKSLASH",
+   "led_PGUP",
    "led_CAPS",
    "led_A",
    "led_S",
@@ -287,6 +309,7 @@
    "led_SEMICOLON",
    "led_QUOTE",
    "led_ENTER",
+   "led_PGDN",
    "led_LSHIFT",
    "led_Z",
    "led_X",
@@ -299,14 +322,18 @@
    "led_PERIOD",
    "led_SLASH",
    "led_RSHIFT",
+   "led_UP",
+   "led_END",
    "led_LCTRL",
    "led_WIN",
    "led_LALT",
    "led_SPACE",
    "led_RALT",
    "led_FN",
-   "led_MENU",
-   "led_RCTRL"
+   "led_RCTRL",
+   "led_LEFT",
+   "led_DOWN",
+   "led_RIGHT"
   ],
   "pcb": [
    "pcb"
@@ -342,427 +369,476 @@
    "label": "Esc",
    "width_u": 1,
    "row": 0,
-   "x": -13.335,
+   "x": -14.287,
    "z": -3.81
   },
   "1": {
    "label": "1",
    "width_u": 1,
    "row": 0,
-   "x": -11.43,
+   "x": -12.383,
    "z": -3.81
   },
   "2": {
    "label": "2",
    "width_u": 1,
    "row": 0,
-   "x": -9.525,
+   "x": -10.477,
    "z": -3.81
   },
   "3": {
    "label": "3",
    "width_u": 1,
    "row": 0,
-   "x": -7.62,
+   "x": -8.573,
    "z": -3.81
   },
   "4": {
    "label": "4",
    "width_u": 1,
    "row": 0,
-   "x": -5.715,
+   "x": -6.668,
    "z": -3.81
   },
   "5": {
    "label": "5",
    "width_u": 1,
    "row": 0,
-   "x": -3.81,
+   "x": -4.762,
    "z": -3.81
   },
   "6": {
    "label": "6",
    "width_u": 1,
    "row": 0,
-   "x": -1.905,
+   "x": -2.857,
    "z": -3.81
   },
   "7": {
    "label": "7",
    "width_u": 1,
    "row": 0,
-   "x": 0.0,
+   "x": -0.953,
    "z": -3.81
   },
   "8": {
    "label": "8",
    "width_u": 1,
    "row": 0,
-   "x": 1.905,
+   "x": 0.952,
    "z": -3.81
   },
   "9": {
    "label": "9",
    "width_u": 1,
    "row": 0,
-   "x": 3.81,
+   "x": 2.857,
    "z": -3.81
   },
   "0": {
    "label": "0",
    "width_u": 1,
    "row": 0,
-   "x": 5.715,
+   "x": 4.763,
    "z": -3.81
   },
   "MINUS": {
    "label": "-",
    "width_u": 1,
    "row": 0,
-   "x": 7.62,
+   "x": 6.668,
    "z": -3.81
   },
   "EQUAL": {
    "label": "=",
    "width_u": 1,
    "row": 0,
-   "x": 9.525,
+   "x": 8.573,
    "z": -3.81
   },
   "BACKSPACE": {
    "label": "Backspace",
    "width_u": 2,
    "row": 0,
-   "x": 12.383,
+   "x": 11.43,
+   "z": -3.81
+  },
+  "DEL": {
+   "label": "Del",
+   "width_u": 1,
+   "row": 0,
+   "x": 14.288,
    "z": -3.81
   },
   "TAB": {
    "label": "Tab",
    "width_u": 1.5,
    "row": 1,
-   "x": -12.859,
+   "x": -13.811,
    "z": -1.905
   },
   "Q": {
    "label": "Q",
    "width_u": 1,
    "row": 1,
-   "x": -10.477,
+   "x": -11.43,
    "z": -1.905
   },
   "W": {
    "label": "W",
    "width_u": 1,
    "row": 1,
-   "x": -8.572,
+   "x": -9.525,
    "z": -1.905
   },
   "E": {
    "label": "E",
    "width_u": 1,
    "row": 1,
-   "x": -6.667,
+   "x": -7.62,
    "z": -1.905
   },
   "R": {
    "label": "R",
    "width_u": 1,
    "row": 1,
-   "x": -4.762,
+   "x": -5.715,
    "z": -1.905
   },
   "T": {
    "label": "T",
    "width_u": 1,
    "row": 1,
-   "x": -2.857,
+   "x": -3.81,
    "z": -1.905
   },
   "Y": {
    "label": "Y",
    "width_u": 1,
    "row": 1,
-   "x": -0.953,
+   "x": -1.905,
    "z": -1.905
   },
   "U": {
    "label": "U",
    "width_u": 1,
    "row": 1,
-   "x": 0.952,
+   "x": -0.0,
    "z": -1.905
   },
   "I": {
    "label": "I",
    "width_u": 1,
    "row": 1,
-   "x": 2.857,
+   "x": 1.905,
    "z": -1.905
   },
   "O": {
    "label": "O",
    "width_u": 1,
    "row": 1,
-   "x": 4.763,
+   "x": 3.81,
    "z": -1.905
   },
   "P": {
    "label": "P",
    "width_u": 1,
    "row": 1,
-   "x": 6.668,
+   "x": 5.715,
    "z": -1.905
   },
   "LBRACKET": {
    "label": "[",
    "width_u": 1,
    "row": 1,
-   "x": 8.573,
+   "x": 7.62,
    "z": -1.905
   },
   "RBRACKET": {
    "label": "]",
    "width_u": 1,
    "row": 1,
-   "x": 10.478,
+   "x": 9.525,
    "z": -1.905
   },
   "BACKSLASH": {
    "label": "\\",
    "width_u": 1.5,
    "row": 1,
-   "x": 12.859,
+   "x": 11.906,
+   "z": -1.905
+  },
+  "PGUP": {
+   "label": "PgUp",
+   "width_u": 1,
+   "row": 1,
+   "x": 14.288,
    "z": -1.905
   },
   "CAPS": {
    "label": "Caps",
    "width_u": 1.75,
    "row": 2,
-   "x": -12.621,
+   "x": -13.573,
    "z": 0.0
   },
   "A": {
    "label": "A",
    "width_u": 1,
    "row": 2,
-   "x": -10.001,
+   "x": -10.954,
    "z": 0.0
   },
   "S": {
    "label": "S",
    "width_u": 1,
    "row": 2,
-   "x": -8.096,
+   "x": -9.049,
    "z": 0.0
   },
   "D": {
    "label": "D",
    "width_u": 1,
    "row": 2,
-   "x": -6.191,
+   "x": -7.144,
    "z": 0.0
   },
   "F": {
    "label": "F",
    "width_u": 1,
    "row": 2,
-   "x": -4.286,
+   "x": -5.239,
    "z": 0.0
   },
   "G": {
    "label": "G",
    "width_u": 1,
    "row": 2,
-   "x": -2.381,
+   "x": -3.334,
    "z": 0.0
   },
   "H": {
    "label": "H",
    "width_u": 1,
    "row": 2,
-   "x": -0.476,
+   "x": -1.429,
    "z": 0.0
   },
   "J": {
    "label": "J",
    "width_u": 1,
    "row": 2,
-   "x": 1.429,
+   "x": 0.476,
    "z": 0.0
   },
   "K": {
    "label": "K",
    "width_u": 1,
    "row": 2,
-   "x": 3.334,
+   "x": 2.381,
    "z": 0.0
   },
   "L": {
    "label": "L",
    "width_u": 1,
    "row": 2,
-   "x": 5.239,
+   "x": 4.286,
    "z": 0.0
   },
   "SEMICOLON": {
    "label": ";",
    "width_u": 1,
    "row": 2,
-   "x": 7.144,
+   "x": 6.191,
    "z": 0.0
   },
   "QUOTE": {
    "label": "'",
    "width_u": 1,
    "row": 2,
-   "x": 9.049,
+   "x": 8.096,
    "z": 0.0
   },
   "ENTER": {
    "label": "Enter",
    "width_u": 2.25,
    "row": 2,
-   "x": 12.144,
+   "x": 11.192,
+   "z": 0.0
+  },
+  "PGDN": {
+   "label": "PgDn",
+   "width_u": 1,
+   "row": 2,
+   "x": 14.288,
    "z": 0.0
   },
   "LSHIFT": {
    "label": "Shift",
    "width_u": 2.25,
    "row": 3,
-   "x": -12.144,
+   "x": -13.097,
    "z": 1.905
   },
   "Z": {
    "label": "Z",
    "width_u": 1,
    "row": 3,
-   "x": -9.049,
+   "x": -10.001,
    "z": 1.905
   },
   "X": {
    "label": "X",
    "width_u": 1,
    "row": 3,
-   "x": -7.144,
+   "x": -8.096,
    "z": 1.905
   },
   "C": {
    "label": "C",
    "width_u": 1,
    "row": 3,
-   "x": -5.239,
+   "x": -6.191,
    "z": 1.905
   },
   "V": {
    "label": "V",
    "width_u": 1,
    "row": 3,
-   "x": -3.334,
+   "x": -4.286,
    "z": 1.905
   },
   "B": {
    "label": "B",
    "width_u": 1,
    "row": 3,
-   "x": -1.429,
+   "x": -2.381,
    "z": 1.905
   },
   "N": {
    "label": "N",
    "width_u": 1,
    "row": 3,
-   "x": 0.476,
+   "x": -0.476,
    "z": 1.905
   },
   "M": {
    "label": "M",
    "width_u": 1,
    "row": 3,
-   "x": 2.381,
+   "x": 1.429,
    "z": 1.905
   },
   "COMMA": {
    "label": ",",
    "width_u": 1,
    "row": 3,
-   "x": 4.286,
+   "x": 3.334,
    "z": 1.905
   },
   "PERIOD": {
    "label": ".",
    "width_u": 1,
    "row": 3,
-   "x": 6.191,
+   "x": 5.239,
    "z": 1.905
   },
   "SLASH": {
    "label": "/",
    "width_u": 1,
    "row": 3,
-   "x": 8.096,
+   "x": 7.144,
    "z": 1.905
   },
   "RSHIFT": {
    "label": "Shift",
-   "width_u": 2.75,
+   "width_u": 1.75,
    "row": 3,
-   "x": 11.668,
+   "x": 9.763,
+   "z": 1.905
+  },
+  "UP": {
+   "label": "\u2191",
+   "width_u": 1,
+   "row": 3,
+   "x": 12.383,
+   "z": 1.905
+  },
+  "END": {
+   "label": "End",
+   "width_u": 1,
+   "row": 3,
+   "x": 14.288,
    "z": 1.905
   },
   "LCTRL": {
    "label": "Ctrl",
    "width_u": 1.25,
    "row": 4,
-   "x": -13.097,
+   "x": -14.049,
    "z": 3.81
   },
   "WIN": {
    "label": "Win",
    "width_u": 1.25,
    "row": 4,
-   "x": -10.716,
+   "x": -11.668,
    "z": 3.81
   },
   "LALT": {
    "label": "Alt",
    "width_u": 1.25,
    "row": 4,
-   "x": -8.334,
+   "x": -9.287,
    "z": 3.81
   },
   "SPACE": {
    "label": "Space",
    "width_u": 6.25,
    "row": 4,
-   "x": -1.191,
+   "x": -2.143,
    "z": 3.81
   },
   "RALT": {
    "label": "Alt",
-   "width_u": 1.25,
+   "width_u": 1,
    "row": 4,
-   "x": 5.953,
+   "x": 4.763,
    "z": 3.81
   },
   "FN": {
    "label": "Fn",
-   "width_u": 1.25,
+   "width_u": 1,
    "row": 4,
-   "x": 8.334,
-   "z": 3.81
-  },
-  "MENU": {
-   "label": "Menu",
-   "width_u": 1.25,
-   "row": 4,
-   "x": 10.716,
+   "x": 6.668,
    "z": 3.81
   },
   "RCTRL": {
    "label": "Ctrl",
-   "width_u": 1.25,
+   "width_u": 1,
    "row": 4,
-   "x": 13.097,
+   "x": 8.573,
+   "z": 3.81
+  },
+  "LEFT": {
+   "label": "\u2190",
+   "width_u": 1,
+   "row": 4,
+   "x": 10.478,
+   "z": 3.81
+  },
+  "DOWN": {
+   "label": "\u2193",
+   "width_u": 1,
+   "row": 4,
+   "x": 12.383,
+   "z": 3.81
+  },
+  "RIGHT": {
+   "label": "\u2192",
+   "width_u": 1,
+   "row": 4,
+   "x": 14.288,
    "z": 3.81
   }
  },
@@ -821,131 +897,5 @@
    4
   ]
  },
- "specs": {
-  "product_name": "Royal Kludge RK61 60% mechanical keyboard",
-  "official_product_url": "https://en.rkgaming.com/product/59/",
-  "manual_url": "https://fccid.io/2A4MQ-RK61/User-Manual/User-manual-5702418.pdf",
-  "specs": [
-   {
-    "name": "Dimensions (L \u00d7 W \u00d7 H)",
-    "value": "289 \u00d7 103 \u00d7 39",
-    "unit": "mm",
-    "source_url": "https://rkgamingstore.com/collections/rk61"
-   },
-   {
-    "name": "Weight",
-    "value": "500",
-    "unit": "g",
-    "source_url": "https://rkgamingstore.com/products/rk61-60-percent-keyboard"
-   },
-   {
-    "name": "Number of keys",
-    "value": "61",
-    "unit": "keys",
-    "source_url": "https://rkgamingstore.com/collections/rk61"
-   },
-   {
-    "name": "Layout",
-    "value": "60%; US QWERTY (ANSI listing)",
-    "unit": "",
-    "source_url": "https://rkgamingstore.com/collections/rk61"
-   },
-   {
-    "name": "Switch type and options",
-    "value": "Mechanical; Red, Blue, Brown. The supplied information does not establish that all RK61 revisions have the same switch options.",
-    "unit": "",
-    "source_url": "https://rkgamingstore.com/collections/rk61"
-   },
-   {
-    "name": "Actuation force",
-    "value": "40 g (RK Red); figures for other switches are not confirmed by the supplied official sources.",
-    "unit": "g",
-    "source_url": "https://www.enostech.com/royal-kludge-rk61-60-wireless-keyboard-review/"
-   },
-   {
-    "name": "Key travel",
-    "value": "RK Red: 2.0 mm actuation point; 4.0 mm total travel. Other switch figures are not confirmed by the supplied official sources.",
-    "unit": "mm",
-    "source_url": "https://www.enostech.com/royal-kludge-rk61-60-wireless-keyboard-review/"
-   },
-   {
-    "name": "Hot-swap socket type",
-    "value": "Official store listing says compatible 3-pin or 5-pin switches are supported on the Color-Block Edition. Other RK61 revisions may differ.",
-    "unit": "",
-    "source_url": "https://rkgamingstore.com/products/rk61-60-color-block-edition"
-   },
-   {
-    "name": "Keycap material and profile",
-    "value": "ABS shine-through; Cherry profile is listed by the official RK collection. Profile/material may vary by revision.",
-    "unit": "",
-    "source_url": "https://rkgamingstore.com/collections/rk61"
-   },
-   {
-    "name": "Backlight type",
-    "value": "Single-color backlight is listed for the official store product; RGB is reported for a separate listing, so the type depends on the specific SKU.",
-    "unit": "",
-    "source_url": "https://rkgamingstore.com/products/rk61-60-percent-keyboard"
-   },
-   {
-    "name": "Battery capacity",
-    "value": "1450",
-    "unit": "mAh",
-    "source_url": "https://rkgamingstore.com/products/rk61-60-color-block-edition"
-   },
-   {
-    "name": "Connectivity",
-    "value": "Official store listing describes Bluetooth 5.1, 2.4 GHz wireless, and USB-C wired connectivity.",
-    "unit": "",
-    "source_url": "https://rkgamingstore.com/products/rk61-60-percent-keyboard"
-   },
-   {
-    "name": "Bluetooth version",
-    "value": "5.1",
-    "unit": "",
-    "source_url": "https://rkgamingstore.com/products/rk61-60-percent-keyboard"
-   },
-   {
-    "name": "2.4 GHz wireless",
-    "value": "Yes",
-    "unit": "",
-    "source_url": "https://rkgamingstore.com/products/rk61-60-percent-keyboard"
-   },
-   {
-    "name": "USB-C wired",
-    "value": "Yes",
-    "unit": "",
-    "source_url": "https://rkgamingstore.com/products/rk61-60-percent-keyboard"
-   },
-   {
-    "name": "Polling rate",
-    "value": "Not confirmed by the official sources provided. A retailer listing reports 1000 Hz, but it does not establish that this applies to every RK61 revision or connection mode.",
-    "unit": "Hz",
-    "source_url": "https://keybumps.com/keyboard/royal-kludge-rk61-rgb-white.html"
-   },
-   {
-    "name": "N-key rollover",
-    "value": "Not confirmed by the official sources provided. A retailer listing reports full NKRO; applicability to all RK61 revisions is unclear.",
-    "unit": "",
-    "source_url": "https://keybumps.com/keyboard/royal-kludge-rk61-rgb-white.html"
-   }
-  ],
-  "sources": [
-   "http://en.rkgaming.com/product/59/",
-   "https://www.bedienungsanleitu.ng/royal-kludge/rk61/anleitung",
-   "https://rkgamingstore.com/products/rk61-60-percent-keyboard",
-   "https://rkgamingstore.com/collections/rk61",
-   "https://fccid.io/2A4MQ-RK61/Users-Manual/User-manual-5702418",
-   "https://www.manualslib.com/download/2294574/Rk-Rk61.html",
-   "https://www.lolvvv.com/review/royal-kludge-rk61",
-   "https://www.enostech.com/royal-kludge-rk61-60-wireless-keyboard-review/",
-   "https://yasugad.hatenablog.com/entry/2022/05/04/190000",
-   "https://rkgamingstore.com/products/rk61-60-color-block-edition",
-   "https://manuals.plus/asin/B08D8ZR2G2",
-   "https://keybumps.com/keyboard/royal-kludge-rk61-rgb-white.html",
-   "https://2666wiki.com/rk61-keyboard-manual/",
-   "https://yourtechreviews.com/royal-kludge-rk61/",
-   "https://www.rtings.com/keyboard/reviews/royal-kludge/rk61",
-   "https://en.rkgaming.com/product/28/"
-  ]
- }
+ "specs": {}
 }

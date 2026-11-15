@@ -33,7 +33,7 @@ log = logging.getLogger("spanner.planner")
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMPTS = Path(__file__).parent / "brain" / "prompts"
-MODEL_DIR = ROOT / "data" / "models" / "rk61"
+MODEL_DIR = ROOT / "data" / "models" / "rk68"
 CACHE_DIR = ROOT / "data" / "plans"
 MOCK_PLANS = ROOT / "fixtures" / "planner" / "plans.json"
 
@@ -242,8 +242,13 @@ _MOCK_KEYWORDS = [
     ("dead_key", r"dead|not (work|regist|typ)|doesn'?t (work|regist|type)|double|chatter|broken|switch"),
 ]
 _KEY_WORDS = {"space bar": "SPACE", "spacebar": "SPACE", "space": "SPACE", "enter": "ENTER", "return": "ENTER",
-              "backspace": "BACKSPACE", "escape": "ESC", "esc": "ESC", "tab": "TAB", "caps": "CAPS",
-              "left shift": "LSHIFT", "right shift": "RSHIFT", "shift": "LSHIFT"}
+              "backspace": "BACKSPACE", "escape": "ESC", "esc": "ESC", "tab": "TAB", "caps": "CAPS", "caps lock": "CAPS",
+              "left shift": "LSHIFT", "right shift": "RSHIFT", "shift": "LSHIFT",
+              # the RK68's right column and arrow cluster
+              "delete": "DEL", "del": "DEL", "page up": "PGUP", "pgup": "PGUP", "page down": "PGDN", "pgdn": "PGDN", "end": "END",
+              "up arrow": "UP", "arrow up": "UP", "up key": "UP", "down arrow": "DOWN", "arrow down": "DOWN", "down key": "DOWN",
+              "left arrow": "LEFT", "arrow left": "LEFT", "right arrow": "RIGHT", "arrow right": "RIGHT",
+              "windows": "WIN", "win key": "WIN", "fn": "FN", "function key": "FN", "control": "LCTRL", "ctrl": "LCTRL", "alt": "LALT"}
 
 
 def _intake_mock(complaint: str) -> Intake:
@@ -357,7 +362,7 @@ def assemble(gen: GenPlan, intake: Intake, refs: list[dict]) -> RepairPlan:
             scene3d=[SceneCommand(**c) for c in scene3d_for_kind(s.kind, parts, key or "F")],
             sources=step_sources[:3], kind=s.kind))
     return RepairPlan(
-        object="Royal Kludge RK61 60% mechanical keyboard", fault=gen.fault, difficulty=gen.difficulty,
+        object="Royal Kludge RK68 65% mechanical keyboard", fault=gen.fault, difficulty=gen.difficulty,
         time_min=max(1, gen.time_min), tools_needed=gen.tools_needed, safety_notes=gen.safety_notes, steps=steps,
         sources=plan_sources[:6], generated=True, title=TITLES[intake.fault_class].format(K=_key_label(key or "F")),
         diagnosis=gen.diagnosis, target_key=key or None,
@@ -432,7 +437,7 @@ def plan_repair(complaint: str, session: str = "") -> dict:
     timings = {"intake_ms": round((t_intake - t0) * 1000), "generate_ms": round((t_gen - t_intake) * 1000),
                "total_ms": round((t_gen - t0) * 1000)}
     if errors or gen is None:                    # fall back to the canonical procedure, honestly labelled
-        return {"status": "fallback", "say": "I couldn't write a custom plan for that, so here is the standard switch repair.",
+        return {"status": "fallback", "say": "I couldn't plan that. Tell me again what's wrong.",
                 "errors": errors, "timings": timings}
     plan = assemble(gen, intake, refs)
     if not mock:

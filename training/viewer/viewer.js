@@ -1,5 +1,5 @@
-// SPANNER // RK61 repair hologram
-// A true-to-spec Royal Kludge RK61 built procedurally (every keycap, switch internals, sockets, LEDs,
+// SPANNER // RK68 repair hologram
+// A true-to-spec Royal Kludge RK68 built procedurally (every keycap, switch internals, sockets, LEDs,
 // plate with cut-outs, PCB, battery, case), playing the knowledge-base repair step by step with animated
 // tools, "what can go wrong" demos, voice narration and voice commands, in a Jarvis-style HUD.
 // Serve the repo root (python -m http.server 8765) and open http://127.0.0.1:8765/training/viewer/
@@ -21,7 +21,7 @@ import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer
 import * as BGU from "three/addons/utils/BufferGeometryUtils.js";
 import { watchPalm } from "./gesture.js";
 
-const BASE = "../../data/models/rk61/";
+const BASE = "../../data/models/rk68/";
 const QP = new URLSearchParams(location.search);
 const FX = QP.get("fx") !== "0";
 const INSTANT = QP.get("instant") === "1";
@@ -199,7 +199,7 @@ function pcbTexture(pack, width, depth) {
     for (const [dx, dz] of [[-0.38, 0.2], [0.26, 0.38]]) { g.beginPath(); g.arc(px(k.x + dx), pz(k.z + dz), 9, 0, 7); g.fill(); }
   }
   g.fillStyle = "#111"; g.fillRect(px(-4.6), pz(-0.9), 150, 100);
-  g.fillStyle = "#e9efe9"; g.font = "bold 30px monospace"; g.fillText("RK61  REV 2.1  HOT-SWAP  3/5-PIN", 70, H - 34);
+  g.fillStyle = "#e9efe9"; g.font = "bold 30px monospace"; g.fillText("RK68  REV 2.1  HOT-SWAP  3/5-PIN", 70, H - 34);
   g.fillText("BAT 1450mAh", px(-8.2), pz(0.2));
   const t = new THREE.CanvasTexture(c); t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; return t;
 }
@@ -1020,7 +1020,7 @@ function showSide(tab) {
   $("side").dataset.tab = tab; $("side").style.display = "block"; $("insp").style.display = "none";
   const S = pack.specs || {};
   if (tab === "specs") {
-    $("sideh").textContent = "SPECIFICATIONS · " + (S.product_name || "RK61");
+    $("sideh").textContent = "SPECIFICATIONS · " + (S.product_name || "RK68");
     $("sidebody").innerHTML = `<table>${(S.specs || []).map((s) => `<tr><td>${s.name}</td><td>${s.value} ${s.unit || ""}<br><a class="src" href="${s.source_url}" target="_blank">${host(s.source_url)} ↗</a></td></tr>`).join("")}</table>
       <p style="margin-top:10px">${S.official_product_url ? `<a href="${S.official_product_url}" target="_blank">Official product page ↗</a> · ` : ""}${S.manual_url ? `<a href="${S.manual_url}" target="_blank">User manual (PDF) ↗</a>` : ""}</p>
       <p class="src">Specs researched live with Linkup; every value links to where it was read.</p>`;
@@ -1346,12 +1346,12 @@ async function loadPlan(d) {
 }
 let planning = false;
 /** What the person said they want fixed -> Claude writes the plan for it -> the hologram plays that plan. */
-async function requestRepair(raw) {
+async function requestRepair(raw, opts = {}) {
   if (planning) return;
   planning = true; stopTour(); clarifying = null;
-  heard(raw, "planning the repair");
+  heard(raw, opts.camera ? "the camera found the key" : "planning the repair");
   setMode("Planning the repair"); $("sn").textContent = "PLANNING"; caption("Working out the fix…\n“" + raw + "”");
-  narrate("Okay. Let me work out the fix.", false);
+  if (!opts.retried) narrate(opts.camera ? `I can see the ${opts.camera} keycap is off. Let me get the steps.` : "Okay. Let me work out the fix.", false);
   try {
     const r = await fetchT(API + "/coach/plan/generate", { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ session: SESSION, complaint: raw }) }, 90000);
@@ -1359,10 +1359,11 @@ async function requestRepair(raw) {
     const d = await r.json();
     if (d.status === "ready") {
       await loadPlan(d);
-      heard(raw, `${plan.steps.length}-step plan`); caption(d.say); narrate(d.say + " Say “start” when you’re ready.", false);
-    } else if (d.status === "fallback") {
-      await loadPlan({ plan: planJson.plan, parts_card: planJson.parts_card, broken_key: planJson.broken_key });
-      heard(raw, "standard repair"); caption(d.say); narrate(d.say + " Say “start” when you’re ready.", false);
+      heard(raw, `${plan.steps.length}-step plan`); caption(d.say);
+      if (opts.camera) { narrate(d.say, false); setTimeout(() => { if (chosen && stepIdx < 0) goStep(0); }, 2500); }   // the camera started it: go
+      else narrate(d.say + " Say “start” when you’re ready.", false);
+    } else if (d.status === "fallback" && !opts.retried) {
+      planning = false; return requestRepair(raw, { ...opts, retried: true });   // one more try before asking again
     } else {
       if (d.status === "clarify") clarifying = raw;
       setReady(); heard(raw, d.status); caption(d.say); narrate(d.say, false);
@@ -1426,7 +1427,10 @@ let missingSeen = { key: null, n: 0 };
 function keyIdForLegend(legend) {
   const L = String(legend || "").trim().toLowerCase(); if (!L) return null;
   for (const [id, k] of Object.entries(pack.keys)) if (id.toLowerCase() === L || String(k.label || "").toLowerCase() === L) return id;
-  const alias = { return: "ENTER", esc: "ESC", escape: "ESC", space: "SPACE", spacebar: "SPACE", backspace: "BACKSPACE", tab: "TAB", caps: "CAPS", "caps lock": "CAPS", shift: "LSHIFT", ctrl: "LCTRL", control: "LCTRL", alt: "LALT", win: "WIN", fn: "FN", menu: "MENU" };
+  const alias = { return: "ENTER", esc: "ESC", escape: "ESC", space: "SPACE", spacebar: "SPACE", backspace: "BACKSPACE", tab: "TAB", caps: "CAPS", "caps lock": "CAPS", shift: "LSHIFT", ctrl: "LCTRL", control: "LCTRL", alt: "LALT", win: "WIN", fn: "FN",
+    del: "DEL", delete: "DEL", pgup: "PGUP", "page up": "PGUP", pageup: "PGUP", pgdn: "PGDN", "page down": "PGDN", pagedown: "PGDN", end: "END",
+    up: "UP", "up arrow": "UP", "arrow up": "UP", "\u2191": "UP", down: "DOWN", "down arrow": "DOWN", "arrow down": "DOWN", "\u2193": "DOWN",
+    left: "LEFT", "left arrow": "LEFT", "arrow left": "LEFT", "\u2190": "LEFT", right: "RIGHT", "right arrow": "RIGHT", "arrow right": "RIGHT", "\u2192": "RIGHT" };
   return pack.keys[alias[L]] ? alias[L] : null;
 }
 async function setBrokenKey(id, why) {
@@ -1438,17 +1442,23 @@ async function setBrokenKey(id, why) {
   narrate(`I can see the ${pack.keys[id].label} keycap is off. That's the key we're fixing.`); heard(why || "camera", "broken key → " + pack.keys[id].label);
   if (stepIdx >= 0) goStep(stepIdx, " · key " + pack.keys[id].label, true);
 }
+let cameraKey = null;   // the key the camera last acted on, so one sighting is handled once
 function onMissingKeys(c) {
-  if (plan?.generated && plan.target_key) return;   // the user said which key: speech beats the camera
   const ids = (c.missing_keys || []).map(keyIdForLegend).filter(Boolean);
   if (ids.length !== 1) { missingSeen = { key: null, n: 0 }; return; }
   missingSeen = ids[0] === missingSeen.key ? { key: ids[0], n: missingSeen.n + 1 } : { key: ids[0], n: 1 };
-  if (missingSeen.n >= 2 && c.confidence >= 0.5) setBrokenKey(ids[0], "camera: " + c.missing_keys.join(", ") + " missing");
+  if (missingSeen.n < 2 || c.confidence < 0.5 || ids[0] === cameraKey) return;
+  const id = ids[0], label = pack.keys[id].label; cameraKey = id;
+  if (!chosen) { requestRepair(`my ${label} key is dead`, { camera: label }); return; }          // nothing planned yet: the camera starts it
+  if (plan?.generated && plan.target_key && plan.target_key !== id) {                                // said one key, pulled another: the board wins
+    requestRepair(`my ${label} key is dead`, { camera: label }); return;
+  }
+  setBrokenKey(id, "camera: " + c.missing_keys.join(", ") + " missing");
 }
 function onCoach(c) {
   $("camlat").textContent = `${(c.latency_ms / 1000).toFixed(1)} s${c.crop?.cropped ? " · zoomed" : ""}`;
+  onMissingKeys(c);                          // before a plan exists this is the only thing the camera can start
   if (!chosen) return;                       // no plan yet: nothing to follow (and no "tell me what's wrong" on every frame)
-  onMissingKeys(c);
   $("camconfbar").style.width = Math.round(c.confidence * 100) + "%";
   const stepTxt = c.step_index > 0 ? ` · <b>STEP ${c.step_index}</b> ${c.step_status.replace("_", " ")}` : "";
   seen(`<b>I SEE</b> ${c.what_i_see}${stepTxt}${c.mistake ? `<br><span class="bad">⚠ ${c.mistake}</span>` : ""}`);
