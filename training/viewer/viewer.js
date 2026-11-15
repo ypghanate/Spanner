@@ -898,9 +898,23 @@ function warnLearned(s) {
 }
 refreshLearned(); setInterval(refreshLearned, 30000);
 let chosen = false;   // true once a plan exists for what the person said is wrong (loadPlan), never before
+// The repair only moves forward while the camera can actually see the keyboard: it is seen when a recent picture shows it.
+let lastSeenAt = 0, pendingGo = null, lastSeenWarn = 0;
+const seenNow = () => INSTANT || QP.get("nocam") === "1" || performance.now() - lastSeenAt < 8000;   // ?nocam=1: no camera (demos, tests)
+function holdUntilSeen(i, note) {
+  if (i <= stepIdx || seenNow()) { pendingGo = null; return false; }             // going back, repeating, or it is in view
+  pendingGo = { i, note };                                                       // carry on by itself the moment it comes into view
+  if (performance.now() - lastSeenWarn > 6000) { lastSeenWarn = performance.now(); narrate("I can’t see your keyboard yet. Point the camera at it and I’ll carry on."); heard("camera", "waiting to see the keyboard"); }
+  return true;
+}
+function noteSeen(c) {
+  if (c.object_visible) lastSeenAt = performance.now();
+  if (pendingGo && seenNow()) { const g = pendingGo; pendingGo = null; goStep(g.i, g.note); }
+}
 async function goStep(i, note = "", silent = false) {
   if (!chosen) { narrate("Tell me what’s wrong first, and I’ll plan the repair."); return; }
   if (!plan.steps.length) return;
+  if (holdUntilSeen(i, note)) return;
   if (mistakeOn) { mistakeOn = false; $("mistake").classList.remove("on"); $("fixit").style.display = "none"; }
   const id = ++runId;
   stepIdx = Math.max(0, Math.min(i, plan.steps.length - 1));
@@ -1454,6 +1468,7 @@ function onMissingKeys(c) {
 }
 let stepHoldUntil = 0;   // after a step change, ignore frames that were taken before it
 function onCoach(c) {
+  noteSeen(c);
   $("camlat").textContent = `${(c.latency_ms / 1000).toFixed(1)} s${c.crop?.cropped ? " · zoomed" : ""}`;
   onMissingKeys(c);
   $("camconfbar").style.width = Math.round(c.confidence * 100) + "%";

@@ -532,8 +532,22 @@ async function runStep(s, id) {
   if (explode < 0.5 && !["frame", "display", "back_glass", "shell", "headband", "usb_c", "screws"].includes(names[0])) { setXray(false); await setExplode(1); }   // an inside part: open it up so it can be seen
   const ok = highlightParts(names); if (ok[0]) await focusPart(ok[0]);
 }
+// The repair only moves forward while the camera can actually see the {WHAT}: it is seen when a recent picture shows it.
+let lastSeenAt = 0, pendingGo = null, lastSeenWarn = 0;
+const seenNow = () => INSTANT || QP.get("nocam") === "1" || performance.now() - lastSeenAt < 8000;   // ?nocam=1: no camera (demos, tests)
+function holdUntilSeen(i, note) {
+  if (i <= stepIdx || seenNow()) { pendingGo = null; return false; }             // going back, repeating, or it is in view
+  pendingGo = { i, note };                                                       // carry on by itself the moment it comes into view
+  if (performance.now() - lastSeenWarn > 6000) { lastSeenWarn = performance.now(); narrate(`I can’t see your ${device.name} yet. Point the camera at it and I’ll carry on.`); heard("camera", `waiting to see the ${device.name}`); }
+  return true;
+}
+function noteSeen(c) {
+  if (c.object_visible) lastSeenAt = performance.now();
+  if (pendingGo && seenNow()) { const g = pendingGo; pendingGo = null; goStep(g.i, g.note); }
+}
 async function goStep(i, note = "") {
   if (!plan) { narrate("Tell me what’s wrong first, and I’ll plan the repair."); return; }
+  if (holdUntilSeen(i, note)) return;
   const id = ++runId; stepIdx = Math.max(0, Math.min(i, plan.steps.length - 1)); finishedDev = false;
   const s = plan.steps[stepIdx]; $("mode").textContent = `STEP ${s.index}/${plan.steps.length}${note}`;
   renderCard(); narrate(`Step ${s.index}. ${s.instruction}`);
@@ -541,7 +555,7 @@ async function goStep(i, note = "") {
 }
 function finishRepair() { finishedDev = true; runId++; select(null); setXray(false); renderCard(); $("mode").textContent = "REPAIR COMPLETE"; narrate("All done. Test it before you rely on it."); }
 function advance() { if (finishedDev) return restart(); if (stepIdx < 0) return goStep(0); if (stepIdx >= plan.steps.length - 1) return finishRepair(); return goStep(stepIdx + 1); }
-function restart() { runId++; stepIdx = -1; finishedDev = false; lastDoneStep = -1; select(null); setXray(false); setExplode(0).then(frameAll); renderCard(); }
+function restart() { pendingGo = null; runId++; stepIdx = -1; finishedDev = false; lastDoneStep = -1; select(null); setXray(false); setExplode(0).then(frameAll); renderCard(); }
 function showMistake() {
   const s = plan?.steps[stepIdx]; const m = s?.common_mistakes?.[0];
   if (!m) { narrate("Nothing in particular to watch for here. Take it slowly."); return; }
@@ -597,6 +611,7 @@ async function onReply(r) {
 
 // ---- what the phone's camera shows (the server checks each picture against the step on screen)
 function onCoach(c) {
+  noteSeen(c);
   $("tele").textContent = `${Object.keys(parts).length} PARTS · CAMERA ${(c.latency_ms / 1000).toFixed(1)} s`;
   if (!plan || !c.object_visible) { agree = 0; return; }
   if (performance.now() < stepHoldUntil) return;                       // we just moved on: this picture was taken before that

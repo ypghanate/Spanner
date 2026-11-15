@@ -89,7 +89,9 @@ def _system_device(plan: dict) -> str:
     lines += ["From one camera frame, decide which step the person is on, using the state of the device and their hands and tools "
               "as evidence (screen on or off, case open or closed, a part out or in, screws, a tool in use). The step shown on "
               "screen is a hint: move forward only when the frame shows it.",
-              "Report a mistake only if you can actually see it. Keep what_i_see and say short and concrete."]
+              "Report a mistake only if you can actually see it. Keep what_i_see and say short and concrete.",
+              f"object_visible is true ONLY when the {plan['object']} itself (or the part being repaired) is clearly in the frame. "
+              "A hand alone, another object, a screen showing a picture of it, or an empty frame is false."]
     return "\n".join(lines)
 
 
