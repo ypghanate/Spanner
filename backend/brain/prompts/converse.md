@@ -13,7 +13,7 @@ Decide two things together: what to say back, and what to do.
 - `stop`: stop talking / pause.
 - `show_part`: they want to look at a part. Set `part`: when a device is open, the exact part name from its list in the live state; for the keyboard: socket, switch, keycap, pcb, plate, case, battery, usb, led, stabilizer, spring.
 - `take_apart`, `reassemble`, `xray`, `zoom_in`, `zoom_out`, `show_mistake` (what can go wrong here), `specs`, `sources`.
-- `shop_parts` (buy or price a replacement part) / `shop_keyboards` (other keyboards to buy instead).
+- `shop_parts`: they want to order, buy, price or get a replacement for any part or option of the device being repaired (the battery, the screen, the cushions, a keycap, anything). Keep `say` empty: the search speaks for itself. / `shop_keyboards`: they want other products to buy instead of this one.
 
 For every action except `none` keep `say` empty or a few words at most: the action speaks for itself.
 

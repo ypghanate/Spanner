@@ -413,7 +413,7 @@ async def intent(req: IntentReq):
                 "command. Commands: next (continue, go on, done, finished), back (previous step), close (hide any panel, "
                 "dismiss, that's enough, ok close), take_apart (explode the model), reassemble, xray, reset (start over), "
                 "tour (walk me through), stop (pause), rewind, show_mistake (what can go wrong), fix_it, "
-                "shop_parts (buy/replace/price of a part: keycaps, switches, stabilizers, cable), shop_keyboards "
+                "shop_parts (order, buy, price or get a replacement for any part of the device), shop_keyboards "
                 "(other/alternative/new keyboards to buy instead), camera_on (watch me), camera_off, calibrate (align the "
                 "hologram with the real keyboard, set as zero), show_part (look at a part: fill part), zoom_in, zoom_out, "
                 "lights_on, lights_off, specs, sources, ask (a real question about the repair that needs an answer), "
@@ -773,12 +773,6 @@ async def device_parts(req: DevicePartsReq):
     return {"ok": True, "parts": len(req.parts)}
 
 
-# the replacement part each kind of fault is most likely to need (shop.classify maps the words to a search)
-PART_FOR_FAULT = {"dead_key": "replacement switches", "sticky_key": "replacement switches",
-                  "missing_keycap": "replacement keycaps", "spacebar_stabilizer": "replacement stabilizers",
-                  "no_power": "a replacement USB-C cable"}
-
-
 @router.post("/plan/generate")
 async def generate_plan(req: PlanReq):
     """What the user said they want fixed -> a Claude-written plan for that fault (slow: 5-10 s with the real model).
@@ -799,12 +793,6 @@ async def generate_plan(req: PlanReq):
         _plans[req.session] = {"broken_key": out.get("broken_key"), "plan": out["plan"], "parts_card": out.get("parts_card"),
                                "plan_id": out["plan_id"]}
         _latest.setdefault(req.session, {})["plan_id"] = out["plan_id"]
-        # search for the part this fault needs now, in the background: by the time they ask, it is already there
-        part_query = PART_FOR_FAULT.get(out.get("fault_class", ""))
-        if part_query and os.getenv("LINKUP_API_KEY"):
-            from .shop import prefetch
-
-            prefetch(part_query)
     from training.feedback import record_stage_timing
 
     record_stage_timing(req.session, "planner", round((time.perf_counter() - t0) * 1000), out["status"] == "ready")
@@ -870,11 +858,5 @@ def mount(app) -> None:
 
         asyncio.get_running_loop().run_in_executor(None, warm)
 
-    @app.on_event("startup")
-    async def _warm_shop() -> None:   # (main.py already warms the YOLO detector)
-        if os.getenv("SHOP_WARMUP", "1") == "1" and os.getenv("LINKUP_API_KEY"):   # live Linkup + Tavily, cached for the demo
-            from .shop import warm as warm_shop
-
-            asyncio.get_running_loop().run_in_executor(None, warm_shop)
     app.mount("/data/models", StaticFiles(directory=ROOT / "data" / "models"), name="models")
     app.mount("/training/viewer", StaticFiles(directory=ROOT / "training" / "viewer", html=True), name="viewer")

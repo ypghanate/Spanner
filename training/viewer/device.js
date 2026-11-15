@@ -592,7 +592,7 @@ function showMistake() {
 
 // ---- Claude plans the repair from what was said
 async function requestRepair(raw) {
-  if (planning) return; planning = true; clarifying = null; runId++;
+  if (planning) return; planning = true; clarifying = null; runId++; closeShop();
   heard(raw, "planning the repair"); $("mode").textContent = "PLANNING THE REPAIR";
   narrate("Okay. Let me work out the fix.");
   try {
@@ -631,7 +631,7 @@ async function onReply(r) {
     case "zoom_in": return flyTo(camera.position.clone().lerp(controls.target, 0.35), controls.target.clone(), 600);
     case "zoom_out": return flyTo(camera.position.clone().sub(controls.target).multiplyScalar(1.5).add(controls.target), controls.target.clone(), 600);
     case "show_mistake": return showMistake();
-    case "shop_parts": case "shop_keyboards": narrate("I can only look up replacement parts for the keyboard so far."); return;
+    case "shop_parts": case "shop_keyboards": return openShop(r.text);
     case "specs": case "sources": break;
   }
   if (r.say) narrate(r.say);
@@ -700,6 +700,77 @@ async function remoteLoop() {
 }
 
 if (QP.get("debug") === "1") window.__spanner = { onCoach, state: () => ({ stepIdx, advancing, speaking: performance.now() < speakingUntil, finishedDev, queued: !!queuedSay, mistakeStreak, lastMistakeAgo: Math.round(performance.now() - lastMistakeAt), hold: Math.round(stepHoldUntil - performance.now()), mistakeShown }), until: () => Math.round(speakingUntil - performance.now()) };   // for tests
+
+// ------------------------------------------------------------------ shopping on request ("order a new battery", "how much is the screen")
+// The server (backend/shop.py) works out what is meant from the words and what is on screen, searches only that, and
+// answers {kind: "part" | "alternatives" | "clarify"}. Nothing is searched unless it is asked for.
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
+const money = (p, c) => (p > 0 ? `${{ GBP: "£", USD: "$", EUR: "€" }[c] || (c ? c + " " : "")}${Number(p).toFixed(2)}` : "see price ↗");
+const moneyGbp = (i) => money(i.price, i.currency) + (i.price_gbp && i.currency !== "GBP" ? ` <small style="opacity:.6">≈ £${i.price_gbp.toFixed(2)}</small>` : "");
+const shopImg = (u) => (u ? `<img src="${esc(u)}" referrerpolicy="no-referrer" onerror="this.remove()">` : "");
+const shopCites = (d) => (d.sources?.length ? `<div class="cites">LINKUP READ ${d.sources_count} PAGES · ${d.sources.slice(0, 8).map((x) => `<a href="${esc(x.url)}" target="_blank">${esc(hostOf(x.url))} ↗</a>`).join("")}</div>` : "");
+function verifyBox(v) {
+  if (!v || v.status === "researching") return `<div class="verify pending"><div class="vh">LINKUP AGENT · VERIFYING<span class="dots"></span></div><div class="meta">checking fit on 2+ independent sites · safety recalls · price of a new one · repair or replace</div></div>`;
+  if (v.status !== "ready" || !v.card) return "";
+  const c = v.card, dec = c.decision;
+  return `<div class="verify"><div class="vh">✓ VERIFIED BY THE LINKUP AGENT${v.fresh ? "" : " · " + esc(c.as_of).toUpperCase()}</div>
+    ${dec ? `<div class="dec">${esc(dec.headline)}</div>` : ""}
+    <div class="meta">${c.recall_checked ? (c.safety ? "⚠ " + esc(c.safety.text) : "No safety recalls found in the last 2 years") : ""} · ${c.sources_count} sources read · ${esc(c.as_of)}</div>
+    <div class="vrow">${c.options.map((o) => `<div class="vo"><div class="pr">${esc(o.price)}</div><div>${esc(o.part)}</div><div class="rt">${esc(o.retailer)}</div>
+      <span class="badge ${o.verified ? "ok" : "no"}">${esc(o.badge).toUpperCase()}</span>
+      <div class="ev"><a href="${esc(o.url)}" target="_blank">buy ↗</a></div></div>`).join("")}</div></div>`;
+}
+let shopReq = 0, verifyTimer = null;
+function closeShop() { shopReq++; clearTimeout(verifyTimer); $("shop").style.display = "none"; }
+async function openShop(raw, refresh = false) {
+  const id = ++shopReq, el = $("shop"); clearTimeout(verifyTimer);
+  const head = (t) => `<h3>${t}<button class="small" id="shopx" style="float:right" aria-label="Close">✕</button></h3>`;
+  el.style.display = "block"; select(null);
+  el.innerHTML = head("SEARCHING THE WEB LIVE") + `<div class="searching">LINKUP · TAVILY · “${esc(raw)}”</div>`;
+  $("shopx").onclick = closeShop;
+  if (!refresh) narrate("Searching live.");
+  let verified = null, spoken = false, polls = 0;
+  const pollVerify = async (product, part) => {
+    if (id !== shopReq || !part) return;
+    try { const r = await fetch(API + "/coach/shop/verified?product=" + encodeURIComponent(product) + "&part=" + encodeURIComponent(part), { signal: AbortSignal.timeout(8000) }); if (r.ok) verified = await r.json(); } catch { /* keep polling */ }
+    if (++polls > 45 || id !== shopReq) return;
+    const box = el.querySelector("#vbox"); if (box) box.innerHTML = verifyBox(verified);
+    if (verified?.status === "ready" && verified.card?.decision && !spoken && box) { spoken = true; narrate(verified.card.decision.headline); }
+    if (!verified || verified.status === "researching") verifyTimer = setTimeout(() => pollVerify(product, part), 4000);
+  };
+  try {
+    const r = await jpost("/coach/shop", { query: raw, session: SESSION }, 75000);
+    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 120)}`);
+    const d = await r.json(); if (id !== shopReq) return;
+    if (d.kind === "clarify") { closeShop(); narrate(d.say); return; }              // not sure which part: ask, do not guess
+    if (d.partial) setTimeout(() => { if (id === shopReq) openShop(raw, true); }, 5000);   // photos / prices still arriving
+    const src = `LIVE · LINKUP + TAVILY · ${(d.latency_ms / 1000).toFixed(1)} s${d.cached ? " · CACHED" : ""}`;
+    if (d.kind === "alternatives") {
+      el.innerHTML = head(`ALTERNATIVES TO YOUR ${esc((d.product || "device").toUpperCase())}`) + `<div class="sub">${src}</div><div class="grid">${d.items.map((k, i) => `
+        <div class="it" style="animation-delay:${i * 70}ms">${shopImg(k.image_url)}<div class="nm">${esc(k.name)}</div><div class="pr">${moneyGbp(k)}</div>
+          <ul>${(k.pros || []).map((x) => `<li class="p">${esc(x)}</li>`).join("")}${(k.cons || []).map((x) => `<li class="c">${esc(x)}</li>`).join("")}</ul>
+          <a href="${esc(k.url)}" target="_blank">${esc(hostOf(k.url))} ↗</a></div>`).join("")}</div>${shopCites(d)}`;
+      const c = d.items.filter((k) => k.price_gbp > 0).sort((a, b) => a.price_gbp - b.price_gbp)[0];
+      narrate(`I found ${d.items.length} alternatives.${c ? ` The cheapest is the ${c.name} at about £${Math.round(c.price_gbp)}.` : ""}`);
+    } else {
+      pollVerify(d.product, d.part);
+      const fit = d.items.filter((o) => o.compatible);
+      el.innerHTML = head(esc(d.part.toUpperCase())) + `<div class="sub">${src}</div><div id="vbox">${verifyBox(verified)}</div><div class="sub">MORE OPTIONS · QUICK SEARCH</div><div class="grid">${d.items.map((o, i) => `
+        <div class="it" style="animation-delay:${i * 70}ms">${shopImg(o.image_url)}<div class="nm">${esc(o.name)}</div><div class="pr">${moneyGbp(o)}</div><div class="rt">${esc(o.retailer)}</div>
+          <span class="badge ${o.compatible ? "ok" : "no"}">${o.compatible ? "✓ FITS YOUR DEVICE" : "✗ WON'T FIT"}</span><div class="why">${esc(o.compatibility)}</div>
+          <a href="${esc(o.url)}" target="_blank">${esc(hostOf(o.url))} ↗</a></div>`).join("")}</div>${shopCites(d)}`;
+      if (!refresh) {
+        const c = fit.filter((o) => o.price > 0).sort((a, b) => a.price - b.price)[0];
+        narrate(`${fit.length} of ${d.items.length} fit.${c ? ` Cheapest that fits: ${money(c.price, c.currency)}, from ${c.retailer}.` : ""} I'm verifying the fit.`);
+      }
+    }
+    $("shopx").onclick = closeShop;
+  } catch (e) {
+    if (id !== shopReq) return;
+    el.innerHTML = head("SEARCH FAILED") + `<div class="searching bad">${esc(e.message)}</div>`; $("shopx").onclick = closeShop; narrate("The live search failed. Ask me again.");
+  }
+}
+
 // ------------------------------------------------------------------ loop + boot
 renderer.setAnimationLoop(() => {
   const now = performance.now();

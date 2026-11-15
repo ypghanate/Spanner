@@ -283,3 +283,64 @@ def test_device_endpoints_register_parts_and_switch_devices():
     c.post("/coach/device/parts", json={"session": "d1", "device": "ipad11", "parts": PHONE_PARTS})     # picked another device
     assert "d1" not in coach._plans
     coach._device_parts.pop("d1", None)
+
+
+# ---------------------------------------------------------------- shopping: nothing hard-coded, only on request
+def _fake_resolve(monkeypatch, **kw):
+    from backend import shop
+
+    calls = []
+    monkeypatch.setattr(shop, "resolve", lambda text, session="": (calls.append(text), shop.ShopTarget(**kw))[1])
+    return shop, calls
+
+
+def test_shop_asks_instead_of_guessing(monkeypatch):
+    shop, _ = _fake_resolve(monkeypatch, action="clarify", question="Which part: the battery or the screen?")
+    monkeypatch.setattr(shop, "_search_parts", lambda *a: (_ for _ in ()).throw(AssertionError("must not search")))
+    assert shop.shop("I want to order something", "s") == {"kind": "clarify", "say": "Which part: the battery or the screen?"}
+
+
+def test_shop_searches_exactly_what_was_resolved_and_caches_it(monkeypatch, tmp_path):
+    shop, calls = _fake_resolve(monkeypatch, action="part", product="Apple iPhone 15", part="replacement battery for the iPhone 15")
+    monkeypatch.setattr(shop, "CACHE_DIR", tmp_path / "shop")
+    shop._cache.clear()
+    seen = []
+    offer = {"name": "iPhone 15 battery", "retailer": "iFixit", "price": 39.0, "currency": "GBP", "url": "https://ifixit.example/b",
+             "image_url": "https://img.example/b.jpg", "compatible": True, "compatibility": "Fits your device."}
+    monkeypatch.setattr(shop, "_search_parts", lambda part, product: (seen.append((part, product)), ([dict(offer)], []))[1])
+    monkeypatch.setattr(shop, "verified_status", lambda product, part: {"status": "researching"})
+    first = shop.shop("order a new battery", "s")
+    assert seen == [("replacement battery for the iPhone 15", "Apple iPhone 15")]
+    assert first["kind"] == "part" and first["product"] == "Apple iPhone 15" and first["part"].startswith("replacement battery")
+    second = shop.shop("how much is the battery", "s")                  # different words, same resolved part: cached
+    assert second["cached"] is True and len(seen) == 1
+
+
+def test_shop_alternatives_and_no_model_names_left():
+    import inspect
+
+    from backend import shop
+
+    src = inspect.getsource(shop)
+    for hard in ("Royal Kludge", "RK61", "PARTS = [", "def classify", "def prefetch", "WARM ="):
+        assert hard not in src, hard
+    assert "alternatives" in src
+
+
+def test_nothing_is_searched_automatically_after_planning():
+    from backend import coach
+
+    src = open(coach.__file__, encoding="utf-8").read()
+    assert "prefetch" not in src and "_warm_shop" not in src and "PART_FOR_FAULT" not in src
+
+
+def test_shop_route_passes_the_session_and_the_clarifying_question(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from backend import shop
+    from backend.main import create_app
+
+    got = {}
+    monkeypatch.setattr(shop, "resolve", lambda text, session="": (got.update(text=text, session=session), shop.ShopTarget(action="clarify", question="Which part?"))[1])
+    r = TestClient(create_app()).post("/coach/shop", json={"query": "order a part", "session": "abc"}).json()
+    assert got == {"text": "order a part", "session": "abc"} and r == {"kind": "clarify", "say": "Which part?"}
