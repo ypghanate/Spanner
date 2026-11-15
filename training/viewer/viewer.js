@@ -788,6 +788,7 @@ const DEFAULT_STAGES = [
 const CONFIRM = { "cable-out": "unplugged", "keycap-pull": "cap off", "puller-place": "puller on", "switch-pull": "switch out", "socket-inspect": "socket clear",
   "new-switch-inspect": "switch ready", "switch-align": "aligned", "switch-insert": "inserted", "switch-test": "switch works", "keycap-place": "seated", "cable-in-test": "{K} works" };
 let STAGES = DEFAULT_STAGES, stageOf = [], finished = false;
+let chosen = false;   // true once a plan exists for what the person said is wrong (loadPlan), never before
 function buildStages() {
   if (plan.generated) {   // a plan Claude wrote: one chapter per step, worded from the step itself
     STAGES = plan.steps.map((s, i) => ({
@@ -815,11 +816,17 @@ function telemetry() { $("telemetry").textContent = `${Object.keys(parts).length
 function dots() { renderStages(); }
 function renderStages() {
   const cur = finished ? STAGES.length : stepIdx >= 0 ? stageOf[stepIdx] : -1;
-  $("stages").innerHTML = STAGES.map((g, i) => {
+  const strip = $("stages"), was = strip.scrollLeft;
+  if (!chosen) { strip.innerHTML = ""; return; }   // no timeline until the fault and its steps are known
+  strip.innerHTML = STAGES.map((g, i) => {
     const st = i < cur ? "done" : i === cur ? "cur" : "";
     const sub = st === "done" ? "Complete" : st === "cur" ? g.sub || "Current step" : "Up next";
     return `<button class="stage ${st}" data-i="${i}" ${st === "cur" ? 'aria-current="step"' : ""}><span class="sl">${String(i + 1).padStart(2, "0")}  ${esc(fillK(g.name))}</span><span class="ss">${sub}</span></button>`;
   }).join("");
+  // one rolling row: the current stage is centred, the ends are cropped by the strip
+  strip.scrollLeft = was;
+  const on = strip.querySelector(".stage.cur") || strip.querySelector(".stage:not(.done)") || strip.lastElementChild;
+  if (on) strip.scrollTo({ left: Math.max(0, on.offsetLeft - (strip.clientWidth - on.offsetWidth) / 2), behavior: "smooth" });
 }
 $("stages").addEventListener("click", (e) => {
   const b = e.target.closest(".stage"); if (!b) return;
@@ -873,7 +880,7 @@ function advance() {
 $("cta").onclick = () => { stopTour(); advance(); };
 $("btnPause").onclick = () => {
   motionPaused = !motionPaused; $("btnPause").classList.toggle("on", motionPaused); $("btnPause").setAttribute("aria-pressed", motionPaused);
-  $("btnPause").textContent = motionPaused ? "Resume motion" : "Pause motion"; if (motionPaused) { controls.autoRotate = false; cancelTweens("cam"); flying = false; controls.enabled = true; }
+  $("btnPause").title = $("btnPause").ariaLabel = motionPaused ? "Resume motion" : "Pause motion"; if (motionPaused) { controls.autoRotate = false; cancelTweens("cam"); flying = false; controls.enabled = true; }
 };
 const TOOL_OF = { "keycap-pull": "KEYCAP PULLER", "puller-place": "SWITCH PULLER", "switch-pull": "SWITCH PULLER", "socket-inspect": "COMPRESSED AIR",
   "new-switch-inspect": "TWEEZERS · SPARE SWITCH", "switch-align": "SPARE SWITCH", "switch-insert": "SPARE SWITCH", "switch-test": "FINGER",
@@ -904,7 +911,6 @@ function warnLearned(s) {
   setTimeout(() => { showTag(`switch_${brokenKey}`, "LEARNED · " + m.toUpperCase().slice(0, 48), "red", 3.2); narrate(`Heads up. People often ${m} at this step. That came from earlier repair sessions.`); }, 2200);
 }
 refreshLearned(); setInterval(refreshLearned, 30000);
-let chosen = false;   // true once a plan exists for what the person said is wrong (loadPlan), never before
 // The repair only moves forward while the camera can actually see the keyboard: it is seen when a recent picture shows it.
 let lastSeenAt = 0, pendingGo = null, lastSeenWarn = 0;
 const seenNow = () => INSTANT || QP.get("nocam") === "1" || performance.now() - lastSeenAt < 8000;   // ?nocam=1: no camera (demos, tests)
