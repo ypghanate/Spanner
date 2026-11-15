@@ -1528,6 +1528,7 @@ async function phoneOrigin() {
   if (!/^(localhost|127\.|\[?::1\]?$)/.test(location.hostname)) return { origin: location.origin, local: false };
   try {
     const n = await fetchJson(API + "/coach/net", 3000);
+    if (n.public_url) return { origin: n.public_url, local: false };
     if (n.lan_ip) return { origin: `${location.protocol}//${n.lan_ip}${location.port ? ":" + location.port : ""}`, local: false };
   } catch { /* older server without /coach/net */ }
   return { origin: location.origin, local: true };
