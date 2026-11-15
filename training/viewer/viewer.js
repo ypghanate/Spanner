@@ -1204,7 +1204,7 @@ async function command(raw) {
   else if (/x.?ray|see through|hologram/.test(t)) { setXray(!xray); say(xray ? "X-ray on." : "X-ray off."); }
   else if (/\b(reset|from the top)\b/.test(t)) { $("reset").onclick(); say("Reset."); }
   else if (/\b(tour|play|walk me through|show me the repair|start the repair)\b/.test(t)) { if (!touring) tour(); say("Walking you through the repair."); }
-  else if (/(stop|pause|hold on|quiet|shut up|stop talking|be quiet|silence|enough)/.test(t)) { if (/pause/.test(t) && !motionPaused) $("btnPause").onclick(); quiet(raw); return; }
+  else if (/\b(stop|pause|hold on|quiet|shut up|stop talking|be quiet|silence|enough)\b/.test(t)) { if (/pause/.test(t) && !motionPaused) $("btnPause").onclick(); quiet(raw); return; }
   else if (/rewind|reverse|undo/.test(t)) { rewind(); say("Rewinding."); }
   else if (/mistake|go wrong|wrong way|what not to do/.test(t)) { showMistake(); said = "showing the mistake"; }
   else if (/fix it|that's wrong|correct it/.test(t)) { fixMistake(); say("Fixed."); }
@@ -1231,7 +1231,7 @@ async function command(raw) {
   heard(raw, said);
 }
 // ---- every spoken sentence, from the laptop mic or the phone mic, comes in here
-const QUICK = /^(?:s*(?:ok(?:ay)?|hey|spanner|please|and|now|just)[,s]*)*(close|stop|quiet|shut up|stop talking|be quiet|enough|pause|next|back|calibrate|reset|rewind|x-?ray|lights (?:on|off)|take it apart|put it back|zoom (?:in|out))/i;
+const QUICK = /^(?:\s*(?:ok(?:ay)?|hey|spanner|please|and|now|just)[,\s]*)*(close|stop|quiet|shut up|stop talking|be quiet|enough|pause|next|back|calibrate|reset|rewind|x-?ray|lights (?:on|off)|take it apart|put it back|zoom (?:in|out))\b/i;
 const echoWords = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/s+/).filter((w) => w.length > 2));
 const STOCK = /what do you want to fix|i'm spanner|i am spanner|show it to me|step by step|replacement parts or other keyboards|heads up|people often|searching live|taking it apart|putting it back|starting over|let me work out the fix|scan the code/i;
 /** Spanner hearing its own voice: its stock phrases, or most of the words are in what it is saying (or just said). */
@@ -1848,18 +1848,18 @@ function showPicker() {
   pickOpen = true; $("pick").style.display = "flex"; $("pick").style.opacity = 1; $("pickecho").textContent = ""; $("pickq").textContent = "What do you want to fix?"; $("pickhint").textContent = "listening · just say it";
   narrate("What do you want to fix?");
 }
-const FAULT_WORDS = /(keys?|keycaps?|space ?bar|enter|shift|backspace|switch(es)?|cable|chargw*|power|lights?|backlight|led|dead|broken|stuck|sticky|rattlw*|wobblw*|loose|missing|cracked|flickerw*|double|chatterw*|not (working|registering|typing)|doesn'?t|won'?t)/i;
+const FAULT_WORDS = /\b(keys?|keycaps?|space ?bar|enter|shift|backspace|switch(es)?|cable|charg\w*|power|lights?|backlight|led|dead|broken|stuck|sticky|rattl\w*|wobbl\w*|loose|missing|cracked|flicker\w*|double|chatter\w*|not (working|registering|typing)|doesn'?t|won'?t)\b/i;
 async function chooseDevice(dev, raw = "") {
   if (!pickOpen) return;
   pickOpen = false; $("pick").style.opacity = 0; setTimeout(() => { $("pick").style.display = "none"; }, 600);
-  if (dev !== "keyboard") { narrate("Opening the " + { iphone15: "iPhone 15", momentum4: "Momentum 4", ipad11: "iPad" }[dev] + "."); setTimeout(() => { location.href = `./device.html?d=${dev}&s=${encodeURIComponent(SESSION)}`; }, 900); return; }
+  if (dev !== "keyboard") { narrate("Opening the " + { iphone15: "iPhone 15", momentum4: "Momentum 4", ipad11: "iPad", plug13a: "plug" }[dev] + "."); setTimeout(() => { location.href = `./device.html?d=${dev}&s=${encodeURIComponent(SESSION)}`; }, 900); return; }
   if (!remoteOn && !camOn) { if (QP.get("camera") === "1") await toggleCamera(); else startRemote(); }
   if (FAULT_WORDS.test(raw)) return requestRepair(raw);   // they already said what's wrong: plan it now
   narrate("The keyboard. What's wrong with it?");
 }
 async function pickByVoice(raw) {   // free speech -> which device; Claude decides when the words aren't obvious
   const t = raw.toLowerCase();
-  let dev = /key ?board|rk ?61|keys?|keycap|space ?bar/.test(t) ? "keyboard" : /i ?phone/.test(t) ? "iphone15" : /head ?phone|momentum|sennheiser|ear ?phone/.test(t) ? "momentum4" : /i ?pad|tablet/.test(t) ? "ipad11" : null;
+  let dev = /\b(plug|fuse|fused|three[- ]?pin|3[- ]?pin|mains)\b/.test(t) ? "plug13a" : /key ?board|rk ?61|\bkeys?\b|keycap|space ?bar/.test(t) ? "keyboard" : /i ?phone/.test(t) ? "iphone15" : /head ?phone|momentum|sennheiser|ear ?phone/.test(t) ? "momentum4" : /i ?pad|tablet/.test(t) ? "ipad11" : null;
   $("pickecho").textContent = "“" + raw.trim() + "”";
   if (!dev) {
     try {

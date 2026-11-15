@@ -344,3 +344,47 @@ def test_shop_route_passes_the_session_and_the_clarifying_question(monkeypatch):
     monkeypatch.setattr(shop, "resolve", lambda text, session="": (got.update(text=text, session=session), shop.ShopTarget(action="clarify", question="Which part?"))[1])
     r = TestClient(create_app()).post("/coach/shop", json={"query": "order a part", "session": "abc"}).json()
     assert got == {"text": "order a part", "session": "abc"} and r == {"kind": "clarify", "say": "Which part?"}
+
+
+# ---------------------------------------------------------------- the UK 13 A plug (demo repair: swapping its fuse)
+PLUG_PARTS = [{"name": n, "label": n.replace("_", " ").title(), "desc": f"the {n}", "group": "plug"}
+              for n in ("body", "cover", "cover_screw", "fuse", "fuse_clips", "cord_grip", "live_terminal", "earth_pin")]
+
+
+def test_plug_is_a_known_device_with_its_faults():
+    from backend import device_planner as dp
+
+    assert "mains plug" in dp.DEVICE_NAMES["plug13a"]
+    assert dp.classify("plug13a", "the fuse in my plug has blown") == "fuse"
+    assert dp.classify("plug13a", "the cable is loose") == "cable"
+
+
+def test_a_plug_fuse_swap_is_not_refused_but_a_burnt_plug_is():
+    from backend import planner
+
+    for fine in ("the fuse in my plug has blown", "my kettle plug has no power, I think it's the fuse", "I need to swap a fuse in a mains plug"):
+        assert not planner._PLUG_STOP.search(fine), fine
+    for unsafe in ("the plug is scorched and melted", "it was sparking in the socket", "the plug is hot to the touch", "I got an electric shock"):
+        r = planner.plan_repair(unsafe, "s", "plug13a", PLUG_PARTS)
+        assert r["status"] == "refused", unsafe
+    # the keyboard rule is unchanged: "mains" alone is still refused there
+    assert planner.plan_repair("my keyboard is plugged into the mains and smoking", "s")["status"] == "refused"
+
+
+def test_plug_plan_uses_plug_parts_and_starts_by_unplugging(monkeypatch, tmp_path):
+    from backend import device_planner as dp
+
+    def fake(complaint, device, parts, refs, errors):
+        assert device == "plug13a"
+        return dp.DevPlan(status="ready", title="Plug fuse replacement", fault="blown fuse", diagnosis="The fuse has blown.",
+                          steps=[dp.DevStep(title="Unplug it", instruction="Pull the plug out of the wall.", expected_visual_state="The plug is in your hand, not in a socket."),
+                                 dp.DevStep(title="Open", instruction="Undo the cover screw and lift the cover.", expected_visual_state="The cover is off.", focus=["cover_screw", "cover"], view="apart"),
+                                 dp.DevStep(title="Swap the fuse", instruction="Pop out the old fuse and press in a new one of the same rating.", expected_visual_state="A new fuse sits in the clips.", focus=["fuse", "fuse_clips"]),
+                                 dp.DevStep(title="Close", instruction="Refit the cover and tighten the screw.", expected_visual_state="The cover is on.", focus=["cover"], view="together")])
+
+    monkeypatch.setattr(dp, "_generate_claude", fake)
+    monkeypatch.setattr(dp, "CACHE_DIR", tmp_path / "plans")
+    r = dp.plan_device_repair("the fuse in my plug blew", "plug13a", PLUG_PARTS)
+    assert r["status"] == "ready" and r["plan"]["device"] == "plug13a" and "mains plug" in r["plan"]["object"]
+    assert [c["part"] for c in r["plan"]["steps"][2]["scene3d"] if c.get("part")] == ["fuse", "fuse_clips"]
+    assert (tmp_path / "plans" / "device-plug13a-class-fuse.json").exists()

@@ -1,0 +1,133 @@
+{
+ "status": "ready",
+ "say": "",
+ "title": "UK 13 A plug fuse replacement",
+ "fault": "",
+ "diagnosis": "A blown cartridge fuse is the most common reason a plug suddenly goes dead. We'll unplug it, open the cover, swap in a new fuse of the right rating and check the wiring before closing it up.",
+ "difficulty": "easy",
+ "time_min": 10,
+ "tools_needed": [
+  "Cross-head (Phillips) screwdriver",
+  "Replacement BS 1362 cartridge fuse (3 A or 13 A to suit the appliance)",
+  "Small flat screwdriver or thin blade (optional, for levering the fuse)"
+ ],
+ "safety_notes": [
+  "Switch off at the wall and pull the plug out of the socket before touching anything. Never open a plug that is in a socket.",
+  "Only use a proper BS 1362 cartridge fuse of the right rating: never foil, wire or a nail.",
+  "If you see scorching, melting, cracks or damaged cable inside, stop: do not use the plug and replace it or call an electrician."
+ ],
+ "steps": [
+  {
+   "title": "Make it safe",
+   "instruction": "Switch off at the wall socket, then pull the plug fully out of the socket. Put it on a table with the back cover facing up.",
+   "expected_visual_state": "The plug is lying on a table, completely out of any socket, back cover facing the camera.",
+   "common_mistakes": [
+    "Opening the plug while it is still in the socket",
+    "Pulling on the cable instead of the plug body to unplug it"
+   ],
+   "focus": [
+    "body"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Undo the cover screw",
+   "instruction": "Unscrew the single central cover screw with a cross-head screwdriver. Keep the screw somewhere it can't roll away.",
+   "expected_visual_state": "The cover screw is removed and sitting on the table beside the plug.",
+   "common_mistakes": [
+    "Using a screwdriver that is too small and rounding the screw head",
+    "Losing the screw"
+   ],
+   "focus": [
+    "cover_screw",
+    "cover"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Lift off the cover",
+   "instruction": "Lift the back cover straight off to expose the terminals and fuse. Look inside for any burn marks or damage.",
+   "expected_visual_state": "The cover is off and the tray is open, showing the three terminals, the cord grip and the fuse in its clips.",
+   "common_mistakes": [
+    "Forcing the cover sideways instead of lifting it",
+    "Ignoring scorch marks or melted plastic inside, which means stop and replace the plug"
+   ],
+   "focus": [
+    "cover",
+    "body",
+    "fuse"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Remove the blown fuse",
+   "instruction": "Gently lever the cartridge fuse out of its clips using a small flat screwdriver or your fingernail. Check it against the replacement.",
+   "expected_visual_state": "The old fuse is out of the clips and held or lying beside the plug, with the empty fuse clips visible.",
+   "common_mistakes": [
+    "Bending the brass fuse clips by prying too hard",
+    "Levering against the live wire or terminal"
+   ],
+   "focus": [
+    "fuse",
+    "fuse_clips"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Fit the new fuse",
+   "instruction": "Choose a fuse of the right rating: 3 A for lamps, chargers and TVs, 13 A for heaters and kettles. Press it firmly into the clips until it snaps in.",
+   "expected_visual_state": "A new cartridge fuse sits level and snug in both fuse clips, with its rating printed on the end visible.",
+   "common_mistakes": [
+    "Fitting a higher rating than the appliance needs",
+    "Not pushing the fuse fully into both clips",
+    "Using foil or wire instead of a proper fuse"
+   ],
+   "focus": [
+    "fuse",
+    "fuse_clips"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Check wires and cord grip",
+   "instruction": "Check brown is at live, blue at neutral and green-and-yellow at earth, with no loose strands or bare copper outside the terminals. Make sure the cord grip clamps the grey outer sheath and its screws are tight.",
+   "expected_visual_state": "Each wire sits under its own terminal screw, no bare copper is visible outside the terminals, and the cord grip is clamped over the grey cable sheath.",
+   "common_mistakes": [
+    "Cord grip clamping the coloured wires instead of the outer sheath",
+    "Leaving a loose terminal screw",
+    "Leaving stray copper strands touching another terminal"
+   ],
+   "focus": [
+    "live_wire",
+    "neutral_wire",
+    "earth_wire",
+    "cord_grip",
+    "cable"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Close up and test",
+   "instruction": "Put the cover back on and tighten the cover screw. Only then plug it into the socket, switch on and check the appliance works.",
+   "expected_visual_state": "The cover is on and flush with the body, the screw is tight, and the appliance powers on when plugged in.",
+   "common_mistakes": [
+    "Plugging in before the cover is screwed on",
+    "Overtightening the screw and cracking the cover",
+    "Pinching the cable under the cover edge"
+   ],
+   "focus": [
+    "cover",
+    "cover_screw",
+    "body"
+   ],
+   "view": "together",
+   "source_ids": []
+  }
+ ]
+}

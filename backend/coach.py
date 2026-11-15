@@ -491,7 +491,7 @@ class DeviceReq(BaseModel):
 
 
 class DevicePick(BaseModel):
-    device: Literal["keyboard", "iphone15", "momentum4", "ipad11", "none"]
+    device: Literal["keyboard", "iphone15", "momentum4", "ipad11", "plug13a", "none"]
     say: str = Field(default="", description="If none: one short spoken sentence asking again, naming the four options.")
 
 
@@ -502,9 +502,9 @@ async def device(req: DeviceReq):
         resp = _client().beta.messages.parse(
             model=INTENT_MODEL, max_tokens=120, thinking=_thinking(INTENT_MODEL),
             system="The user was asked 'What do you want to fix?'. Map their words to one device: keyboard (a mechanical "
-                   "keyboard, RK61, a dead key, typing), iphone15 (phone, mobile, iPhone), momentum4 (headphones, "
-                   "Sennheiser, earcups, headset), ipad11 (iPad, tablet). If it is none of these or unclear, 'none' with "
-                   "a short friendly question naming the four options.",
+                   "keyboard, a dead key, typing), iphone15 (phone, mobile, iPhone), momentum4 (headphones, "
+                   "Sennheiser, earcups, headset), ipad11 (iPad, tablet), plug13a (a three-pin mains plug, a plug fuse, "
+                   "a blown fuse). If it is none of these or unclear, 'none' with a short friendly question naming the five options.",
             messages=[{"role": "user", "content": req.text}], output_format=DevicePick)
         return resp.parsed_output or DevicePick(device="none")
     return (await asyncio.to_thread(run)).model_dump()
@@ -651,7 +651,7 @@ class Turn(BaseModel):
                     "take_apart", "reassemble", "xray", "zoom_in", "zoom_out", "show_mistake", "specs", "sources",
                     "shop_parts", "shop_keyboards"] = "none"
     part: str = Field(default="", description="For show_part: socket, switch, keycap, pcb, plate, case, battery, usb, led, stabilizer, spring")
-    device: Literal["", "keyboard", "iphone15", "momentum4", "ipad11"] = ""
+    device: Literal["", "keyboard", "iphone15", "momentum4", "ipad11", "plug13a"] = ""
     complaint: str = Field(default="", description="For plan_repair: the fault, in the person's words.")
 
 
