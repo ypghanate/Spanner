@@ -46,6 +46,7 @@ class Settings:
     eleven_tts_model: str = "eleven_flash_v2_5"
     eleven_stt_model: str = "scribe_v1"            # one-shot /audio fallback
     eleven_stt_live_model: str = "scribe_v2_realtime"
+    eleven_tts_speed: float = 1.15                  # ElevenLabs allows 0.7-1.2: brisk, not chipmunk
     eleven_tts_format: str = "mp3_44100_64"         # cached files and live stream
     live_sample_rate: int = 16000                   # phone mic PCM16 mono
     live_vad_silence_s: float = 0.7                 # silence that ends an utterance
