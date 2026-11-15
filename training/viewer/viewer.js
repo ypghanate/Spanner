@@ -1097,32 +1097,54 @@ function reportSpeaking(ms) {
   const now = performance.now(); if (ms > 0 && now - lastSpeakReport < 300) return; lastSpeakReport = now;
   fetch(API + "/coach/speaking", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: SESSION, seconds: ms / 1000 }) }).catch(() => {});
 }
+// Spanner never cuts itself off. A line asked for while another is playing waits its turn (at most 3 wait; a quick "Mm-hm" is
+// dropped instead of queued). Only the person can stop it: stop, the palm, or speaking over it (stopSpeech). Every way a clip can
+// end (finished, error, stall) goes through speechDone, and a watchdog frees the queue if a clip never reports back.
+const speechQ = []; let playing = false, playGuard = 0;
+const FILLER_SET = new Set(["Mm-hm.", "Okay.", "Let me see.", "Right."]);
+const isFiller = (t) => FILLER_SET.has((t || "").trim());
 function stopSpeech() {
-  reportSpeaking(0);
+  reportSpeaking(0); speechQ.length = 0; playing = false; clearTimeout(playGuard);
   if ("speechSynthesis" in window) speechSynthesis.cancel();
   if (sayAudio) { try { sayAudio.pause(); } catch { /* already gone */ } sayAudio = null; }
   speakingUntil = 0;
 }
+function speechDone() {
+  if (!playing) return;
+  playing = false; clearTimeout(playGuard); sayAudio = null;
+  const next = speechQ.shift();
+  if (!next) { speakingUntil = performance.now() + 400; reportSpeaking(0); return; }
+  setTimeout(() => { if (!playing) speakNow(next.text, next.show); else speechQ.unshift(next); }, 220);
+}
 function browserSay(text) {
-  if (!("speechSynthesis" in window)) { speakingUntil = 0; return; }
+  if (!("speechSynthesis" in window)) { speakingUntil = 0; return speechDone(); }
   const u = new SpeechSynthesisUtterance(text); if (voice) u.voice = voice; u.rate = 1.2; u.pitch = 0.92;
-  const done = () => { speakingUntil = performance.now() + 400; reportSpeaking(0); };
-  u.onend = done; u.onerror = done;
+  u.onend = u.onerror = () => speechDone();
   speakingUntil = performance.now() + speechMs(text); currentSpeech = text; reportSpeaking(speechMs(text)); speechSynthesis.speak(u);
 }
-function narrate(text, show = true) {
-  if (!text) return;
+function speakNow(text, show) {
   if (show) caption(text);
-  if (!voiceOn || INSTANT) return;
-  stopSpeech();
+  playing = true; clearTimeout(playGuard); playGuard = setTimeout(() => speechDone(), speechMs(text) + 9000);
   if (!elevenOK) return browserSay(text);
   const a = new Audio(API + "/coach/say?text=" + encodeURIComponent(text));
   sayAudio = a; speakingUntil = performance.now() + speechMs(text) + 4000; currentSpeech = text; reportSpeaking(speechMs(text) + 1000);
   const fallback = () => { if (sayAudio === a) { sayAudio = null; browserSay(text); } };
-  a.onended = () => { if (sayAudio === a) { sayAudio = null; speakingUntil = performance.now() + 400; reportSpeaking(0); } };
+  a.onended = () => { if (sayAudio === a) speechDone(); };
   a.onerror = a.onstalled = a.onabort = fallback;
   setTimeout(() => { if (sayAudio === a && a.paused && a.currentTime === 0) fallback(); }, 5000);   // never started playing
   a.play().catch(fallback);
+}
+function narrate(text, show = true) {
+  if (!text) return;
+  if (!voiceOn || INSTANT) { if (show) caption(text); return; }
+  if (playing || speechQ.length) {
+    if (isFiller(text)) return;                                              // a filler never waits behind real speech
+    if (text === currentSpeech || speechQ.some((q) => q.text === text)) return;   // already being said, or already waiting
+    for (let i = speechQ.length - 1; i >= 0; i--) if (isFiller(speechQ[i].text)) speechQ.splice(i, 1);
+    speechQ.push({ text, show }); while (speechQ.length > 3) speechQ.shift();
+    return;
+  }
+  speakNow(text, show);
 }
 $("voice").onclick = () => { voiceOn = !voiceOn; $("voice").classList.toggle("on", voiceOn); if (voiceOn) narrate("Voice on. I'm Spanner. Say next, take it apart, or show me the socket."); else stopSpeech(); };
 // the voice pill in the guidance card: who is talking right now
@@ -1132,7 +1154,7 @@ setInterval(() => {
   pill.className = st; $("captState").textContent = sp ? "Spanner is speaking" : micOn ? (gateOpen() ? "Listening to you" : "Say “Spanner …”") : voiceOn ? "Voice on" : "Voice off · tap to wake";
 }, 250);
 $("captPill").onclick = () => { if (performance.now() < speakingUntil) stopSpeech(); else if (!micOn && !phoneMic) $("mic").onclick(); };
-$("say").onclick = () => { const s = plan.steps[stepIdx]; if (!s) return; if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); } narrate(`Step ${s.index}. ${s.instruction}`); };
+$("say").onclick = () => { const s = plan.steps[stepIdx]; if (!s) return; if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); } stopSpeech(); narrate(`Step ${s.index}. ${s.instruction}`); };
 
 const PART_WORDS = [[/socket/, () => `socket_${brokenKey}`], [/spring|inside the switch|open the switch/, () => `switch_${brokenKey}`], [/spare|new switch|replacement/, () => "switch_spare"],
   [/switch/, () => `switch_${brokenKey}`], [/keycap|key cap|\bcap\b/, () => `keycap_${brokenKey}`], [/pcb|board|circuit/, () => "pcb"], [/plate/, () => "plate"],
@@ -1661,7 +1683,7 @@ function closePicker() { if (!pickOpen) return; pickOpen = false; $("pick").styl
 async function onReply(r) {
   if (!r.addressed || isEcho(r.text, 6000)) { heard(r.text, "not for me"); return; }
   heard(r.text, r.action === "none" ? "talking" : r.action.replace(/_/g, " "));
-  if (r.action !== "stop" && performance.now() < speakingUntil) stopSpeech();
+  if (r.action !== "stop" && performance.now() < speakingUntil && !isFiller(currentSpeech)) stopSpeech();
   const viaCommand = { take_apart: "take it apart", reassemble: "put it back together", xray: "x-ray", zoom_in: "zoom in",
     zoom_out: "zoom out", show_mistake: "show me the mistake", specs: "specs", sources: "sources" };
   switch (r.action) {
@@ -2013,6 +2035,7 @@ async function pickByVoice(raw) {   // free speech -> which device; Claude decid
 }
 if (QP.get("pick") === "1" && INSTANT) { pickOpen = true; $("pick").style.display = "flex"; }
 if (QP.get("kb")) fetchLayout();
+if (QP.get("debug")) window.__spanner = { narrate, stopSpeech, speech: () => ({ playing, queue: speechQ.map((x) => x.text), current: currentSpeech }) };   // test hook
 if (QP.get("twin")) { objectFlow.on = true; setObjectMode(true); twinFromGlb(QP.get("twin")); }   // test hook: ?twin=/data/objects/... shows any mesh
 if (QP.get("say")) { const seq = QP.get("say").split("|"); let i = 0; const go = () => { if (i < seq.length) { hearSpeech(seq[i++]); setTimeout(go, 2500); } }; setTimeout(go, 5000); }   // test hook: ?say=a|b|c feeds heard sentences
 // wake: browsers need one gesture before mic + speech; after that it's voice only

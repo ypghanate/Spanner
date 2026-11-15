@@ -978,6 +978,10 @@ def _converse(text: str, session: str) -> Turn:
         print(f"converse failed: {e}", flush=True)
         return Turn(addressed=True, say="Sorry, I didn't catch that. Say it again?")
     turn.say = _tighten(turn.say, 18) if turn.action == "none" else _tighten(turn.say, 6)
+    if turn.say:               # never narrate a lookup ("let me consult the manual"), never repeat a point in new words
+        from .speech import clean_line, said_so_far
+
+        turn.say = clean_line(turn.say, said_so_far(session, hist))
     if turn.addressed:        # remember the exchange (plain text, so later turns don't carry old state)
         hist += [{"role": "user", "content": text},
                  {"role": "assistant", "content": turn.say or f"({turn.action.replace('_', ' ')})"}]

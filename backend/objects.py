@@ -676,9 +676,15 @@ class Job:
                 system=(f"You are Spanner, a repair coach on a voice call. The person is fixing a {name} ({self.intake.fault}). "
                         "Reply with ONE or two short spoken sentences: first react to what they just said like a good technician would "
                         "(what it suggests, briefly), never a bare 'got it'. " + goal + " Never repeat a sentence you already said. "
+                        "Never say you are checking, consulting, reading or looking up a manual, guide or instructions, and never announce what "
+                        "you are about to look up: the screen already shows the research. Do not make a point you already made, "
+                        "even in other words. "
                         "No lists, no markdown.\n\nWhat you already said:\n" + (hist or "(nothing yet)")),
                 messages=[{"role": "user", "content": answer}])
             out = "".join(b.text for b in r.content if b.type == "text").strip()
+            from .speech import clean_line
+
+            out = clean_line(out, self.said)       # no "let me consult the manual", no old point in new words
             if out:
                 return out
         except Exception as e:
