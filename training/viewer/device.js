@@ -354,6 +354,8 @@ function plug13a() {
 
 const DEVICES = { iphone15: iphone15, ipad11: ipad11, momentum4: momentum4, plug13a: plug13a };
 const d = (QP.get("d") || "iphone15").toLowerCase();
+// the example under the "say what is wrong" prompt is a fault this device can really have (a plug has no screen)
+const EXAMPLE_FAULT = { iphone15: "the screen is cracked", ipad11: "the battery drains too fast", momentum4: "the ear cushion is torn", plug13a: "the fuse in my plug has blown" };
 const device = (DEVICES[d] || iphone15)();
 document.title = `Spanner · ${device.name}`; $("sessTitle").textContent = device.name + " repair"; $("sessSub").textContent = device.name + " · guided repair"; $("sceneTitle").textContent = device.name;
 
@@ -577,7 +579,7 @@ function renderCard() {
   if (!plan) {
     $("sn").textContent = "READY"; $("head").innerHTML = "<span>What needs</span><span>fixing?</span>";
     $("si").textContent = `Just tell me what’s wrong with your ${device.name}.`; $("helper").textContent = device.fact;
-    $("ctaLabel").textContent = "Say what’s wrong"; $("foot").textContent = "For example: “the screen is cracked”."; $("sceneTitle").textContent = device.name;
+    $("ctaLabel").textContent = "Say what’s wrong"; $("foot").textContent = `For example: “${EXAMPLE_FAULT[d] || "the screen is cracked"}”.`; $("sceneTitle").textContent = device.name;
   } else if (finishedDev) {
     $("sn").textContent = "ALL DONE"; $("head").innerHTML = "<span>Repair</span><span>complete.</span>"; $("si").textContent = "Test it before you rely on it.";
     $("helper").textContent = "Say “start over” to run the repair again."; $("ctaLabel").textContent = "Say “start over”"; $("foot").textContent = "The session stays open until you close it."; $("sceneTitle").textContent = `${plan.title || device.name} · done`;

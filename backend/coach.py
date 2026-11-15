@@ -340,25 +340,8 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
         on_keyboard = _demo(session)["plan"].get("device", "keyboard") == "keyboard"
         data, crop = await asyncio.to_thread(_keyboard_crop, data) if on_keyboard else (data, {"cropped": False})
         view = await asyncio.to_thread(_ask, base64.standard_b64encode(data).decode(), current_step, session)
-        timing["ask"] = round((time.perf_counter() - t1) * 1000)
-        if view.keyboard_visible or crop.get("cropped"):      # Claude sees a keyboard, or the detector found one
-            _start_layout_read(session, data)        # the first good frame of the keyboard: read its layout in the background
-        gap_suspected = bool(view.missing_keys or view.gap_left or view.gap_right or view.gap_x is not None)
-        first_pass = resolve_gap(view)               # a layout-validated read (both neighbours in one row) counts
-        if first_pass and (not confirmed or first_pass == _gap_cache[session]["key"]):
-            _remember_gap(session, first_pass)       # a confirmed key is only ever changed by the zoomed second look
-        cached = _cached_gap(session, first_pass) if gap_suspected else None
-        verified = None
-        if gap_suspected and not cached and not _verify_resting(session):
-            t2 = time.perf_counter()
-            verified = await asyncio.to_thread(verify_gap, data, view)
-            timing["verify"] = round((time.perf_counter() - t2) * 1000)
-            if verified:
-                _remember_gap(session, verified)
-            else:
-                _verify_missed(session)
-        elif gap_suspected and not cached:
-            crop["verify_resting"] = True
+        gap_suspected = on_keyboard and bool(view.missing_keys or view.gap_left or view.gap_right or view.gap_x is not None)
+        verified = await asyncio.to_thread(verify_gap, data, view) if gap_suspected else None
     finally:
         _frame_inflight.discard(session)
     if verified:
@@ -832,8 +815,9 @@ async def generate_plan(req: PlanReq):
         parts = dp.get("parts") if dp.get("device") == req.device else None
         out = await asyncio.to_thread(plan_repair, req.complaint, req.session, req.device, parts)
     except Exception as e:                       # API down, bad key...: keep the session usable on the canned plan
-        out = {"status": "fallback", "say": "I couldn't plan that just now, so here is the standard switch repair.",
-               "errors": [f"{type(e).__name__}: {e}"]}
+        say = ("I couldn't plan that just now, so here is the standard switch repair." if req.device == "keyboard"
+               else "I couldn't plan that just now. Tell me again what is wrong and I'll try once more.")     # never a keyboard repair for a plug
+        out = {"status": "fallback", "say": say, "errors": [f"{type(e).__name__}: {e}"]}
     if out["status"] == "ready":
         _plans[req.session] = {"broken_key": out.get("broken_key"), "plan": out["plan"], "parts_card": out.get("parts_card"),
                                "plan_id": out["plan_id"]}
