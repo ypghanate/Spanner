@@ -89,7 +89,7 @@ async def mock_understand(jpeg: bytes, frame_id: str, detections: list[Detection
 
 # --- P4 mocks (brain, store) ------------------------------------------------
 
-_SAFETY_RX = re.compile(r"\b(gas|mains|230\s?v|240\s?v|110\s?v|high voltage|live wire|boiler)\b", re.I)
+from backend.brain.safety import _STOP as _SAFETY_RX   # same rule as the real stage: mains only matters while connected
 
 
 async def mock_safety_check(report: SituationReport, session: Any) -> BrainResponse | None:

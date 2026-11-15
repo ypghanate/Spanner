@@ -6,8 +6,30 @@ from typing import Any
 
 from backend.contracts import Alert, BrainResponse, SituationReport
 
-_STOP = re.compile(r"\b(gas|mains|230\s?v|240\s?v|110\s?v|high[- ]voltage|live wire|boiler|"
+_HARD = re.compile(r"\b(gas|high[- ]voltage|live wire|boiler|"
                    r"lithium (?:battery )?(?:swelling|swollen|puncture)|swollen battery)\b", re.I)
+# Mains power is only a reason to stop while the thing is connected to it. A plug that is out of the wall (the usual
+# case when someone is fixing its fuse) is a normal home repair: the plan's first step is to make sure it stays that way.
+_MAINS = re.compile(r"\b(mains|230\s?v|240\s?v|110\s?v)\b", re.I)
+_CONNECTED = re.compile(r"(?<!un)(?<!not )(?<!n't )\b(plugged in|plugged into|in the (wall )?socket|switched on|turned on|powered( on| up)?|live)\b", re.I)
+_DISCONNECTED = re.compile(r"\b(unplugged|un-plugged|not plugged( in)?|isn'?t plugged( in)?|disconnected|switched off|turned off|out of the (wall|socket)|off at the wall)\b", re.I)
+
+
+class _Stop:
+    """`_STOP.search(text)`: a match when the text describes something unsafe to repair at home, else None."""
+
+    @staticmethod
+    def search(text: str):
+        m = _HARD.search(text)
+        if m:
+            return m
+        mains = _MAINS.search(text)
+        if mains and _CONNECTED.search(text) and not _DISCONNECTED.search(text):
+            return mains
+        return None
+
+
+_STOP = _Stop()
 
 
 async def check(report: SituationReport, session: Any) -> BrainResponse | None:
