@@ -64,6 +64,33 @@ class CoachView(BaseModel):
     gap_y: float | None = Field(default=None, description="If there is a gap: its centre, as a fraction of the image height (0 = top, 1 = bottom). null if none.")
 
 
+def _tighten(text: str, max_words: int = 14) -> str:
+    """Spoken lines are short: the first sentence only, cut at max_words."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    first = re.split(r"(?<=[.!?])\s+", text, maxsplit=1)[0]
+    words = first.split()
+    return first if len(words) <= max_words else " ".join(words[:max_words]).rstrip(",;:") + "."
+
+
+def _reconcile(view: "CoachView") -> "CoachView":
+    """One story: what the screen shows (mistake / done) and what is spoken must agree, and both screens get the same line."""
+    if not view.object_visible:
+        view.mistake, view.say = "", ""
+        return view
+    if view.mistake:                                   # a mistake is never also 'done', and the line is about the mistake
+        if view.step_status == "done":
+            view.step_status = "in_progress"
+        say = _tighten(view.say) or _tighten(view.mistake)
+        view.say = say if say.lower().startswith(("careful", "stop", "wait")) else "Careful. " + say
+    elif view.step_status == "done":
+        view.say = _tighten(view.say) or "Nice. Next step."
+    else:
+        view.say = ""                                  # nothing to praise or warn about: stay quiet instead of chatting
+    return view
+
+
 @lru_cache(maxsize=1)
 def _default_demo() -> dict:
     path = MODEL_DIR / "demo_plan.json"
@@ -382,7 +409,7 @@ def _focus(demo: dict, current: int) -> str:
         "few words. Empty if nothing is wrong.",
         f"3. step_index: {current}, unless the frame clearly shows a LATER step's state (then that step). Never go back "
         "because of an unclear frame.",
-        "4. say: if done, one short line of praise; if a mistake, what to do instead; otherwise empty.",
+        "4. say: at most 10 words. If done, a quick 'Nice.'; if a mistake, what to do instead; otherwise empty. It must agree with step_status and mistake.",
     ]
     return "\n".join(lines)
 
@@ -415,7 +442,7 @@ def _ask(image_b64: str, current_step: int, session: str = "", model: str | None
     elif out.missing_keys and (out.gap_left or out.gap_right):
         out.missing_keys = []                      # neighbours given but inconsistent with the layout: don't trust the guess
     out.confidence = max(0.0, min(out.confidence, 1.0))
-    return out
+    return _reconcile(out)
 
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
@@ -527,6 +554,9 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
     out = {**view.model_dump(), "latency_ms": latency, "model": crop.get("model", COACH_MODEL), "ts": time.time(), "crop": crop,
            "layout_id": (_layouts.get(session) or {}).get("id")}
     _latest.setdefault(session, {})["view"] = out
+    if out.get("say"):
+        from .voice import tts
+        tts.start(out["say"])            # audio starts generating now: the laptop and the phone both fetch the same file
     return out
 
 
@@ -547,8 +577,8 @@ async def ask(q: Ask):
     def run() -> str:
         resp = _client().messages.create(
             model=FAST_MODEL, max_tokens=250, thinking=_thinking(FAST_MODEL),
-            system=[{"type": "text", "text": ctx + "\n\nNow answer the user's spoken question in at most 2 short, "
-                     "concrete spoken sentences. No lists, no markdown.", "cache_control": {"type": "ephemeral"}}],
+            system=[{"type": "text", "text": ctx + "\n\nNow answer the user's spoken question in ONE short, "
+                     "concrete spoken sentence (under 15 words). No lists, no markdown.", "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": q.question}])
         return "".join(b.text for b in resp.content if b.type == "text").strip()
 
@@ -773,12 +803,47 @@ class UtteranceReq(BaseModel):
     filename: str = "clip.m4a"
 
 
+_eleven_stt_ok = True        # flips to False the first time the key turns out not to have the speech-to-text permission
+
+
+def _stt_fal(audio: bytes, filename: str) -> str:
+    """fal's Wizper (Whisper v3): ~2 s for a short clip, no permission to ask anybody for."""
+    import fal_client
+
+    ext = Path(filename).suffix.lower() or ".m4a"
+    mime = {".m4a": "audio/mp4", ".mp4": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".webm": "audio/webm", ".ogg": "audio/ogg"}.get(ext, "audio/mp4")
+    # Inline (data URI), not fal_client.upload: measured 15 Nov on this network, upload + run took 2.7-22 s (median 9.6 s), inline took 0.7 s every time
+    url = f"data:{mime};base64,{base64.standard_b64encode(audio).decode()}"
+    r = fal_client.run("fal-ai/wizper", arguments={"audio_url": url, "task": "transcribe", "language": "en"})
+    return (r.get("text") or "").strip()
+
+
+async def _transcribe(audio: bytes, filename: str) -> tuple[str, str, int]:
+    """(text, engine, ms): ElevenLabs Scribe while the key allows it, fal Wizper otherwise."""
+    global _eleven_stt_ok
+    from .voice import stt
+
+    t0 = time.perf_counter()
+    if _eleven_stt_ok:
+        try:
+            tr = await stt.transcribe(audio, filename)
+            return tr.text.strip(), "elevenlabs", round((time.perf_counter() - t0) * 1000)
+        except Exception as e:
+            if "permission" in str(e) or "speech_to_text" in str(e):
+                _eleven_stt_ok = False
+                print("ElevenLabs key has no speech-to-text permission: using fal Wizper from now on", flush=True)
+            elif not os.getenv("FAL_KEY"):
+                raise
+    if not os.getenv("FAL_KEY"):
+        raise HTTPException(502, "no speech-to-text available (ElevenLabs permission missing and no FAL_KEY)")
+    text = await asyncio.to_thread(_stt_fal, audio, filename)
+    return text, "fal-wizper", round((time.perf_counter() - t0) * 1000)
+
+
 @router.post("/utterance")
 async def utterance(req: UtteranceReq):
     """Speech from the phone's microphone (one m4a clip per utterance). It is transcribed here (ElevenLabs Scribe) and
     handed to the laptop viewer through /coach/latest, so the phone listens and the laptop speaks back."""
-    from .voice import stt
-
     try:
         audio = base64.b64decode(req.audio_b64, validate=False)
     except Exception:
@@ -786,12 +851,14 @@ async def utterance(req: UtteranceReq):
     if not audio or len(audio) > 8_000_000:
         raise HTTPException(400, "empty or too long")
     try:
-        tr = await stt.transcribe(audio, req.filename)
+        text, engine, stt_ms = await _transcribe(audio, req.filename)
+    except HTTPException:
+        raise
     except Exception as e:
-        if "speech_to_text" in str(e) and "permission" in str(e):
-            raise HTTPException(502, "the ElevenLabs key needs the Speech to Text permission turned on")
         raise HTTPException(502, f"couldn't transcribe: {str(e)[:200]}")
-    text = tr.text.strip()
+    from training.feedback import record_stage_timing
+
+    record_stage_timing(req.session, "stt_" + engine.replace("-", "_"), stt_ms, bool(text))
     if not text:
         return {"text": ""}
     turn_id = f"{time.time():.3f}"
@@ -799,7 +866,7 @@ async def utterance(req: UtteranceReq):
     # Straight on to the reply (no waiting for the laptop to notice the words): what to do + what to say, in one go.
     turn = _quick_turn(text, req.session) or await asyncio.to_thread(_converse, text, req.session)
     _latest[req.session]["reply"] = {**turn.model_dump(), "text": text, "id": turn_id, "ts": time.time()}
-    return {"text": text, "reply": turn.model_dump()}
+    return {"text": text, "reply": turn.model_dump(), "stt": {"engine": engine, "ms": stt_ms}}
 
 
 # ---------------------------------------------------------------- conversation (phone mic -> one reply + action)
@@ -825,6 +892,23 @@ class ViewState(BaseModel):
 _view_state: dict[str, ViewState] = {}
 _history: dict[str, list[dict]] = {}      # recent conversation per session (user / assistant turns)
 CONVERSE_MODEL = os.getenv("CONVERSE_MODEL", "claude-haiku-5-5")
+
+
+class ConverseReq(BaseModel):
+    session: str
+    text: str
+
+
+@router.post("/converse")
+async def converse(req: ConverseReq):
+    """The laptop's version of a phone turn: words in, {addressed, action, say} out in ONE model call."""
+    t0 = time.perf_counter()
+    turn = _quick_turn(req.text, req.session) or await asyncio.to_thread(_converse, req.text, req.session)
+    ms = round((time.perf_counter() - t0) * 1000)
+    from training.feedback import record_stage_timing
+
+    record_stage_timing(req.session, "converse", ms, True)
+    return {**turn.model_dump(), "text": req.text, "id": f"{time.time():.3f}", "ms": ms}
 
 
 @router.post("/state")
@@ -869,7 +953,7 @@ def _context(session: str) -> str:
     st = _view_state.get(session, ViewState(session=session))
     lines = [f"Screen: {st.screen}." + (f" Step {st.step} of {st.total} is on screen." if st.screen == "step" else "")]
     v = _latest.get(session, {}).get("view")
-    if v and v.get("what_i_see"):
+    if v and v.get("what_i_see") and time.time() - v["ts"] < 12:      # older than that it is a guess about the past
         lines.append(f"Camera ({max(0, round(time.time() - v['ts']))} s ago): {v['what_i_see']}"
                      + (f" Possible mistake: {v['mistake']}" if v.get("mistake") else ""))
     return "\n".join(lines)
@@ -885,7 +969,7 @@ def _converse(text: str, session: str) -> Turn:
     messages = hist[-8:] + [{"role": "user", "content": f"[live state]\n{_context(session)}\n\n[they said] {text}"}]
     try:
         resp = _client().beta.messages.parse(
-            model=CONVERSE_MODEL, max_tokens=400, thinking=_thinking(CONVERSE_MODEL), output_config={"effort": "low"},
+            model=CONVERSE_MODEL, max_tokens=150, thinking=_thinking(CONVERSE_MODEL), output_config={"effort": "low"},
             system=[{"type": "text", "text": _converse_prompt()},
                     {"type": "text", "text": _plan_text(session), "cache_control": {"type": "ephemeral"}}],
             messages=messages, output_format=Turn)
@@ -893,6 +977,7 @@ def _converse(text: str, session: str) -> Turn:
     except Exception as e:
         print(f"converse failed: {e}", flush=True)
         return Turn(addressed=True, say="Sorry, I didn't catch that. Say it again?")
+    turn.say = _tighten(turn.say, 18) if turn.action == "none" else _tighten(turn.say, 6)
     if turn.addressed:        # remember the exchange (plain text, so later turns don't carry old state)
         hist += [{"role": "user", "content": text},
                  {"role": "assistant", "content": turn.say or f"({turn.action.replace('_', ' ')})"}]
@@ -974,7 +1059,14 @@ async def say(text: str):
     text = text.strip()[:600]
     if not text:
         raise HTTPException(400, "empty text")
-    return StreamingResponse(tts.stream(text), media_type="audio/mpeg",
+    from fastapi.responses import FileResponse
+
+    name = tts.start(text)
+    path = tts.cache_dir() / name if name else None
+    if path and path.exists():
+        return FileResponse(path, media_type="audio/mpeg", headers={"Cache-Control": "public, max-age=86400"})
+    prog = await tts.progressive(name) if name else None      # the same generation the frame already started
+    return StreamingResponse(prog if prog is not None else tts.stream(text), media_type="audio/mpeg",
                              headers={"Cache-Control": "public, max-age=86400"})
 
 
@@ -1011,6 +1103,14 @@ def mount(app) -> None:
         from backend.vision import detect as det
 
         asyncio.get_running_loop().run_in_executor(None, det.warm)
+
+    @app.on_event("startup")
+    async def _warm_voice() -> None:
+        from .voice import tts
+
+        if tts.available():
+            for line in ("Mm-hm.", "Okay.", "Let me see.", "Right.", "One moment."):
+                tts.start(line)          # generated once, then served from the disk cache in ~50 ms
 
     @app.on_event("startup")
     async def _warm_plans() -> None:   # every fault class planned before anyone asks: planning becomes instant

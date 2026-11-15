@@ -1089,7 +1089,7 @@ let elevenOK = false, speakingUntil = 0, sayAudio = null, currentSpeech = "";   
 fetchJson(API + "/coach/health", 4000).then((d) => { elevenOK = !!d.tts; }).catch(() => {});
 // While Spanner talks, the mic ignores what it hears (it would hear Spanner). That window must always end: the
 // estimate below is based on the text length, and every way a clip can stop (end, error, stall, abort) closes it.
-const speechMs = (text) => Math.min(45000, 2500 + text.split(/\s+/).length * 450);
+const speechMs = (text) => Math.min(45000, 1500 + text.split(/\s+/).length * 330);
 // tell the phone how long we'll be talking, so it pauses its microphone (it would only record our own voice)
 let lastSpeakReport = 0;
 function reportSpeaking(ms) {
@@ -1105,7 +1105,7 @@ function stopSpeech() {
 }
 function browserSay(text) {
   if (!("speechSynthesis" in window)) { speakingUntil = 0; return; }
-  const u = new SpeechSynthesisUtterance(text); if (voice) u.voice = voice; u.rate = 1.03; u.pitch = 0.92;
+  const u = new SpeechSynthesisUtterance(text); if (voice) u.voice = voice; u.rate = 1.2; u.pitch = 0.92;
   const done = () => { speakingUntil = performance.now() + 400; reportSpeaking(0); };
   u.onend = done; u.onerror = done;
   speakingUntil = performance.now() + speechMs(text); currentSpeech = text; reportSpeaking(speechMs(text)); speechSynthesis.speak(u);
@@ -1129,7 +1129,7 @@ $("voice").onclick = () => { voiceOn = !voiceOn; $("voice").classList.toggle("on
 setInterval(() => {
   const sp = performance.now() < speakingUntil, st = sp ? "speaking" : micOn ? "listening" : "idle", pill = $("captPill");
   if (pill.dataset.s === st + voiceOn) return; pill.dataset.s = st + voiceOn;
-  pill.className = st; $("captState").textContent = sp ? "Spanner is speaking" : micOn ? "Listening to you" : voiceOn ? "Voice on" : "Voice off · tap to wake";
+  pill.className = st; $("captState").textContent = sp ? "Spanner is speaking" : micOn ? (gateOpen() ? "Listening to you" : "Say “Spanner …”") : voiceOn ? "Voice on" : "Voice off · tap to wake";
 }, 250);
 $("captPill").onclick = () => { if (performance.now() < speakingUntil) stopSpeech(); else if (!micOn && !phoneMic) $("mic").onclick(); };
 $("say").onclick = () => { const s = plan.steps[stepIdx]; if (!s) return; if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); } narrate(`Step ${s.index}. ${s.instruction}`); };
@@ -1198,7 +1198,7 @@ async function command(raw) {
   else if (/step (\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven)/.test(t)) {
     const words = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven"], m = /step (\d+|\w+)/.exec(t);
     const n = parseInt(m[1]) || words.indexOf(m[1]) + 1; if (n > 0) { stopTour(); goStep(n - 1); said = `step ${n}`; }
-  } else { said = "…"; heard(raw, "thinking"); return intentFallback(raw); }
+  } else { said = "…"; heard(raw, "thinking"); return converseTurn(raw); }
   heard(raw, said);
 }
 // ---- every spoken sentence, from the laptop mic or the phone mic, comes in here
@@ -1216,6 +1216,22 @@ function isEcho(text, graceMs = 1500) {
 let lastActed = { text: "", t: 0 };
 /** While Spanner talks only a clean short command gets through (barge-in); its own voice is dropped.
  *  graceMs: how long after it stops talking an echo can still arrive (the phone's clips are transcribed a few s later). */
+// ---- whose voice? In a loud room the mic hears everyone, and the person pitching is talking to the audience, not to Spanner.
+// Spanner reacts to: its name ("Spanner, next"), an answer within ATTN_MS of its own voice or of the last accepted command,
+// and everything while the question page or a diagnostic question is open. Turn it off with ?gate=0 in a quiet room.
+const ATTN_MS = 10000, GATE_ON = QP.get("gate") !== "0";
+let attnUntil = performance.now() + (QP.get("attn") === "0" ? 0 : 60000);   // the first minute after opening is open: the question, the pairing
+const WAKE = /^\W*(?:(?:hey|ok|okay|hi)[ ,]+)?(?:spanner|spaner|spannar|spana|spenner|spanna)\b[ ,.:!?-]*/i;
+const gateOpen = () => !GATE_ON || pickOpen || objectFlow.asking || performance.now() < Math.max(attnUntil, speakingUntil ? speakingUntil + ATTN_MS : 0);
+function attentionGate(text) {
+  const m = text.match(WAKE);
+  if (m) return { ok: true, text: text.slice(m[0].length).trim(), named: true };
+  if (/\b(spanner|spaner|spannar)\b/i.test(text)) return { ok: true, text, named: true };
+  return { ok: gateOpen(), text };
+}
+const FILLERS = ["Mm-hm.", "Okay.", "Let me see.", "Right."]; let lastFiller = -1;
+const nextFiller = () => { let i; do { i = Math.floor(Math.random() * FILLERS.length); } while (i === lastFiller); lastFiller = i; return FILLERS[i]; };
+
 /** The mic often hears Spanner's own line followed by the person's words ("okay the airpods 3 I'm finding it... one of them is
  *  quieter"): drop the part that is Spanner's sentence and keep what the person added. */
 function stripOwnVoice(text) {
@@ -1238,12 +1254,17 @@ function hearSpeech(text, graceMs = 1500) {
   if (!text || !text.trim()) return;
   if (now < speakingUntil + graceMs) { const cut = stripOwnVoice(text); if (cut !== text) { heard(text, cut ? "→ " + cut : "that was me"); text = cut; } if (!text) return; }
   const key = text.toLowerCase().replace(/[^a-z0-9' ]/g, " ").replace(/\s+/g, " ").trim();   // "Next." and "next" are one command
-  if (key === lastActed.text && now - lastActed.t < 4000) return;   // the final of a command already run (or the phone and the laptop both heard it)
+  if (now - lastActed.t < 4000 && (key === lastActed.text || (lastActed.text.split(" ").length <= 2 && key.startsWith(lastActed.text + " ")))) return;   // the final of a command already run ("next" then "next step"), or the phone and the laptop both heard it
   if (now < speakingUntil) {                                        // Spanner is talking: only a clean short command barges in
     const q = text.match(QUICK);
     if (!q || isEcho(text, graceMs) || echoWords(currentSpeech).has(q[1].toLowerCase().split(" ")[0])) return;   // ignore silently
     text = q[0];
   } else if (isEcho(text, graceMs)) { heard(text, "ignored: that was me talking"); return; }   // just stopped: drop echoes, keep the rest
+  const gate = attentionGate(text);
+  if (QP.get("debug")) console.log("GATE", JSON.stringify(text), "->", gate.ok ? "accepted as " + JSON.stringify(gate.text) : "ignored");
+  if (!gate.ok) { heard(text, "not for me · say “Spanner …”"); return; }
+  if (gate.named && !gate.text) { attnUntil = now + ATTN_MS; heard("Spanner", "listening"); blip(880, 0.05); return; }   // just its name: open the window
+  text = gate.text; attnUntil = now + ATTN_MS; blip(1250, 0.035);                                              // instant acknowledgement: heard you
   lastActed = { text: key, t: now };
   if (now < speakingUntil) stopSpeech();
   setListen(true, "Listening · " + text.trim().slice(0, 40)); command(text);
@@ -1261,11 +1282,14 @@ $("mic").onclick = () => {
   let fails = 0, lastErr = "", recognizing = false, lastEvent = performance.now();
   const r = (rec = new SR()); r.continuous = true; r.interimResults = true; r.lang = "en-GB"; r.maxAlternatives = 1;
   r.onstart = () => { recognizing = true; lastEvent = performance.now(); };
+  let stable = null;
   r.onresult = (e) => {
     fails = 0; lastEvent = performance.now();
     const res = e.results[e.results.length - 1], text = res[0].transcript;
+    clearTimeout(stable);
     if (res.isFinal) hearSpeech(text);
     else if (QUICK.test(text)) hearSpeech(text.match(QUICK)[0]);      // "close" acts the moment it is heard
+    else if (text.trim().split(/\s+/).length >= 2) stable = setTimeout(() => hearSpeech(text), 750);   // Chrome only finalises in silence: in a loud room that never comes, so act when the words stop changing
   };
   r.onspeechend = () => { lastEvent = performance.now(); };
   r.onend = () => {
@@ -1374,6 +1398,21 @@ const INTENT_TEXT = { next: "next", back: "back", close: "close", take_apart: "t
   xray: "x-ray", reset: "reset", tour: "tour", stop: "stop", rewind: "rewind", show_mistake: "show me the mistake", fix_it: "fix it",
   camera_on: "camera on", camera_off: "camera off", zoom_in: "zoom in", zoom_out: "zoom out", lights_on: "lights on", lights_off: "lights off",
   specs: "specs", sources: "sources" };
+let turnSeq = 0;
+/** Words Spanner has no instant rule for: one call returns what to do and what to say. If it is slow, a short spoken
+ *  acknowledgement (never the same one twice in a row) fills the wait; the answer cuts it off. */
+async function converseTurn(raw) {
+  const id = ++turnSeq;
+  const filler = setTimeout(() => { if (id === turnSeq && performance.now() > speakingUntil) narrate(nextFiller(), false); }, 1500);
+  try {
+    await reportState();
+    const r = await fetchT(API + "/coach/converse", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: SESSION, text: raw }) }, 12000);
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json(); clearTimeout(filler);
+    if (id !== turnSeq) return;
+    lastReplyId = d.id; return onReply(d);
+  } catch (e) { clearTimeout(filler); return intentFallback(raw); }
+}
 async function intentFallback(raw) {
   try {
     const r = await fetchT(API + "/coach/intent", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: raw, current_step: stepIdx + 1 }) }, 10000);
@@ -1533,7 +1572,7 @@ function onCoach(c) {
   if (c.mistake && c.confidence >= 0.4 && performance.now() - lastMistakeAt > 5000) {
     lastMistakeAt = performance.now(); flash();
     showTag(`keycap_${brokenKey}`, "⚠ " + c.mistake.toUpperCase().slice(0, 60), "red", 2.6);
-    narrate("Careful. " + (c.say || c.mistake));
+    narrate(c.say || "Careful. " + c.mistake);
     return;
   }
   // the step on screen is done: praise it and move on by exactly one step (one confident frame is enough)
@@ -1610,12 +1649,12 @@ let remoteLoop = false, lastDataAt = 0, pollFails = 0, lastUtterId = "", lastAli
 // ---- the phone is the microphone: the server transcribes, decides what to do and what to say (one Claude turn with
 // the conversation so far and what is on screen); this laptop just does it and speaks.
 function screenState() {
-  return { session: SESSION, screen: linkState !== "live" ? "pairing" : pickOpen ? "picking" : finished ? "done" : stepIdx >= 0 ? "step" : "ready",
+  return { session: SESSION, screen: remoteOn && linkState !== "live" ? "pairing" : pickOpen ? "picking" : finished ? "done" : stepIdx >= 0 ? "step" : "ready",
     step: stepIdx + 1, total: plan?.steps?.length || 0, title: plan?.title || "" };
 }
 function reportState() {
-  const st = screenState(), key = JSON.stringify(st); if (key === lastStateSent) return; lastStateSent = key;
-  fetch(API + "/coach/state", { method: "POST", headers: { "content-type": "application/json" }, body: key }).catch(() => { lastStateSent = ""; });
+  const st = screenState(), key = JSON.stringify(st); if (key === lastStateSent) return Promise.resolve(); lastStateSent = key;
+  return fetch(API + "/coach/state", { method: "POST", headers: { "content-type": "application/json" }, body: key }).catch(() => { lastStateSent = ""; });
 }
 const ACKS = ["Mm-hm.", "Okay.", "Let me see.", "Right."];
 function closePicker() { if (!pickOpen) return; pickOpen = false; $("pick").style.opacity = 0; setTimeout(() => { $("pick").style.display = "none"; }, 600); }
@@ -1952,6 +1991,7 @@ async function pickByVoice(raw) {   // free speech -> which device; Claude decid
 }
 if (QP.get("pick") === "1" && INSTANT) { pickOpen = true; $("pick").style.display = "flex"; }
 if (QP.get("kb")) fetchLayout();
+if (QP.get("say")) { const seq = QP.get("say").split("|"); let i = 0; const go = () => { if (i < seq.length) { hearSpeech(seq[i++]); setTimeout(go, 2500); } }; setTimeout(go, 5000); }   // test hook: ?say=a|b|c feeds heard sentences
 // wake: browsers need one gesture before mic + speech; after that it's voice only
 // The question page is the first thing on screen (it covers the boot and the keyboard). One tap wakes the voice
 // (browsers need a gesture). With the phone as camera + microphone, pair it first, then ask: the question needs ears.
@@ -1964,7 +2004,7 @@ if (INSTANT || QP.get("wake") === "0" || QP.get("pick") === "0") {
     // One tap: this laptop listens and asks straight away. The phone is only the camera (and, with the Spanner app,
     // a second microphone): it is paired once the person has said what they want to fix, never before the question.
     removeEventListener("keydown", wake, true); $("pick").classList.remove("first"); $("pick").style.cursor = "default";
-    voiceOn = true; $("voice").classList.add("on");
+    voiceOn = true; $("voice").classList.add("on"); attnUntil = performance.now() + 60000;
     if (!micOn) $("mic").onclick();          // this laptop listens from the first tap; the phone app takes over when it speaks
     $("pick").style.display = "flex"; $("pickhint").textContent = "listening"; pickPairCode();
     try { startRemote(); } catch (e) { console.error("wake:", e); }
