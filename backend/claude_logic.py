@@ -41,6 +41,8 @@ Guidelines for `say_to_user`:
 - Optimized for Text-to-Speech (TTS): Conversational, warm, direct, and completely free of markdown, bullet symbols, or special characters that sound unnatural when spoken aloud.
 - Use "unclear" when frames do not show enough detail."""
 
+def rag
+
 
 def _img(frame):
   _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
