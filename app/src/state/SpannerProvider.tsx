@@ -135,6 +135,7 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
   const speech = useRef<SpeechPlayer | null>(null);
   const tracker = useRef(new StepTracker());
   const listener = useRef<VoiceListener | null>(null);
+  const laptopLeads = useRef(false); // true once the laptop reports its screen: it owns the current step
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
   const polling = useRef(false);
   const last = useRef({ view: null as CoachView | null, viewTs: 0, poseTs: 0, planId: "", say: "", poseAt: 0, frameAt: 0, poseBusy: false, frameBusy: false, uri: null as string | null });
@@ -191,7 +192,7 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
       const l = last.current;
       const plan = stateRef.current.plan;
       if (!plan) return;
-      tracker.current.update(v, plan.steps.length, Date.now());
+      if (!laptopLeads.current) tracker.current.update(v, plan.steps.length, Date.now()); // else the laptop's step rules
       l.view = v;
       project(v);
       if (v.say && v.say !== l.say) {
@@ -228,6 +229,12 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
               tracker.current = new StepTracker();
               patch({ plan: np.plan, partsCard: np.parts_card, currentStep: null, stepStatus: null, phase: "identifying" });
             }
+          }
+          // the laptop decides which step is current (one source of truth, no flicking between two trackers)
+          if (d.screen) {
+            laptopLeads.current = true;
+            const tr = tracker.current, step = d.screen === "step" ? d.screen_step ?? 0 : tr.step, done = d.screen === "done";
+            if (step !== tr.step || done !== tr.complete) { tr.step = step; tr.complete = done; project(l.view); }
           }
           if (d.pose && d.pose.ts !== l.poseTs) {
             l.poseTs = d.pose.ts;

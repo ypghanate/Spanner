@@ -1447,32 +1447,37 @@ function onMissingKeys(c) {
   missingSeen = ids[0] === missingSeen.key ? { key: ids[0], n: missingSeen.n + 1 } : { key: ids[0], n: 1 };
   if (missingSeen.n >= 2 && c.confidence >= 0.5) setBrokenKey(ids[0], "camera: " + c.missing_keys.join(", ") + " missing");
 }
+let stepHoldUntil = 0;   // after a step change, ignore frames that were taken before it
 function onCoach(c) {
   $("camlat").textContent = `${(c.latency_ms / 1000).toFixed(1)} s${c.crop?.cropped ? " · zoomed" : ""}`;
   onMissingKeys(c);
   $("camconfbar").style.width = Math.round(c.confidence * 100) + "%";
   const stepTxt = c.step_index > 0 ? ` · <b>STEP ${c.step_index}</b> ${c.step_status.replace("_", " ")}` : "";
   seen(`<b>I SEE</b> ${c.what_i_see}${stepTxt}${c.mistake ? `<br><span class="bad">⚠ ${c.mistake}</span>` : ""}`);
-  if (!c.object_visible || c.step_index < 1) { agree = 0; return; }
-  // follow the user: jump to the step they're doing (two frames agree, or one very confident frame)
-  agree = c.step_index === lastDetect ? agree + 1 : 1; lastDetect = c.step_index;
+  if (!c.object_visible) { agree = 0; return; }
+  if (performance.now() < stepHoldUntil) return;      // we just moved on: this frame was taken before that
   if (c.confidence >= 0.6) maybeAutoShop(c);
-  const target = c.step_index - 1, sure = agree >= 2 || c.confidence >= 0.85;
-  if (sure && target !== stepIdx && c.confidence >= 0.5) {
-    stopTour(); goStep(target, " · detected");
-  } else if (sure && target === stepIdx && c.step_status === "done" && lastDoneStep !== target) {
-    lastDoneStep = target;                    // step finished: show the next one
-    showTag(`keycap_${brokenKey}`, `STEP ${c.step_index} DONE ✓`, "ok", 2.2);
-    narrate(c.say || "Done. Next step.");
-    if (stepIdx < plan.steps.length - 1) setTimeout(() => goStep(stepIdx + 1, " · auto"), 1400);
-    else setTimeout(() => { if (!finished) finishRepair(); }, 1400);
-  }
-  if (c.mistake && performance.now() - lastMistakeAt > 8000) {
+  const cur = stepIdx + 1;
+  // something going wrong: say it straight away (camera reads are focused on the step on screen and its known mistakes)
+  if (c.mistake && c.confidence >= 0.4 && performance.now() - lastMistakeAt > 5000) {
     lastMistakeAt = performance.now(); flash();
     showTag(`keycap_${brokenKey}`, "⚠ " + c.mistake.toUpperCase().slice(0, 60), "red", 2.6);
-    narrate("Careful. " + c.mistake);
-  } else if (c.say && !c.mistake && sure && target === stepIdx && c.step_status !== "done") {
-    // light guidance only when nothing else is being said
+    narrate("Careful. " + (c.say || c.mistake));
+    return;
+  }
+  // the step on screen is done: praise it and move on by exactly one step (one confident frame is enough)
+  if (chosen && cur >= 1 && c.step_status === "done" && c.step_index >= cur && c.confidence >= 0.55 && lastDoneStep !== stepIdx) {
+    lastDoneStep = stepIdx; agree = 0; stepHoldUntil = performance.now() + 2500;
+    showTag(`keycap_${brokenKey}`, `STEP ${cur} DONE ✓`, "ok", 2.2);
+    narrate(c.say || "Nice. On to the next step.");
+    if (stepIdx < plan.steps.length - 1) setTimeout(() => goStep(stepIdx + 1, " · auto"), 900);
+    else setTimeout(() => { if (!finished) finishRepair(); }, 900);
+    return;
+  }
+  // they skipped ahead: only when two frames in a row agree on the same later step. Never jumps back on its own.
+  agree = c.step_index === lastDetect ? agree + 1 : 1; lastDetect = c.step_index;
+  if (chosen && c.step_index > cur && agree >= 2 && c.confidence >= 0.6) {
+    stopTour(); stepHoldUntil = performance.now() + 2500; goStep(c.step_index - 1, " · detected");
   }
 }
 

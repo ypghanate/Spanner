@@ -240,16 +240,46 @@ def verify_gap(data: bytes, view: "CoachView") -> str | None:
     return None
 
 
+def _focus(demo: dict, current: int) -> str:
+    """The question for one frame, focused on the step on screen: is it done, is it going wrong, has the person moved on.
+    (Asked only "which step?", the model hopped between neighbouring steps and rarely flagged mistakes.)"""
+    steps = demo["plan"]["steps"]
+    if not 0 < current <= len(steps):
+        return ("The repair has not started on screen yet. Which step's state does the frame show (step_index, 0 if "
+                "unclear)? Report a mistake only if you can see one.")
+    s = steps[current - 1]
+    nxt = steps[current] if current < len(steps) else None
+    mistakes = "; ".join(s.get("common_mistakes", [])) or "none listed"
+    lines = [f"STEP {current} is on screen: {s['instruction']}",
+             f"It is DONE when: {s['expected_visual_state']}",
+             f"Known mistakes at this step: {mistakes}"]
+    if nxt:
+        lines.append(f"(Next, step {current + 1}: {nxt['instruction']} Done when: {nxt['expected_visual_state']})")
+    lines += [
+        f"1. step_status: 'done' as soon as the frame shows step {current}'s DONE state, even if the hands are still there; "
+        "'in_progress' if they are working on it; 'not_started' if not yet.",
+        "2. mistake: if the frame shows one of the known mistakes, or anything clearly wrong for this step (the wrong key, "
+        "a tool on the wrong part, force at an angle, the keyboard still plugged in when it should not be), say it in a "
+        "few words. Empty if nothing is wrong.",
+        f"3. step_index: {current}, unless the frame clearly shows a LATER step's state (then that step). Never go back "
+        "because of an unclear frame.",
+        "4. say: if done, one short line of praise; if a mistake, what to do instead; otherwise empty.",
+    ]
+    return "\n".join(lines)
+
+
 def _ask(image_b64: str, current_step: int, session: str = "") -> CoachView:
     demo = _demo(session)
-    hint = (f"The screen currently shows step {current_step}." if current_step > 0
-            else "The repair has not started on screen yet.")
+    st = _view_state.get(session)
+    if st and st.screen == "step":       # the laptop's step on screen, not the phone's own counter (they could differ)
+        current_step = st.step
+    hint = _focus(demo, current_step)
     resp = _client().beta.messages.parse(
         model=COACH_MODEL, max_tokens=2048,
         system=[{"type": "text", "text": _system(demo), "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": image_b64}},
-            {"type": "text", "text": hint + " Which step is the user on?"}]}],
+            {"type": "text", "text": hint}]}],
         output_format=CoachView, output_config={"effort": "low"},
         thinking=_thinking(COACH_MODEL),   # one frame -> one label: thinking only adds latency
         **({"betas": [FALLBACK_BETA], "fallbacks": "default"} if "haiku" not in COACH_MODEL else {}))
@@ -525,7 +555,9 @@ _speaking: dict[str, float] = {}
 async def latest(session: str):
     """The phone's last results for this session: the coach's view, the newest utterance, signals, and whether the
     laptop is talking right now (judged on the server's clock, so phone and laptop clocks don't matter)."""
-    return {**_latest.get(session, {}), "speaking": _speaking.get(session, 0) > time.time()}
+    st = _view_state.get(session)
+    shown = {"screen": st.screen, "screen_step": st.step if st.screen == "step" else 0} if st else {}
+    return {**_latest.get(session, {}), **shown, "speaking": _speaking.get(session, 0) > time.time()}
 
 
 @router.get("/plan")

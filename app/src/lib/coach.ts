@@ -50,6 +50,9 @@ export interface Latest {
   plan_id?: string;
   /** The laptop is talking right now: pause the microphone so it doesn't record Spanner's own voice. */
   speaking?: boolean;
+  /** What the laptop has on screen: the phone follows it, so both always show the same step. */
+  screen?: "pairing" | "picking" | "ready" | "step" | "done";
+  screen_step?: number;
 }
 
 /** The laptop's QR encodes `${origin}/training/viewer/phone.html?s=<session>`. Anything else is not a pairing code. */
