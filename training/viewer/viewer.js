@@ -1357,9 +1357,9 @@ async function openShop(raw, auto = false, refresh = false) {
     }
     if (!verified || verified.status === "researching" || verified.refreshing) verifyTimer = setTimeout(pollVerify, 4000);
   };
-  if (isPart && !objectFlow.on) pollVerify();   // the two-site verification agent knows the keyboard, not an object learned live
+  if (isPart) pollVerify();
   try {
-    const r = await fetchT(API + "/coach/shop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: raw, model: objectFlow.on ? (objectFlow.status?.model || objectFlow.status?.object || "") : "" }) }, 75000);
+    const r = await fetchT(API + "/coach/shop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: raw }) }, 75000);
     if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 120)}`);
     const d = await r.json(); if (id !== shopReq) return;
     // offers came back before every photo / price was found: the server finishes them; show the full set shortly
@@ -1369,7 +1369,7 @@ async function openShop(raw, auto = false, refresh = false) {
     const img = (u) => (u ? `<img src="${esc(u)}" referrerpolicy="no-referrer" onerror="this.remove()">` : "");
     if (d.kind === "keyboard") {
       const ri = d.repair_instead ? `<div class="verify"><div class="vh">BEFORE YOU BUY · FIXING YOUR RK61 (LINKUP AGENT, ${esc(d.repair_instead.as_of).toUpperCase()})</div><div class="dec">${esc(d.repair_instead.headline).replace(/^(Repair it:)/, "<b>$1</b>")}</div></div>` : "";
-      el.innerHTML = `<h3>${d.generic ? "ALTERNATIVES" : "OTHER KEYBOARDS"} · VS YOUR ${esc((d.model || "RK68").toUpperCase())}${autoTag}</h3><div class="sub">${src}</div>${ri}<div class="grid">${d.items.map((k, i) => `
+      el.innerHTML = `<h3>OTHER KEYBOARDS · VS YOUR RK61${autoTag}</h3><div class="sub">${src}</div>${ri}<div class="grid">${d.items.map((k, i) => `
         <div class="it" style="animation-delay:${i * 70}ms">${img(k.image_url)}
           <div class="nm">${esc(k.name)}</div><div class="pr">${moneyGbp(k)}</div>
           <ul>${(k.pros || []).map((x) => `<li class="p">${esc(x)}</li>`).join("")}${(k.cons || []).map((x) => `<li class="c">${esc(x)}</li>`).join("")}</ul>
@@ -1378,7 +1378,7 @@ async function openShop(raw, auto = false, refresh = false) {
       narrate(`I found ${d.items.length} alternatives.${c ? ` The cheapest is the ${c.name} at about £${Math.round(c.price_gbp)}.` : ""}${d.repair_instead ? " But fixing yours is far cheaper." : ""}`);
     } else {
       const fit = d.items.filter((o) => o.compatible);
-      el.innerHTML = `<h3>REPLACEMENT ${esc(d.item.split(" (")[0]).toUpperCase()} · FOR YOUR ${esc((d.model || "RK68").toUpperCase())}${autoTag}</h3><div class="sub">${src}</div><div id="vbox">${verifyBox(verified)}</div><div class="sub">MORE OPTIONS · QUICK SEARCH</div><div class="grid">${d.items.map((o, i) => `
+      el.innerHTML = `<h3>REPLACEMENT ${esc(d.item.split(" (")[0]).toUpperCase()} · FOR YOUR RK61${autoTag}</h3><div class="sub">${src}</div><div id="vbox">${verifyBox(verified)}</div><div class="sub">MORE OPTIONS · QUICK SEARCH</div><div class="grid">${d.items.map((o, i) => `
         <div class="it" style="animation-delay:${i * 70}ms">${img(o.image_url)}
           <div class="nm">${esc(o.name)}</div><div class="pr">${moneyGbp(o)}</div><div class="rt">${esc(o.retailer)}</div>
           <span class="badge ${o.compatible ? "ok" : "no"}">${o.compatible ? "✓ FITS YOUR RK61" : "✗ WON'T FIT"}</span>
@@ -1930,11 +1930,12 @@ async function objectPoll() {
   try {
     const st = await fetchJson(API + "/coach/object?session=" + SESSION, 8000);
     const prev = objectFlow.status || {}; objectFlow.status = st;
-    if (st.photo_url && !objectFlow.photoShown) {      // the found product, shown on the question page only (never as a 2D sheet in the 3D panel)
+    if (st.photo_url && !objectFlow.photoShown) {
       objectFlow.photoShown = true;
       $("pickecho").innerHTML = `<img src="${API + st.photo_url}" alt="" style="max-width:260px;max-height:200px;border-radius:10px;margin-top:8px;object-fit:contain;background:#fff;padding:6px">`;
+      setObjectMode(true); twinFromPhoto(API + st.photo_url);
     }
-    if (st.twin_url && !objectFlow.glbShown) { objectFlow.glbShown = true; setObjectMode(true); twinFromGlb(API + st.twin_url); }
+    if (st.twin_url && !objectFlow.glbShown) { objectFlow.glbShown = true; twinFromGlb(API + st.twin_url); }
     if (st.pictures && Object.keys(st.pictures).length !== Object.keys(objectFlow.pictures).length) { objectFlow.pictures = st.pictures; renderStepPicture(); }
     if (st.plan_ready && !chosen) {
       const pj = await fetchJson(API + "/coach/plan?session=" + SESSION, 10000);
@@ -1955,7 +1956,7 @@ async function objectPoll() {
 }
 function renderStepPicture() {
   const h = $("helper"); if (!objectFlow.on || stepIdx < 0) { if (objectFlow.on) h.innerHTML = ""; return; }
-  const url = objectFlow.pictures[String(plan.steps[stepIdx].index)];   // the step picture lives in the card, not the 3D panel
+  const url = objectFlow.pictures[String(plan.steps[stepIdx].index)];
   h.innerHTML = url ? `<img src="${API + url}" alt="" style="width:100%;border-radius:10px;margin:6px 0 8px;display:block">` : "";
 }
 

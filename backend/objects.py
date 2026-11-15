@@ -157,23 +157,10 @@ class Job:
         return out
 
     def run_photo(self) -> None:
-        """The product photo first (Tavily image search on the person's own words, seconds), the 3D twin starts the moment
-        it is on disk; the official page and the specs (Linkup, slower) land alongside and never gate the twin."""
-        t0 = time.time(); self.set("photo", "running")
-        name = self.intake.model or self.first_text
-        try:
-            path = self._download_image(self._image_candidates(name))
-            self.photo_url = f"/data/objects/{self.slug}/{path.name}"
-            self.set("photo", "ready", url=self.photo_url); self.record("object_photo", t0, True)
-            _pool.submit(self._guard, "twin", self.run_twin)
-        except Exception as e:
-            self.set("photo", "failed", error=str(e)[:200]); self.record("object_photo", t0, False)
-        self._run_specs(name)
-
-    def _run_specs(self, name: str) -> None:
         from backend.shop import _structured
 
-        t0 = time.time()
+        t0 = time.time(); self.set("photo", "running")
+        name = self.intake.model or self.first_text
         try:
             data, sources = _structured(
                 f"Find the official product photo and key specifications of the {name} ({self.intake.object}). Prefer the "
@@ -184,19 +171,16 @@ class Job:
             if not picks:
                 raise RuntimeError("Linkup found no product page")
             pick = ProductPick.model_validate(picks[0])
-            if self.phase["photo"]["status"] == "failed":          # no image from the image search: Linkup's as a fallback
-                try:
-                    path = self._download_image([pick.image_url] + pick.image_alternatives)
-                    self.photo_url = f"/data/objects/{self.slug}/{path.name}"
-                    self.set("photo", "ready", url=self.photo_url); _pool.submit(self._guard, "twin", self.run_twin)
-                except Exception as e:
-                    self.set("photo", "failed", error=str(e)[:200])
+            urls = self._image_candidates(pick.product_name or name) + [pick.image_url] + pick.image_alternatives
+            path = self._download_image(urls)
+            self.photo_url = f"/data/objects/{self.slug}/{path.name}"
             self.specs = [s.model_dump() for s in pick.specs][:6]
             (self.dir / "specs.json").write_text(json.dumps({"product_name": pick.product_name, "official_product_url": pick.official_url,
                                                              "specs": self.specs, "sources": sources[:8]}, indent=1), encoding="utf-8")
-            self.record("object_specs", t0, True)
+            self.set("photo", "ready", product=pick.product_name, url=self.photo_url); self.record("object_photo", t0, True)
+            _pool.submit(self._guard, "twin", self.run_twin)
         except Exception as e:
-            print(f"specs {name}: {str(e)[:120]}", flush=True); self.record("object_specs", t0, False)
+            self.set("photo", "failed", error=str(e)[:200]); self.record("object_photo", t0, False)
 
     def _image_candidates(self, name: str) -> list[str]:
         """Tavily image search: the product on a plain background (Linkup's structured answers rarely carry image URLs)."""
@@ -251,7 +235,7 @@ class Job:
                         result = handle.get(); break
                 except Exception:
                     pass
-                time.sleep(2)
+                time.sleep(3)
             if result is None:
                 raise RuntimeError(f"no 3D model within {TWIN_CAP_S} s")
             m = result.get("model_mesh") or result.get("model_glb") or {}
