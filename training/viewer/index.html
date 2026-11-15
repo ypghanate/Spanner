@@ -39,8 +39,9 @@
   /* ------------------------------------------------------------ page grid: header / scene + guidance / stages */
   #app { height:100%; min-height:640px; display:grid; grid-template-rows:auto minmax(0,1fr) auto; padding:0 24px 20px; gap:20px; }
   #top { display:flex; justify-content:space-between; align-items:flex-start; padding-top:20px; gap:16px; }
-  #sessTitle { margin:0; font-size:26px; font-weight:500; line-height:1.35; }
-  #sessSub { font-size:12px; color:var(--muted); }
+  #logo { display:block; height:30px; width:auto; }
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  #sessTitle { margin:0; }
   #topright { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
   #link { display:flex; align-items:center; gap:10px; font-size:15px; font-weight:500; min-height:28px; }
   .ldot { width:7px; height:7px; border-radius:50%; background:var(--muted); flex:none; }
@@ -59,15 +60,16 @@
   main { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:24px; min-height:0; }
   #scene { position:relative; min-height:0; border-radius:12px; }
   .lbl { position:absolute; top:16px; font-size:12px; font-weight:500; color:var(--muted); z-index:2; }
-  .lbl.tl { left:20px; } .lbl.tr { right:64px; max-width:60%; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  #viewport { position:absolute; left:clamp(0px,4.5%,64px); right:clamp(0px,4.5%,64px); top:48px; bottom:60px; border-radius:12px; overflow:hidden; background:var(--scene); }
+  .lbl.tr { left:20px; top:16px; max-width:50%; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #viewport { position:absolute; left:0; right:0; top:0; bottom:48px; border-radius:12px; overflow:hidden; background:var(--scene); }
   #c { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
   #labels { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
-  #sceneFoot { position:absolute; left:20px; bottom:0; max-width:calc(100% - 200px); }
+  #sceneFoot { position:absolute; left:4px; bottom:0; max-width:calc(100% - 80px); }
   #sceneTitle { font-size:17px; font-weight:500; line-height:1.35; }
   #sceneSub { font-size:12px; color:var(--muted); }
-  #btnPause { position:absolute; right:64px; bottom:8px; background:none; border:0; padding:4px 0; font-size:12px; font-weight:500; color:var(--muted); }
-  #btnPause:hover { color:var(--text); } #btnPause.on { color:var(--action); }
+  #btnPause { position:absolute; right:0; bottom:2px; width:40px; height:40px; display:grid; place-items:center; background:var(--raised); border:1px solid var(--line); border-radius:50%; color:var(--text); cursor:pointer; }
+  #btnPause:hover { background:var(--line); } #btnPause svg { width:18px; height:18px; fill:currentColor; }
+  #btnPause .play { display:none; } #btnPause.on .play { display:block; } #btnPause.on .pause { display:none; } #btnPause.on { color:var(--action); }
 
   /* ------------------------------------------------------------ guidance card */
   #card { display:flex; flex-direction:column; min-height:0; background:var(--raised); border-radius:12px; padding:24px; }
@@ -101,8 +103,8 @@
   #foot { margin-top:12px; font-size:12px; color:var(--muted); flex:none; }
 
   /* ------------------------------------------------------------ five repair stages */
-  #stages { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
-  .stage { position:relative; background:none; border:0; text-align:left; padding:24px 10px 0 0; border-radius:0; cursor:pointer; }
+  #stages { display:flex; gap:8px; overflow:hidden; white-space:nowrap; }
+  .stage { flex:0 0 calc((100% - 24px) / 4); min-width:0; position:relative; background:none; border:0; text-align:left; padding:24px 10px 0 0; border-radius:0; cursor:pointer; }
   .stage::before { content:""; position:absolute; left:0; right:0; top:0; height:3px; background:var(--line); }
   .stage.done::before, .stage.cur::before { background:var(--action); }
   .stage .sl { display:block; font-size:17px; font-weight:500; color:var(--muted); white-space:pre; overflow:hidden; text-overflow:ellipsis; }
@@ -199,24 +201,23 @@
 <body>
 <div id="app">
   <header id="top">
-    <div id="sess"><h1 id="sessTitle">Repair companion</h1><div id="sessSub">Keyboard · guided repair</div></div>
+    <div id="sess"><img id="logo" src="logo.png" alt="Spanner"><h1 id="sessTitle" class="sr">Repair companion</h1></div>
     <div id="topright">
       <div id="link" data-state="idle" role="status" aria-live="polite"><i class="ldot"></i><span id="linktext">Phone not connected</span></div>
-      <div id="topbtns"><span id="listen">Mic off</span><button class="ghost" id="btnPair">Pair phone</button><button class="ghost" id="btnTheme" aria-label="Switch theme">Light</button></div>
+      <div id="topbtns"><span id="listen" class="sr">Mic off</span><button class="ghost" id="btnPair">Pair phone</button><button class="ghost sr" id="btnTheme" aria-label="Switch theme">Light</button></div>
     </div>
   </header>
 
   <main>
     <section id="scene" aria-label="3D companion">
-      <div class="lbl tl">3D COMPANION</div>
-      <div class="lbl tr" id="mode">Keyboard overview</div>
       <div id="viewport">
+        <div class="lbl tr" id="mode">Keyboard overview</div>
         <canvas id="c"></canvas><div id="labels"></div><div id="flash"></div>
         <div class="panel" id="cam"><video id="video" autoplay playsinline muted></video><div class="row"><span class="live">LIVE · WATCHING</span><span id="camlat"></span></div><div id="seen">Point the camera at the keyboard and your hands.</div><div id="camconf"><i id="camconfbar"></i></div></div>
         <div class="panel" id="pair"></div>
       </div>
       <div id="sceneFoot"><div id="sceneTitle">Keyboard overview</div><div id="sceneSub">The view follows your repair, not a timer.</div></div>
-      <button id="btnPause" aria-pressed="false">Pause motion</button>
+      <button id="btnPause" aria-pressed="false" aria-label="Pause motion" title="Pause motion"><svg class="pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg><svg class="play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
       <div class="panel" id="side"><h3 id="sideh">SPECS</h3><div id="sidebody"></div></div>
       <div class="panel" id="insp">
         <h3 id="ih">PART</h3><p id="ip"></p><table id="it"></table>
@@ -225,16 +226,16 @@
     </section>
 
     <aside id="card" aria-label="Repair guidance">
-      <div id="sn">READY</div>
+      <div id="sn" class="sr">READY</div>
       <div id="mid">
         <h2 id="head"><span>Show me</span><span>the keyboard.</span></h2>
         <p id="si">Point your phone at the keyboard, or say “start”.</p>
         <div id="rule"></div>
-        <div id="helper"></div><div id="sd"></div><div id="sm"></div><div id="tools"></div>
+        <div id="helper" class="sr"></div><div id="sd"></div><div id="sm"></div><div id="tools"></div>
       </div>
       <div id="capt" class="idle"><button id="captPill" class="idle" aria-label="Spanner's voice"><span class="wave"><i></i><i></i><i></i><i></i><i></i></span><span id="captState">Voice off</span></button><div id="captText"></div></div>
       <button id="cta"><span id="ctaLabel">Say “start”</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h16M14 6l6 6-6 6"/></svg></button>
-      <div id="foot"></div>
+      <div id="foot" class="sr"></div>
     </aside>
   </main>
 
