@@ -21,7 +21,8 @@ const API = QP.get("api") || "";
 // ------------------------------------------------------------------ scene (same look as the keyboard hologram)
 const renderer = new THREE.WebGLRenderer({ canvas: $("c"), antialias: true, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75)); renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0x05080f); scene.fog = new THREE.FogExp2(0x05080f, 0.011);
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const scene = new THREE.Scene(); scene.background = new THREE.Color(cssVar("--scene") || "#131a15"); scene.fog = new THREE.FogExp2(scene.background.getHex(), 0.006);
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 400); camera.position.set(0, 30, 40);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -40,13 +41,27 @@ for (const [r, w, o] of [[19, 0.08, 0.6], [20.4, 0.03, 0.35], [22.5, 0.05, 0.25]
   m.rotation.x = -Math.PI / 2; m.position.y = 0.02; m.userData.spin = (Math.random() - 0.5) * 0.25; rings.add(m);
 }
 const composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera));
-const outline = new OutlinePass(new THREE.Vector2(innerWidth, innerHeight), scene, camera); Object.assign(outline, { edgeStrength: 4, edgeGlow: 0.5, edgeThickness: 1.3, pulsePeriod: 0 });
+grid.visible = false; rings.visible = false;   // the calm look: just the device and its shadow
+const outline = new OutlinePass(new THREE.Vector2(1, 1), scene, camera); Object.assign(outline, { edgeStrength: 4, edgeGlow: 0.5, edgeThickness: 1.3, pulsePeriod: 0 });
 outline.visibleEdgeColor.set(CYAN); outline.hiddenEdgeColor.set(0x0a5566); composer.addPass(outline);
 composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } }, vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
   fragmentShader: "uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (c.r != c.r || c.g != c.g || c.b != c.b || c.a != c.a) c = vec4(0.0,0.0,0.0,1.0); gl_FragColor = vec4(min(c.rgb, vec3(16.0)), c.a); }" }));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.35, 0.4, 1.6)); composer.addPass(new OutputPass());
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.35, 0.4, 1.6)); composer.addPass(new OutputPass());
 const labelRenderer = new CSS2DRenderer({ element: $("labels") });
-function resize() { renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); labelRenderer.setSize(innerWidth, innerHeight); outline.resolution.set(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+function resize() {
+  const vp = $("viewport"), w = Math.max(1, vp.clientWidth), h = Math.max(1, vp.clientHeight);
+  renderer.setSize(w, h, false); composer.setSize(w, h); labelRenderer.setSize(w, h); outline.resolution.set(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+function applyTheme(t, persist = true) {
+  document.documentElement.dataset.theme = t;
+  if (persist) try { localStorage.setItem("spanner-theme", t); } catch { /* storage blocked */ }
+  $("btnTheme").textContent = t === "light" ? "Dark" : "Light";
+  scene.background = new THREE.Color(cssVar("--scene") || "#131a15"); scene.fog.color.copy(scene.background);
+  renderer.toneMappingExposure = t === "light" ? 1.05 : 1.0;
+}
+$("btnTheme").onclick = () => applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+applyTheme(document.documentElement.dataset.theme, false);
+new ResizeObserver(() => resize()).observe($("viewport"));
 addEventListener("resize", resize); resize();
 
 // ------------------------------------------------------------------ materials
@@ -276,7 +291,7 @@ function momentum4() {
 const DEVICES = { iphone15: iphone15, ipad11: ipad11, momentum4: momentum4 };
 const d = (QP.get("d") || "iphone15").toLowerCase();
 const device = (DEVICES[d] || iphone15)();
-$("dev").textContent = device.name.toUpperCase(); document.title = `Spanner · ${device.name}`;
+document.title = `Spanner · ${device.name}`; $("sessTitle").textContent = device.name + " repair"; $("sessSub").textContent = device.name + " · guided repair"; $("sceneTitle").textContent = device.name;
 
 // ------------------------------------------------------------------ build + explode
 const parts = {}, group = new THREE.Group(); scene.add(group);
@@ -323,18 +338,33 @@ function select(name) {
 function focusPart(name) { const p = parts[name]; if (!p) return; const b = new THREE.Box3().setFromObject(p.obj), s = b.getSize(V3()), w = b.getCenter(V3()); const dist = Math.max(s.x, s.y, s.z) * 2.2 + 5; return flyTo(w.clone().add(V3(dist * 0.5, dist * 0.55, dist * 0.7)), w, 900); }
 const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
 renderer.domElement.addEventListener("click", (e) => {
-  ptr.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ptr, camera);
+  const rc = renderer.domElement.getBoundingClientRect(); ptr.set(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1); ray.setFromCamera(ptr, camera);
   const hit = ray.intersectObjects(group.children, true).find((h) => h.object.userData.part); select(hit ? hit.object.userData.part : null);
 });
 
 // ------------------------------------------------------------------ voice (ElevenLabs through the backend, browser as fallback) + commands
 let elevenOK = false, sayAudio = null, speakingUntil = 0, currentSpeech = "";
-fetch(API + "/coach/health").then((r) => r.json()).then((j) => { elevenOK = !!j.tts; }).catch(() => {});
+// Spanner's voice is ElevenLabs (through the server). Wait for the server to say so before the first line is spoken,
+// or that line comes out in the browser's own voice.
+// A page opened by navigating from another page has had no click yet, so the browser will not play audio: ask for one tap
+// (and keep the pending line) rather than speaking in the browser's own voice.
+let pendingSay = "";
+function needTap(text) {
+  pendingSay = text; const w = $("wake"); if (!w) return;
+  w.querySelector(".big").textContent = "Tap to turn on Spanner’s voice"; w.querySelector("small").textContent = "Your browser needs one tap before it will play sound.";
+  w.style.display = "flex";
+  const go = () => { removeEventListener("keydown", go, true); w.style.display = "none"; const t = pendingSay; pendingSay = ""; if (t) narrate(t); };
+  w.addEventListener("pointerdown", go, { once: true }); addEventListener("keydown", go, { capture: true, once: true });
+}
+let healthKnown = false;
+const healthP = fetch(API + "/coach/health", { signal: AbortSignal.timeout(4000) }).then((r) => r.json()).then((j) => { elevenOK = !!j.tts; }).catch(() => {}).finally(() => { healthKnown = true; });
 function stopSpeaking() { reportSpeaking(0); if ("speechSynthesis" in window) speechSynthesis.cancel(); if (sayAudio) { sayAudio.pause(); sayAudio = null; } speakingUntil = 0; }
 function narrate(text) {
-  if (!voiceOn || INSTANT || !text) return; stopSpeaking(); currentSpeech = text; speakingUntil = performance.now() + 60000;
-  reportSpeaking(Math.min(45000, 2500 + text.split(/\s+/).length * 450) + 1000);
-  if (elevenOK) { const a = new Audio(API + "/coach/say?text=" + encodeURIComponent(text)); sayAudio = a; a.onended = () => { speakingUntil = performance.now() + 300; reportSpeaking(0); }; a.play().catch(() => browserSay(text)); return; }
+  if (!voiceOn || INSTANT || !text) return;
+  if (!healthKnown) { healthP.then(() => narrate(text)); return; }
+  stopSpeaking(); currentSpeech = text; speakingUntil = performance.now() + 60000;
+  caption(text); reportSpeaking(Math.min(45000, 2500 + text.split(/\s+/).length * 450) + 1000);
+  if (elevenOK) { const a = new Audio(API + "/coach/say?text=" + encodeURIComponent(text)); sayAudio = a; a.onended = () => { speakingUntil = performance.now() + 300; reportSpeaking(0); }; a.play().catch((e) => { if (e && e.name === "NotAllowedError") needTap(text); else browserSay(text); }); return; }
   browserSay(text);
 }
 function browserSay(text) { if (!("speechSynthesis" in window)) return; const u = new SpeechSynthesisUtterance(text); u.rate = 1.03; u.pitch = 0.92; u.onend = () => { speakingUntil = performance.now() + 300; reportSpeaking(0); }; speechSynthesis.speak(u); }
@@ -436,25 +466,55 @@ async function phoneOrigin() {
 let pairRun = 0;
 async function showPair() {
   const run = ++pairRun, el = $("pair"); el.style.display = "block";
-  el.innerHTML = `<div class="tr">PREPARING THE PAIRING CODE…</div>`;
+  el.innerHTML = `<div class="t">Pair your phone</div><div class="tr">Preparing the code…</div>`;
   const url = `${await phoneOrigin()}/training/viewer/phone.html?s=${SESSION}`;
   if (run !== pairRun || linkLive) return;
-  el.innerHTML = `<div>Scan with the Spanner app to connect your phone</div><img src="${API}/coach/qr?url=${encodeURIComponent(url)}" alt="pairing code"><div class="tr">WAITING FOR YOUR PHONE</div>`;
+  el.innerHTML = `<div class="t">Scan with the Spanner app</div><img src="${API}/coach/qr?url=${encodeURIComponent(url)}" alt="QR code to pair your phone"><div class="tr">Waiting for the first photo from your phone</div>`;
 }
 function hidePair() { pairRun++; $("pair").style.display = "none"; }
 
 // ---- the repair guide
 const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const pad2 = (n) => String(n).padStart(2, "0");
+const two = (t) => { const w = String(t || "").split(/\s+/); const k = Math.ceil(w.length / 2); return w.length < 3 ? [t || ""] : [w.slice(0, k).join(" "), w.slice(k).join(" ")]; };
+function caption(text) { $("captText").textContent = text || ""; }
 function renderCard() {
-  const el = $("card");
-  if (!plan) { el.classList.remove("on"); $("note").style.display = ""; return; }
-  $("note").style.display = "none"; el.classList.add("on");
-  const n = plan.steps.length, s = plan.steps[stepIdx];
-  if (finishedDev) { $("cn").textContent = "ALL DONE"; $("ct").textContent = "Repair complete"; $("ci").textContent = "Test it before you rely on it. Say “start over” to run it again."; $("cd").textContent = ""; $("cm").textContent = ""; }
-  else if (!s) { $("cn").textContent = `${plan.title || "REPAIR"} · ${n} STEPS`.toUpperCase(); $("ct").textContent = plan.diagnosis || plan.fault; $("ci").textContent = "Say “start” when you’re ready."; $("cd").textContent = plan.difficulty ? `Difficulty: ${plan.difficulty} · about ${plan.time_min} min` : ""; $("cm").textContent = (plan.safety_notes || [])[0] ? "⚠ " + plan.safety_notes[0] : ""; }
-  else { $("cn").textContent = `STEP ${s.index} OF ${n}`; $("ct").textContent = s.title || ""; $("ci").textContent = s.instruction; $("cd").textContent = s.expected_visual_state ? "✓ Done when: " + s.expected_visual_state : ""; $("cm").textContent = s.common_mistakes?.[0] ? "⚠ " + s.common_mistakes[0] : ""; }
-  $("cdots").innerHTML = plan.steps.map((_, i) => `<span class="${finishedDev || i < stepIdx ? "done" : i === stepIdx ? "on" : ""}"></span>`).join("");
+  const n = plan?.steps?.length || 0, s = plan?.steps?.[stepIdx];
+  $("tools").innerHTML = ""; $("sd").textContent = ""; $("sm").textContent = "";
+  if (!plan) {
+    $("sn").textContent = "READY"; $("head").innerHTML = "<span>What needs</span><span>fixing?</span>";
+    $("si").textContent = `Just tell me what’s wrong with your ${device.name}.`; $("helper").textContent = device.fact;
+    $("ctaLabel").textContent = "Say what’s wrong"; $("foot").textContent = "For example: “the screen is cracked”."; $("sceneTitle").textContent = device.name;
+  } else if (finishedDev) {
+    $("sn").textContent = "ALL DONE"; $("head").innerHTML = "<span>Repair</span><span>complete.</span>"; $("si").textContent = "Test it before you rely on it.";
+    $("helper").textContent = "Say “start over” to run the repair again."; $("ctaLabel").textContent = "Say “start over”"; $("foot").textContent = "The session stays open until you close it."; $("sceneTitle").textContent = `${plan.title || device.name} · done`;
+  } else if (!s) {
+    $("sn").textContent = `${n} STEPS · ${String(plan.difficulty || "").toUpperCase()}`; $("head").innerHTML = two(plan.title || "Your repair").map((l) => `<span>${esc(l)}</span>`).join("");
+    $("si").textContent = plan.diagnosis || plan.fault; $("helper").textContent = `About ${plan.time_min} min.${(plan.safety_notes || [])[0] ? "  ⚠ " + plan.safety_notes[0] : ""}`;
+    $("ctaLabel").textContent = "Say “start”"; $("foot").textContent = "The 3D view follows at your pace."; $("sceneTitle").textContent = plan.title || device.name;
+  } else {
+    $("sn").textContent = `STEP ${pad2(s.index)} OF ${pad2(n)}`; $("head").innerHTML = two(s.title || "").map((l) => `<span>${esc(l)}</span>`).join("");
+    $("si").textContent = s.instruction; $("helper").textContent = "";
+    $("sd").textContent = s.expected_visual_state ? "✓ Done when: " + s.expected_visual_state : ""; $("sm").textContent = s.common_mistakes?.[0] ? "⚠ " + s.common_mistakes[0] : "";
+    $("tools").innerHTML = (plan.tools_needed || []).slice(0, 4).map((t) => `<span class="chip">${esc(t)}</span>`).join("");
+    $("ctaLabel").textContent = stepIdx >= n - 1 ? "Say “done”" : "Say “next”"; $("foot").textContent = "“Repeat” · “what could go wrong” · “zoom in”"; $("sceneTitle").textContent = `${plan.title || device.name} · ${s.title || ""}`;
+  }
+  $("stages").style.gridTemplateColumns = `repeat(${Math.max(1, n)}, minmax(0, 1fr))`;
+  $("stages").innerHTML = (plan?.steps || []).map((st, i) => {
+    const cls = finishedDev || i < stepIdx ? "done" : i === stepIdx ? "cur" : "";
+    return `<button class="stage ${cls}" data-i="${i}" ${cls === "cur" ? 'aria-current="step"' : ""}><span class="sl">${pad2(i + 1)}  ${esc(st.title || "Step " + (i + 1))}</span><span class="ss">${cls === "done" ? "Complete" : cls === "cur" ? "Current step" : "Up next"}</span></button>`;
+  }).join("");
 }
+$("stages").addEventListener("click", (e) => { const b = e.target.closest(".stage"); if (b && plan) goStep(Number(b.dataset.i)); });
+$("cta").onclick = () => { if (plan) advance(); };
+setInterval(() => {   // the voice pill: who is talking right now
+  const sp = performance.now() < speakingUntil, st = sp ? "speaking" : (REMOTE ? linkLive : micOn) ? "listening" : "idle", pill = $("captPill");
+  if (pill.dataset.s === st + voiceOn) return; pill.dataset.s = st + voiceOn; pill.className = st;
+  $("captState").textContent = sp ? "Spanner is speaking" : st === "listening" ? "Listening to you" : voiceOn ? "Voice on" : "Voice off · tap to wake";
+}, 250);
+const LINK_TEXT = { idle: "Phone not connected", waiting: "Waiting for your phone…", live: "Connected to your phone", lost: "Phone connection lost · waiting for it to return" };
+function setLink(state) { $("link").dataset.state = state; $("linktext").textContent = LINK_TEXT[state]; $("btnPair").style.display = state === "live" ? "none" : ""; }
+$("btnPair").onclick = () => { if (REMOTE) showPair(); };
 function highlightParts(names) {
   const ok = names.filter((n) => parts[n]); select(ok[0] || null);
   if (ok.length > 1) outline.selectedObjects = ok.map((n) => parts[n].obj);   // a second and third part pulse along with the first
@@ -469,7 +529,7 @@ async function runStep(s, id) {
   if (id !== runId) return;
   const names = (s.scene3d || []).filter((c) => (c.op === "highlight" || c.op === "pulse") && c.part).map((c) => c.part);
   if (!names.length) return;
-  if (explode < 0.5 && !["frame", "display", "back_glass", "shell", "headband", "usb_c", "screws"].includes(names[0])) setXray(true);   // an inside part: see through the case
+  if (explode < 0.5 && !["frame", "display", "back_glass", "shell", "headband", "usb_c", "screws"].includes(names[0])) { setXray(false); await setExplode(1); }   // an inside part: open it up so it can be seen
   const ok = highlightParts(names); if (ok[0]) await focusPart(ok[0]);
 }
 async function goStep(i, note = "") {
@@ -581,7 +641,8 @@ async function remoteLoop() {
       }
       if (fresh) lastDataAt = performance.now();
       const live = !!lastDataAt && performance.now() - lastDataAt < 6000;
-      if (live !== linkLive) { linkLive = live; if (live) hidePair(); else showPair(); }
+      if (live !== linkLive) { linkLive = live; if (live) hidePair(); else if (lastDataAt) showPair(); }
+      setLink(live ? "live" : lastDataAt ? "lost" : "waiting");
       reportState();
     } catch { /* keep polling */ }
     await sleep(300);
@@ -595,13 +656,13 @@ renderer.setAnimationLoop(() => {
   for (const r of rings.children) r.rotation.z += r.userData.spin * 0.01;
   controls.update(); if (FX) composer.render(); else renderer.render(scene, camera); labelRenderer.render(scene, camera);
 });
-$("nb").textContent = device.name.toUpperCase(); $("nt").textContent = device.fact + " Say “take it apart”, “show me the battery”, “x-ray”, or “keyboard” to go back to the repair.";
+renderCard(); setLink(REMOTE ? "waiting" : "idle");
 $("tele").textContent = `${Object.keys(parts).length} PARTS · ASSEMBLED`; $("mode").textContent = "ASSEMBLED";
 setXray(true); await frameAll(); setXray(false);
 if (QP.get("explode") === "1") { await setExplode(1); await frameAll(); }
 if (QP.get("xray") === "1") setXray(true);
 if (QP.get("select") && parts[QP.get("select")]) { select(QP.get("select")); await focusPart(QP.get("select")); }
 if (INSTANT || QP.get("wake") === "0" || REMOTE) {
-  $("wake").remove();
-  if (REMOTE) { voiceOn = true; $("listen").textContent = "PHONE MIC"; $("nt").textContent = device.fact + " Tell me what's wrong with it."; narrate(`${device.name}. What's wrong with it?`); remoteLoop(); }
+  if (!REMOTE) $("wake").remove();
+  if (REMOTE) { voiceOn = true; $("listen").textContent = "PHONE MIC"; narrate(`${device.name}. What's wrong with it?`); remoteLoop(); }
 } else { const w = $("wake"); const wake = () => { w.remove(); voiceOn = true; startMic(); narrate(`${device.name}. ${device.fact} Say take it apart.`); }; w.addEventListener("pointerdown", wake, { once: true }); }

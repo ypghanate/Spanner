@@ -831,6 +831,15 @@ def mount(app) -> None:
     app.include_router(router)
     app.include_router(shop_router)
 
+    @app.middleware("http")
+    async def _viewer_no_stale_cache(request, call_next):
+        """The viewer pages and scripts change often: always revalidate, so a browser never runs an old copy
+        (an old device.js against a new page was showing the previous UI)."""
+        resp = await call_next(request)
+        if request.url.path.startswith("/training/viewer/") and not request.url.path.startswith("/training/viewer/vendor/"):
+            resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
     @app.on_event("startup")
     async def _warm_plans() -> None:   # every fault class planned before anyone asks: planning becomes instant
         from .planner import warm

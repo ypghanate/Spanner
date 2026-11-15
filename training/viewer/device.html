@@ -1,55 +1,243 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Spanner · device hologram</title>
-<script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/examples/jsm/"}}</script>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Spanner · Device repair</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  // Theme before first paint: ?theme=light|dark, else the last choice, else the system setting.
+  (() => {
+    let t = new URLSearchParams(location.search).get("theme");
+    try { t = t || localStorage.getItem("spanner-theme"); } catch { /* storage blocked */ }
+    t = t || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    document.documentElement.dataset.theme = t === "light" ? "light" : "dark";
+  })();
+</script>
 <style>
-  :root { --bg:#05080F; --cyan:#00E5FF; --cyan2:#00e5ff55; --ok:#3DFFA8; --warn:#FFC83D; --danger:#FF3D5A; --mono:"JetBrains Mono",ui-monospace,Consolas,monospace; }
-  html,body { margin:0; height:100%; background:var(--bg); overflow:hidden; font-family:system-ui,"Segoe UI",Inter,sans-serif; }
-  canvas#c { position:fixed; inset:0; width:100%; height:100%; display:block; }
-  #labels { position:fixed; inset:0; pointer-events:none; }
-  .hud { position:fixed; font-family:var(--mono); color:var(--cyan); text-shadow:0 0 10px #00e5ff99; z-index:5; }
-  .panel { background:linear-gradient(180deg,#071320e8,#05080fe8); border:1px solid var(--cyan2); border-radius:4px; backdrop-filter:blur(10px); box-shadow:0 0 24px #00e5ff1a, inset 0 0 20px #00e5ff0d; }
-  .brackets::before,.brackets::after { content:""; position:absolute; width:14px; height:14px; border:2px solid var(--cyan); }
-  .brackets::before { left:-1px; top:-1px; border-right:0; border-bottom:0; } .brackets::after { right:-1px; bottom:-1px; border-left:0; border-top:0; }
-  #top { top:16px; left:20px; right:20px; display:flex; justify-content:space-between; align-items:flex-start; }
-  #brand { font-size:13px; letter-spacing:.32em; padding-top:6px; } #brand b { color:#fff; font-weight:600; }
-  #status { font-size:11px; letter-spacing:.16em; opacity:.85; text-align:right; line-height:1.6; }
-  #listen { font:10.5px var(--mono); letter-spacing:.14em; color:var(--cyan); opacity:.85; }
-  #listen.on::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:#ff3d5a; margin-right:6px; box-shadow:0 0 8px #ff3d5a; animation:blink 1.2s infinite; }
-  @keyframes blink { 50% { opacity:.25; } }
-  #insp { right:20px; top:112px; width:320px; padding:14px 16px; display:none; text-shadow:none; color:#e6fbff; }
-  #insp h3 { margin:0 0 4px; font:600 13px var(--mono); letter-spacing:.12em; color:var(--cyan); text-shadow:0 0 10px #00e5ff88; }
-  #insp p { margin:6px 0 4px; font-size:13px; line-height:1.45; color:#bfeef7; }
-  #insp .k { font:10.5px var(--mono); letter-spacing:.12em; opacity:.7; margin-top:6px; }
-  .tag { font:600 10.5px var(--mono); letter-spacing:.14em; color:#05080f; background:var(--cyan); padding:3px 8px; border-radius:3px; box-shadow:0 0 12px #00e5ff; white-space:nowrap; }
-  .tag.red { background:var(--danger); color:#fff; box-shadow:0 0 12px var(--danger); }
-  .callout { font:10px var(--mono); letter-spacing:.18em; color:var(--cyan); opacity:.75; white-space:nowrap; text-shadow:0 0 8px #00e5ff; }
-  #note { left:20px; bottom:20px; max-width:560px; padding:12px 16px; font-size:13px; color:#e6fbff; text-shadow:none; line-height:1.45; }
-  #note b { font:600 11px var(--mono); letter-spacing:.2em; color:var(--cyan); display:block; margin-bottom:6px; }
-  #heard { position:fixed; left:50%; bottom:110px; transform:translateX(-50%); padding:8px 14px; font:12px var(--mono); color:#e6fbff; display:none; z-index:6; }
-  #wake { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; z-index:20; background:radial-gradient(#02121dcc, #000d); cursor:pointer; font:600 15px var(--mono); letter-spacing:.3em; color:var(--cyan); text-shadow:0 0 14px #00e5ff; }
-  #wake small { font:11px var(--mono); letter-spacing:.14em; opacity:.7; text-shadow:none; }
-  /* the repair guide: the step on screen, how to confirm it, what to avoid */
-  #card { left:20px; bottom:20px; width:min(520px,calc(100vw - 40px)); padding:14px 18px 12px; display:none; text-shadow:none; color:#e6fbff; }
-  #card.on { display:block; }
-  #cn { font:600 11px var(--mono); letter-spacing:.2em; color:var(--cyan); text-shadow:0 0 10px #00e5ff88; }
-  #ct { font-size:20px; font-weight:500; margin:6px 0 4px; line-height:1.25; }
-  #ci { font-size:14px; line-height:1.5; color:#d3f3fa; }
-  #cd { font:12px/1.45 var(--mono); color:var(--ok); margin-top:8px; } #cm { font:12px/1.45 var(--mono); color:var(--warn); margin-top:4px; }
-  #cdots { display:flex; gap:5px; margin-top:10px; } #cdots span { flex:1; height:3px; border-radius:2px; background:#00e5ff30; }
-  #cdots span.done { background:var(--ok); } #cdots span.on { background:var(--cyan); box-shadow:0 0 8px var(--cyan); }
-  #pair { left:50%; top:96px; transform:translateX(-50%); padding:14px 18px; text-align:center; display:none; text-shadow:none; color:#e6fbff; z-index:7; font-size:12.5px; }
-  #pair img { width:200px; height:200px; display:block; margin:8px auto; border-radius:6px; background:#f2f2e9; padding:8px; }
-  #pair b { font:600 12px var(--mono); color:var(--cyan); word-break:break-all; } #pair .tr { font:10.5px var(--mono); letter-spacing:.14em; color:var(--ok); margin-top:6px; }
-</style></head>
+  @font-face { font-family:"Inter"; font-weight:400; src:local("Inter Regular"), local("Inter"), url("./vendor/fonts/Inter_400Regular.ttf") format("truetype"); font-display:swap; }
+  @font-face { font-family:"Inter"; font-weight:500; src:local("Inter Medium"), url("./vendor/fonts/Inter_500Medium.ttf") format("truetype"); font-display:swap; }
+  @font-face { font-family:"Inter"; font-weight:600; src:local("Inter SemiBold"), url("./vendor/fonts/Inter_600SemiBold.ttf") format("truetype"); font-display:swap; }
+
+  /* Design tokens: the spanner.* variables from the Figma "Laptop companion" frames. */
+  :root, :root[data-theme="dark"] {
+    --base:#101512; --raised:#253027; --scene:#131a15; --text:#f2f2e9; --muted:#a0a99f; --line:#354137; --line-strong:#39463b;
+    --action:#caf879; --on-action:#172415; --danger:#f3917c; --call:#b7332d; --warn:#ffd166; --ok:#caf879;
+    --cam-surface:#101512; --cam-text:#ffffff; --cam-accent:#caf879; --scrim:rgba(5,8,5,.42);
+  }
+  :root[data-theme="light"] {
+    --base:#f3f2ec; --raised:#e4e8dc; --scene:#efeee8; --text:#16241b; --muted:#626d61; --line:#d1d6c9; --line-strong:#cbd3c4;
+    --action:#214e31; --on-action:#f6f7ef; --danger:#b7332d; --call:#b7332d; --warn:#8a5a00; --ok:#214e31;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--base); color:var(--text); font-family:Inter,"Segoe UI",system-ui,sans-serif; font-size:15px; line-height:1.35; }
+  body { overflow:hidden; user-select:none; -webkit-font-smoothing:antialiased; }
+  button { font:inherit; color:inherit; cursor:pointer; }
+  a { color:var(--action); text-decoration:none; } a:hover { text-decoration:underline; }
+  :focus-visible { outline:2px solid var(--action); outline-offset:2px; }
+  .muted { color:var(--muted); }
+
+  /* ------------------------------------------------------------ page grid: header / scene + guidance / stages */
+  #app { height:100%; min-height:640px; display:grid; grid-template-rows:auto minmax(0,1fr) auto; padding:0 24px 20px; gap:20px; }
+  #top { display:flex; justify-content:space-between; align-items:flex-start; padding-top:20px; gap:16px; }
+  #sessTitle { margin:0; font-size:26px; font-weight:500; line-height:1.35; }
+  #sessSub { font-size:12px; color:var(--muted); }
+  #topright { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+  #link { display:flex; align-items:center; gap:10px; font-size:15px; font-weight:500; min-height:28px; }
+  .ldot { width:7px; height:7px; border-radius:50%; background:var(--muted); flex:none; }
+  #link[data-state="live"] .ldot { background:var(--action); }
+  #link[data-state="webcam"] .ldot { background:var(--action); }
+  #link[data-state="waiting"] .ldot { background:var(--warn); animation:blink 1.4s infinite; }
+  #link[data-state="lost"] .ldot, #link[data-state="offline"] .ldot { background:var(--danger); animation:blink 1s infinite; }
+  #link[data-state="lost"], #link[data-state="offline"] { color:var(--danger); }
+  @keyframes blink { 50% { opacity:.3 } }
+  #topbtns { display:flex; align-items:center; gap:8px; }
+  .ghost { background:transparent; border:1px solid var(--line); border-radius:999px; padding:4px 12px; font-size:12px; font-weight:500; color:var(--text); }
+  .ghost:hover { background:var(--raised); }
+  #listen { font-size:12px; color:var(--muted); min-width:64px; text-align:right; }
+  #listen.on { color:var(--text); } #listen.on::before { content:""; display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--danger); margin-right:6px; animation:blink 1.2s infinite; }
+
+  main { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:24px; min-height:0; }
+  #scene { position:relative; min-height:0; border-radius:12px; }
+  .lbl { position:absolute; top:16px; font-size:12px; font-weight:500; color:var(--muted); z-index:2; }
+  .lbl.tl { left:20px; } .lbl.tr { right:64px; max-width:60%; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #viewport { position:absolute; left:clamp(0px,4.5%,64px); right:clamp(0px,4.5%,64px); top:48px; bottom:60px; border-radius:12px; overflow:hidden; background:var(--scene); }
+  #c { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  #labels { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+  #sceneFoot { position:absolute; left:20px; bottom:0; max-width:calc(100% - 200px); }
+  #sceneTitle { font-size:17px; font-weight:500; line-height:1.35; }
+  #sceneSub { font-size:12px; color:var(--muted); }
+  #btnPause { position:absolute; right:64px; bottom:8px; background:none; border:0; padding:4px 0; font-size:12px; font-weight:500; color:var(--muted); }
+  #btnPause:hover { color:var(--text); } #btnPause.on { color:var(--action); }
+
+  /* ------------------------------------------------------------ guidance card */
+  #card { display:flex; flex-direction:column; min-height:0; background:var(--raised); border-radius:12px; padding:24px; }
+  #sn { font-size:12px; font-weight:500; color:var(--muted); text-transform:uppercase; }
+  #mid { flex:1 1 auto; min-height:0; overflow:auto; margin:0 -8px; padding:0 8px 18px; scrollbar-width:thin; scrollbar-color:var(--line-strong) transparent;
+         -webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 22px),transparent); mask-image:linear-gradient(180deg,#000 calc(100% - 22px),transparent); }
+  #head { margin:20px 0 0; font-size:36px; font-weight:400; line-height:1.1; letter-spacing:-.04em; }
+  #head span { display:block; }
+  #si { margin:18px 0 0; font-size:17px; font-weight:500; line-height:1.35; min-height:46px; }
+  #rule { height:1px; background:var(--line); margin:16px 0 14px; }
+  #helper { font-size:12px; color:var(--muted); white-space:pre-line; }
+  #sd { font-size:11.5px; color:var(--muted); margin-top:8px; } #sd:empty, #sm:empty { display:none; }
+  #sm { font-size:11.5px; color:var(--warn); margin-top:6px; }
+  #tools { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; } #tools:empty { display:none; }
+  .chip { font-size:10.5px; font-weight:500; letter-spacing:.04em; color:var(--muted); border:1px solid var(--line-strong); padding:2px 8px; border-radius:999px; }
+  #capt { margin-top:14px; background:var(--cam-surface); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:8px; color:var(--cam-text); flex:none; }
+  #captPill { display:flex; align-items:center; gap:8px; min-height:24px; background:none; border:0; padding:0; color:var(--cam-accent); font-size:11px; font-weight:500; text-align:left; cursor:default; }
+  #captPill.speaking { cursor:pointer; }
+  .wave { display:flex; align-items:center; justify-content:center; gap:2px; width:28px; height:24px; }
+  .wave i { width:3px; border-radius:2px; background:var(--cam-accent); display:block; }
+  .wave i:nth-child(1), .wave i:nth-child(5) { height:6px; } .wave i:nth-child(2) { height:13px; } .wave i:nth-child(3) { height:20px; } .wave i:nth-child(4) { height:11px; }
+  .idle .wave i { transform:scaleY(.45); }
+  .speaking .wave i, .listening .wave i { animation:wave .9s ease-in-out infinite; transform-origin:center; }
+  .wave i:nth-child(2) { animation-delay:.12s !important; } .wave i:nth-child(3) { animation-delay:.24s !important; } .wave i:nth-child(4) { animation-delay:.36s !important; } .wave i:nth-child(5) { animation-delay:.48s !important; }
+  .listening .wave i { animation-duration:1.6s; opacity:.8; }
+  @keyframes wave { 50% { transform:scaleY(.45) } }
+  #captText { font-size:18px; font-weight:500; line-height:1.35; white-space:pre-line; max-height:5.4em; overflow:hidden; }
+  #cta { margin-top:16px; flex:none; width:100%; height:56px; border:0; border-radius:8px; padding:16px; display:flex; align-items:center; gap:8px; background:var(--action); color:var(--on-action); font-size:15px; font-weight:600; text-align:left; }
+  #cta:hover { filter:brightness(1.05); } #cta:active { transform:translateY(1px); }
+  #ctaLabel { flex:1; } #cta svg { width:24px; height:24px; flex:none; }
+  #foot { margin-top:12px; font-size:12px; color:var(--muted); flex:none; }
+
+  /* ------------------------------------------------------------ five repair stages */
+  #stages { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
+  .stage { position:relative; background:none; border:0; text-align:left; padding:24px 10px 0 0; border-radius:0; cursor:pointer; }
+  .stage::before { content:""; position:absolute; left:0; right:0; top:0; height:3px; background:var(--line); }
+  .stage.done::before, .stage.cur::before { background:var(--action); }
+  .stage .sl { display:block; font-size:17px; font-weight:500; color:var(--muted); white-space:pre; overflow:hidden; text-overflow:ellipsis; }
+  .stage.cur .sl { color:var(--text); }
+  .stage .ss { display:block; margin-top:6px; font-size:12px; color:var(--muted); }
+  .stage:hover .sl { color:var(--text); }
+
+  /* ------------------------------------------------------------ panels that open on request (specs, sources, parts, part inspector, pairing, shop, live camera) */
+  .panel { background:var(--raised); border:1px solid var(--line); border-radius:12px; color:var(--text); box-shadow:0 8px 28px rgba(0,0,0,.18); }
+  #side, #insp, #cam, #pair { display:none; position:absolute; z-index:6; }
+  #side { right:16px; top:44px; width:360px; max-height:calc(100% - 120px); overflow:auto; padding:16px 18px; font-size:12.5px; }
+  #insp { right:16px; top:44px; width:300px; padding:16px 18px; }
+  #side h3, #insp h3, #shop h3 { margin:0 0 10px; font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  #insp p { margin:6px 0 10px; font-size:13px; line-height:1.45; }
+  #insp table, #side table { width:100%; border-collapse:collapse; font-size:12px; }
+  #insp td, #side td { padding:5px 4px; border-bottom:1px solid var(--line); vertical-align:top; } #insp td:first-child, #side td:first-child { color:var(--muted); width:40%; }
+  #side .src { font-size:10.5px; color:var(--muted); } #side .offer { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:8px 0; }
+  #side .head { font-size:15px; font-weight:500; margin:4px 0 8px; }
+  #side .badge, #shop .badge { font-size:10.5px; font-weight:600; letter-spacing:.06em; padding:2px 7px; border-radius:999px; border:1px solid; display:inline-block; margin-top:4px; }
+  #side .ok, #shop .ok { color:var(--ok); border-color:var(--ok); } #side .warn { color:var(--warn); border-color:var(--warn); } #shop .no { color:var(--danger); border-color:var(--danger); }
+  #cam { right:12px; top:12px; width:230px; padding:6px; }
+  #cam video { width:100%; display:block; border-radius:8px; transform:scaleX(-1); background:#000; }
+  #cam .row { display:flex; justify-content:space-between; align-items:center; font-size:10.5px; font-weight:600; letter-spacing:.06em; color:var(--muted); margin:6px 4px 2px; }
+  #cam .live { color:var(--danger); } #cam .live::before { content:"●"; margin-right:5px; animation:blink 1.2s infinite; }
+  #seen { font-size:11.5px; line-height:1.35; margin:4px 4px 2px; min-height:30px; max-height:64px; overflow:hidden; }
+  #seen b { font-weight:600; } #seen .bad { color:var(--danger); font-weight:600; }
+  #camconf { height:3px; background:var(--line); margin:6px 4px 2px; border-radius:2px; } #camconf i { display:block; height:100%; width:0; background:var(--action); border-radius:2px; transition:width .4s; }
+  #pair { left:50%; top:50%; transform:translate(-50%,-50%); padding:20px 22px; text-align:center; font-size:12.5px; max-width:calc(100% - 24px); }
+  #pair img { width:220px; height:220px; display:block; margin:0 auto 12px; border-radius:8px; image-rendering:pixelated; }
+  #pair b { font-weight:600; font-size:12px; word-break:break-all; user-select:text; }
+  #pair .t { font-size:15px; font-weight:600; margin-bottom:6px; } #pair .tr { margin-top:10px; font-size:11.5px; color:var(--muted); } #pair .warn { margin-top:10px; font-size:11.5px; color:var(--warn); }
+  #tip { position:fixed; pointer-events:none; padding:6px 10px; font-size:12px; font-weight:500; display:none; white-space:nowrap; z-index:40; } #tip b { font-weight:600; }
+  #heard { position:fixed; left:50%; bottom:150px; transform:translateX(-50%); padding:8px 14px; font-size:12px; display:none; z-index:30; max-width:70vw; } #heard b { font-weight:600; }
+  #flash { position:absolute; inset:0; pointer-events:none; background:var(--danger); opacity:0; transition:opacity .25s; z-index:3; }
+
+  /* 3D labels (CSS2D) */
+  .callout { font-size:10.5px; font-weight:600; letter-spacing:.14em; color:var(--text); padding:3px 8px; border-left:2px solid var(--action); background:var(--base); border-radius:0 4px 4px 0; transform:translate(16px,-50%); white-space:nowrap; transition:opacity .4s; }
+  .tag { font-size:11px; font-weight:600; letter-spacing:.1em; color:var(--on-action); background:var(--action); padding:3px 9px; border-radius:999px; transform:translate(-50%,-150%); white-space:nowrap; }
+  .tag.red { background:var(--call); color:#fff; } .tag.ok { background:var(--action); }
+  .dim { font-size:10.5px; letter-spacing:.08em; color:var(--muted); transform:translate(-50%,-50%); white-space:nowrap; opacity:0; transition:opacity .4s; }
+
+  /* shop / live parts search */
+  #shop { overflow-x:hidden; position:fixed; left:50%; top:80px; transform:translateX(-50%); width:min(1060px, calc(100% - 48px)); max-height:calc(100% - 120px); overflow:auto; padding:18px 20px; display:none; z-index:25; font-size:12.5px; }
+  #shop .sub { font-size:11px; color:var(--muted); margin-bottom:10px; letter-spacing:.04em; }
+  #shop .grid, #shop .vrow { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:12px; }
+  #shop .it { border:1px solid var(--line); border-radius:8px; padding:10px; background:var(--base); display:flex; flex-direction:column; gap:6px; animation:rise .45s ease both; }
+  #shop .it img { width:100%; height:140px; object-fit:contain; background:#fff; border-radius:6px; }
+  #shop .nm { font-size:13.5px; font-weight:500; line-height:1.3; } #shop .pr { font-size:18px; font-weight:600; } #shop .rt { font-size:11px; color:var(--muted); }
+  #shop .badge { align-self:flex-start; } #shop .why { font-size:12px; color:var(--muted); line-height:1.4; }
+  #shop ul { margin:0; padding-left:16px; font-size:12px; line-height:1.45; } #shop li.p { color:var(--ok); } #shop li.c { color:var(--danger); }
+  #shop .searching { font-size:12px; font-weight:500; padding:30px 0; text-align:center; color:var(--muted); } #shop .searching.bad { color:var(--danger); }
+  #shop .verify { border:1px solid var(--action); background:var(--base); border-radius:8px; padding:10px 12px; margin:0 0 12px; animation:rise .45s ease both; }
+  #shop .verify.pending { border-color:var(--line-strong); }
+  #shop .verify .vh { font-size:11px; font-weight:600; letter-spacing:.08em; color:var(--ok); margin-bottom:6px; } #shop .verify.pending .vh { color:var(--muted); }
+  #shop .verify .dec { font-size:17px; font-weight:500; line-height:1.35; margin:2px 0 4px; } #shop .verify .dec b { color:var(--ok); }
+  #shop .verify .meta { font-size:11px; color:var(--muted); }
+  #shop .vo { border:1px solid var(--line); border-radius:8px; padding:7px 9px; font-size:12px; } #shop .vo .pr { font-size:15px; } #shop .ev a { margin-right:6px; }
+  #shop .auto { font-size:11px; font-weight:600; color:var(--warn); margin-left:8px; } #shop .cites { margin-top:12px; font-size:11px; color:var(--muted); line-height:1.7; } #shop .cites a { margin-right:10px; }
+  #shop .dots::after { content:"…"; animation:blink 1.2s infinite; }
+  @keyframes rise { from { opacity:0; transform:translateY(10px); } }
+
+  /* ------------------------------------------------------------ wake + boot overlays */
+  #wake { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:12px; z-index:20; background:var(--scrim); backdrop-filter:blur(6px); cursor:pointer; text-align:center; padding:24px; }
+  #wake .box { background:var(--base); border:1px solid var(--line); border-radius:16px; padding:32px 40px; max-width:520px; box-shadow:0 18px 60px rgba(0,0,0,.35); }
+  #wake .big { font-size:26px; font-weight:500; margin-bottom:8px; } #wake small { display:block; font-size:12px; color:var(--muted); line-height:1.5; }
+  #wake .go { display:inline-flex; align-items:center; gap:8px; margin-top:18px; height:48px; padding:0 20px; border-radius:8px; background:var(--action); color:var(--on-action); font-weight:600; font-size:15px; }
+  #boot { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:var(--base); z-index:30; transition:opacity .6s; text-align:center; padding:24px; }
+  #boot .t { font-size:20px; font-weight:500; } #boot .bar { width:260px; height:3px; background:var(--line); border-radius:2px; overflow:hidden; } #boot .bar i { display:block; height:100%; width:0; background:var(--action); transition:width .3s; }
+  #boot small { font-size:12px; color:var(--muted); max-width:460px; line-height:1.5; } #boot small.bad { color:var(--danger); }
+  #boot button { margin-top:4px; height:40px; padding:0 18px; border-radius:8px; border:0; background:var(--action); color:var(--on-action); font-weight:600; display:none; }
+
+  /* the old button toolbar is voice-only: still wired (keys / voice / deep links) but not drawn */
+  #legacy { display:none !important; }
+
+  @media (max-height:860px) { #tools, #helper, #rule { display:none; } #head { font-size:30px; margin-top:14px; } #capt { margin-top:10px; padding:12px 14px; } #captText { font-size:16px; } #cta { margin-top:12px; height:50px; } #card { padding:20px; } }
+  @media (max-height:720px) { #sd, #sm { display:none; } #head { font-size:26px; } #si { font-size:15px; } #stages .ss { display:none; } .stage { padding-top:14px; } #app { gap:12px; } }
+  @media (max-width:1080px) { main { grid-template-columns:minmax(0,1fr) 320px; gap:16px; } #head { font-size:30px; } .stage .sl { font-size:15px; } }
+  @media (max-width:860px) { body { overflow:auto; } #app { height:auto; } main { grid-template-columns:1fr; } #scene { height:62vh; min-height:360px; } #card { min-height:560px; } }
+  @media (prefers-reduced-motion:reduce) { .ldot, .wave i { animation:none !important; } }
+
+  /* ------------------------------------------------------------ "What do you want to fix?" (first screen) */
+  #pick.first { display:flex; z-index:30; cursor:pointer; } #pick.first .hint::before { background:var(--cyan); box-shadow:0 0 8px var(--cyan); animation:none; }
+  #pick { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:18px; z-index:19; background:#05080F; transition:opacity .6s; }
+  #pick .q { font:300 34px/1.3 system-ui,"Segoe UI",Inter,sans-serif; color:#e6fbff; letter-spacing:.01em; text-align:center; max-width:720px; padding:0 24px; }
+  #pick .hint { font:11px var(--mono); letter-spacing:.3em; color:var(--cyan); opacity:.75; text-transform:uppercase; }
+  #pick .hint::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:#ff3d5a; margin-right:8px; box-shadow:0 0 8px #ff3d5a; animation:blink 1.2s infinite; }
+  #pick .echo { font:13px var(--mono); color:#7fd6e6; min-height:18px; opacity:.85; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/build/three.module.js",
+               "three/addons/": "./vendor/three/examples/jsm/" } }
+</script>
+</head>
 <body>
-<canvas id="c"></canvas><div id="labels"></div>
-<div class="hud" id="top"><div id="brand">SPANNER <b>//</b> <b id="dev">DEVICE</b> HOLOGRAM</div><div id="status"><span id="mode">STANDBY</span><br><span id="tele"></span><br><span id="listen">MIC OFF</span></div></div>
-<div class="hud panel brackets" id="insp"><h3 id="ih">PART</h3><p id="ip"></p><div class="k" id="ik"></div></div>
-<div class="hud panel brackets" id="note"><b id="nb">HOLOGRAM</b><span id="nt"></span></div>
-<div class="hud panel brackets" id="card"><div id="cn"></div><div id="ct"></div><div id="ci"></div><div id="cd"></div><div id="cm"></div><div id="cdots"></div></div>
-<div class="hud panel brackets" id="pair"></div>
+<div id="app">
+  <header id="top">
+    <div id="sess"><h1 id="sessTitle">Repair companion</h1><div id="sessSub">Guided repair</div></div>
+    <div id="topright">
+      <div id="link" data-state="idle" role="status" aria-live="polite"><i class="ldot"></i><span id="linktext">Phone not connected</span></div>
+      <div id="topbtns"><span id="listen">Mic off</span><button class="ghost" id="btnPair">Pair phone</button><button class="ghost" id="btnTheme" aria-label="Switch theme">Light</button></div>
+    </div>
+  </header>
+
+  <main>
+    <section id="scene" aria-label="3D companion">
+      <div class="lbl tl">3D COMPANION</div>
+      <div class="lbl tr" id="mode">Assembled</div>
+      <div id="viewport">
+        <canvas id="c"></canvas><div id="labels"></div><div id="flash"></div>
+        <div class="panel" id="pair"></div>
+      </div>
+      <div id="sceneFoot"><div id="sceneTitle">Overview</div><div id="sceneSub"><span id="tele"></span></div></div>
+      <div class="panel" id="insp"><h3 id="ih">PART</h3><p id="ip"></p><div class="k" id="ik"></div></div>
+    </section>
+
+    <aside id="card" aria-label="Repair guidance">
+      <div id="sn">READY</div>
+      <div id="mid">
+        <h2 id="head"><span>What needs</span><span>fixing?</span></h2>
+        <p id="si">Just tell me what’s wrong.</p>
+        <div id="rule"></div>
+        <div id="helper"></div><div id="sd"></div><div id="sm"></div><div id="tools"></div>
+      </div>
+      <div id="capt" class="idle"><button id="captPill" class="idle" aria-label="Spanner's voice"><span class="wave"><i></i><i></i><i></i><i></i><i></i></span><span id="captState">Voice off</span></button><div id="captText"></div></div>
+      <button id="cta"><span id="ctaLabel">Say “start”</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      <div id="foot"></div>
+    </aside>
+  </main>
+
+  <nav id="stages" aria-label="Repair stages"></nav>
+</div>
+
 <div class="panel" id="heard"></div>
-<div id="wake">TAP TO WAKE SPANNER<small>then just talk: "take it apart", "show me the battery", "put it back", "x-ray", "keyboard"</small></div>
+<div id="wake"><div class="box"><div class="big">Wake Spanner</div><small>Tap anywhere, then just talk: “take it apart”, “show me the battery”, “what’s wrong with it?”</small><span class="go">Tap to start</span></div></div>
+
 <script type="module" src="./device.js"></script>
-</body></html>
+</body>
+</html>
