@@ -83,8 +83,7 @@ export function CallHeader() {
   const { startedAt, connected } = useSpanner();
   const elapsed = useElapsed(startedAt);
   return (
-    <View style={styles.header}>
-      <Image source={images.logo} style={{ width: 126, height: 22, marginLeft: 10 }} contentFit="contain" />
+    <View style={[styles.header, { justifyContent: "flex-end" }]}>
       <View style={styles.durationPill}>
         <View style={[styles.liveDot, { backgroundColor: connected ? camera.accent : hudColors.warn }]} />
         <Txt weight="medium" size={12} color={camera.text}>{elapsed}</Txt>
@@ -244,16 +243,20 @@ export function SafetyBanner({ message, severity }: { message: string; severity:
   );
 }
 
-/** Dark caption card with the voice status pill. Tap the status while Spanner speaks to interrupt. */
-export function SpokenCaption({ text, speaking, listening }: { text: string; speaking: boolean; listening?: boolean }) {
-  const { interrupt } = useSpanner();
+/** Live transcript: what the person is saying right now, or what Spanner is saying. Taps go through to the screen. */
+export function Transcript() {
+  const { caption, userText, transcriptWho, speaking, level, micMuted } = useSpanner();
+  const hearing = !speaking && !micMuted && level > 0.15;   // the person is talking into the phone
+  const you = speaking ? false : hearing ? true : transcriptWho === "you";
+  const text = speaking ? caption : hearing ? userText || "Listening…" : you ? userText : caption;
+  if (!text) return null;
   return (
-    <View style={styles.caption}>
-      <Pressable disabled={!speaking} onPress={interrupt} accessibilityLabel="Stop speaking" style={styles.voiceStatus}>
-        <View style={{ width: 28 }}><Waveform active={speaking || !!listening} /></View>
-        <Txt weight="medium" size={11} color={camera.accent}>{speaking ? "Spanner is speaking" : "Listening to you"}</Txt>
-      </Pressable>
-      <Txt weight="medium" size={18} color={camera.text}>{text}</Txt>
+    <View pointerEvents="none" style={styles.caption}>
+      <View style={styles.voiceStatus}>
+        <View style={{ width: 28 }}><Waveform active={speaking || hearing} /></View>
+        <Txt weight="medium" size={11} color={camera.accent}>{you ? "YOU" : "SPANNER"}</Txt>
+      </View>
+      <Txt weight="medium" size={18} color={camera.text} numberOfLines={6}>{text}</Txt>
     </View>
   );
 }
@@ -261,14 +264,14 @@ export function SpokenCaption({ text, speaking, listening }: { text: string; spe
 /** Bottom bar: the spoken action (tap = send now), a hint, the "..." button and End call. */
 export function VoiceFooter({ action, hint, onMore }: { action: string; hint: string; onMore: () => void }) {
   const { c } = useTheme();
-  const { endCall, sendNow, level, speaking } = useSpanner();
+  const { endCall, tapScreen, level, speaking } = useSpanner();
   return (
     <View style={[styles.footer, { backgroundColor: c.base }]}>
       <View style={{ flex: 1, flexDirection: "row", gap: 12 }}>
         <View style={{ width: 20, height: 48, justifyContent: "center", marginLeft: 0 }}>
           <Waveform active={!speaking && level > 0.15} barWidth={2} color={c.action} scale={20 / 24} />
         </View>
-        <Pressable onPress={sendNow} accessibilityRole="button" style={{ flex: 1 }}>
+        <Pressable onPress={tapScreen} accessibilityRole="button" style={{ flex: 1 }}>
           <View style={{ height: 48, justifyContent: "center" }}>
             <Txt weight="semibold" size={15} numberOfLines={1}>{action}</Txt>
           </View>

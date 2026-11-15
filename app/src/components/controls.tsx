@@ -103,7 +103,7 @@ export function ControlsSheet({ visible, variant, onClose }: { visible: boolean;
               <Txt weight="semibold" size={18} color={c.textSecondary}>×</Txt>
             </Pressable>
           </View>
-          <Txt size={12} color={c.textSecondary}>Voice stays on unless you mute it.</Txt>
+          <Txt size={12} color={c.textSecondary}>Mute yourself, or mute the bot to pause the conversation.</Txt>
 
           <View style={styles.row}>
             <Control
@@ -114,18 +114,11 @@ export function ControlsSheet({ visible, variant, onClose }: { visible: boolean;
               onPress={() => st.setMicMuted(!st.micMuted)}
             />
             <Control
-              label="Speaker"
+              label={st.botMuted ? "Bot paused" : "Mute bot"}
               icon={icons.speaker}
-              bg={st.speakerOn ? c.action : on.bg}
-              fg={st.speakerOn ? c.onAction : on.fg}
-              onPress={() => st.setSpeakerOn(!st.speakerOn)}
-            />
-            <Control
-              label="Camera"
-              icon={icons.camera}
-              bg={st.cameraOn ? on.bg : off.bg}
-              fg={st.cameraOn ? on.fg : off.fg}
-              onPress={() => st.setCameraOn(!st.cameraOn)}
+              bg={st.botMuted ? off.bg : on.bg}
+              fg={st.botMuted ? off.fg : on.fg}
+              onPress={() => st.setBotMuted(!st.botMuted)}
             />
             <View style={styles.control}>
               <CallEndButton size={56} onPress={endCall} />

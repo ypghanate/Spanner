@@ -50,6 +50,8 @@ export interface Latest {
   plan_id?: string;
   /** The laptop is talking right now: pause the microphone so it doesn't record Spanner's own voice. */
   speaking?: boolean;
+  /** The laptop's latest answer to something the person said. */
+  reply?: { id: string; say?: string; text?: string };
   /** What the laptop has on screen: the phone follows it, so both always show the same step. */
   screen?: "pairing" | "picking" | "ready" | "step" | "done";
   screen_step?: number;
