@@ -8,6 +8,7 @@ RUN_DIR="${TMPDIR:-/tmp}/spanner-run"
 mkdir -p "$RUN_DIR"
 
 BACKEND_LOG="$RUN_DIR/backend.log"
+export PUBLIC_URL_FILE="$RUN_DIR/public_url"; rm -f "$PUBLIC_URL_FILE"
 TUNNEL_LOG="$RUN_DIR/cloudflared.log"
 EXPO_LOG="$RUN_DIR/expo.log"
 : >"$BACKEND_LOG"; : >"$TUNNEL_LOG"; : >"$EXPO_LOG"
@@ -138,9 +139,10 @@ for _ in $(seq 1 120); do
 done
 grep -q "Registered tunnel connection" "$TUNNEL_LOG" || die "cloudflared never registered a connection. See $TUNNEL_LOG."
 echo "Tunnel registered"
-VIEWER_URL="$TUNNEL_URL$VIEWER_PATH"
+VIEWER_URL="http://localhost:$BACKEND_PORT$VIEWER_PATH"   # laptop uses localhost: no DNS lookup of the tunnel name
+printf %s "$TUNNEL_URL" >"$PUBLIC_URL_FILE"               # the pairing QR carries this address for the phone
 
-# Open the laptop viewer now (the browser retries the name on its own); Expo may still be bundling.
+# Open the laptop viewer now; Expo may still be bundling.
 if command -v open >/dev/null 2>&1; then
   open "$VIEWER_URL" >/dev/null 2>&1 || true
 elif command -v xdg-open >/dev/null 2>&1; then

@@ -719,7 +719,12 @@ async def net():
         ip = ""
     finally:
         s.close()
-    return {"lan_ip": "" if not ip or ip.startswith("127.") else ip}
+    public = ""
+    try:                                      # start.sh writes the tunnel address here once cloudflared has one
+        public = Path(os.environ.get("PUBLIC_URL_FILE", "")).read_text().strip() if os.environ.get("PUBLIC_URL_FILE") else ""
+    except OSError:
+        pass
+    return {"lan_ip": "" if not ip or ip.startswith("127.") else ip, "public_url": public}
 
 
 class Signal(BaseModel):

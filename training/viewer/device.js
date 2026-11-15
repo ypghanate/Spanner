@@ -430,7 +430,7 @@ function isEchoDev(text, graceMs = 6000) {
 // ---- pairing code (only while no phone is sending pictures)
 async function phoneOrigin() {
   if (!/^(localhost|127\.|\[?::1\]?$)/.test(location.hostname)) return location.origin;
-  try { const n = await (await fetch(API + "/coach/net", { signal: AbortSignal.timeout(3000) })).json(); if (n.lan_ip) return `${location.protocol}//${n.lan_ip}${location.port ? ":" + location.port : ""}`; } catch { /* older server */ }
+  try { const n = await (await fetch(API + "/coach/net", { signal: AbortSignal.timeout(3000) })).json(); if (n.public_url) return n.public_url; if (n.lan_ip) return `${location.protocol}//${n.lan_ip}${location.port ? ":" + location.port : ""}`; } catch { /* older server */ }
   return location.origin;
 }
 let pairRun = 0;
