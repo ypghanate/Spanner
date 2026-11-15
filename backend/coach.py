@@ -826,8 +826,9 @@ async def generate_plan(req: PlanReq):
         parts = dp.get("parts") if dp.get("device") == req.device else None
         out = await asyncio.to_thread(plan_repair, req.complaint, req.session, req.device, parts)
     except Exception as e:                       # API down, bad key...: keep the session usable on the canned plan
-        out = {"status": "fallback", "say": "I couldn't plan that just now, so here is the standard switch repair.",
-               "errors": [f"{type(e).__name__}: {e}"]}
+        say = ("I couldn't plan that just now, so here is the standard switch repair." if req.device == "keyboard"
+               else "I couldn't plan that just now. Tell me again what is wrong and I'll try once more.")     # never a keyboard repair for a plug
+        out = {"status": "fallback", "say": say, "errors": [f"{type(e).__name__}: {e}"]}
     if out["status"] == "ready":
         _plans[req.session] = {"broken_key": out.get("broken_key"), "plan": out["plan"], "parts_card": out.get("parts_card"),
                                "plan_id": out["plan_id"]}

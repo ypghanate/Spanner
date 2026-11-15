@@ -52,8 +52,20 @@ FAULTS = {"iphone15": _PHONE, "ipad11": _PHONE,
           "plug13a": [("fuse", r"fuse|blown|blew|no power|dead|stopped working|not working|tripp", "the fuse in my plug has blown")]}   # a moulded plug has nothing else a person can repair
 
 
+# A plug has one stock fault (a blown fuse) with one pre-written plan. That plan is only for that fault: "the kettle keeps tripping
+# the fuse", a frayed cable, a cracked case, a plug that is warm or loose in the socket, or just "it is dead" are different
+# problems (sometimes ones to stop at), so they are planned by the model from what the person actually said, never answered
+# with the stock plan.
+_PLUG_FUSE = re.compile(r"\bfuse\b|blown|blew", re.I)
+_PLUG_SOMETHING_ELSE = re.compile(r"fray|bare|expos|crack|broke|bent|loose|wobbl|warm|hot|smell|burn|scorch|spark|melt|wet|water|damp|"
+                                  r"keeps? (blowing|tripping)|keeps? going|trips?\b|tripp|again and again|every time|new fuse|rcd|breaker|"
+                                  r"short|socket|wall|cable|cord|wire|pin\b", re.I)
+
+
 def classify(device: str, complaint: str) -> str | None:
     t = complaint.lower()
+    if device == "plug13a":
+        return "fuse" if _PLUG_FUSE.search(t) and not _PLUG_SOMETHING_ELSE.search(t) else None
     for cls, rx, _ in FAULTS.get(device, []):
         if re.search(rx, t):
             return cls

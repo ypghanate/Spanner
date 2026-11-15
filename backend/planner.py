@@ -384,6 +384,12 @@ def _use_mock() -> bool:
     return get_settings().use_mocks or not os.getenv("ANTHROPIC_API_KEY")
 
 
+def _device_mock() -> bool:
+    """The iPhone, iPad, headphones and plug repairs: USE_MOCKS is on by default (the offline tests and CI need that), and it must
+    not hand a person at the demo a canned plan when a key is there. A mock only when there is no key at all."""
+    return _use_mock() and not os.getenv("ANTHROPIC_API_KEY")
+
+
 def plan_repair(complaint: str, session: str = "", device: str = "keyboard", device_parts: list[dict] | None = None) -> dict:
     """Blocking. Returns {"status": ready|clarify|refused, ...}; run it in a thread from async code.
     Other devices (iPhone, iPad, headphones) go to backend.device_planner with the parts their hologram reported."""
@@ -403,7 +409,7 @@ def plan_repair(complaint: str, session: str = "", device: str = "keyboard", dev
     if device != "keyboard":
         from .device_planner import plan_device_repair
 
-        return plan_device_repair(complaint, device, device_parts or [], mock=mock)
+        return plan_device_repair(complaint, device, device_parts or [], mock=_device_mock())
     intake = _intake_mock(complaint) if mock else (_intake_fast(complaint) or _intake_claude(complaint))
     t_intake = time.perf_counter()
     if not intake.in_scope:
