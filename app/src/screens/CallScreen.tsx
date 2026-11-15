@@ -13,7 +13,7 @@ import { CallView, useSpanner } from "../state/SpannerProvider";
 import { absUrl } from "../lib/config";
 import { Icon, icons, images, Txt } from "../components/ui";
 import {
-  CallHeader, CameraBackdrop, CameraBox, DurationPillStandalone, FindingCard, HudBoxes, SafetyBanner, StepProgressCard, Transcript, VoiceFooter,
+  CallHeader, CameraBackdrop, CameraBox, DurationPillStandalone, FlipButton, FindingCard, HudBoxes, SafetyBanner, StepProgressCard, Transcript, VoiceFooter,
 } from "../components/call";
 import { ControlsSheet, SheetVariant } from "../components/controls";
 import { Diagram2D } from "../components/diagram";
@@ -195,7 +195,8 @@ function Explainer({
   return (
     <SafeAreaView style={styles.fill} edges={["top"]}>
       <View style={styles.column}>
-        <View style={[styles.exHeader, { justifyContent: "flex-end" }]}>
+        <View style={[styles.exHeader, { justifyContent: "space-between" }]}>
+          <FlipButton />
           <DurationPillStandalone />
         </View>
         <Txt size={11} color={c.textSecondary} style={{ marginTop: 19 }}>{copy.label}</Txt>

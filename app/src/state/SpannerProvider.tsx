@@ -61,6 +61,7 @@ export interface SpannerState {
   botMuted: boolean; // speaker button: Spanner is silenced and the conversation is paused
   speakerOn: boolean; // also play Spanner's voice on this phone (the laptop already speaks)
   cameraOn: boolean; // false = stop sending frames
+  cameraFacing: "back" | "front"; // which camera the phone uses (flip button on the call)
   lastFrameUri: string | null; // last photo sent to the laptop, shown on the summary
 }
 
@@ -97,6 +98,7 @@ const initial: SpannerState = {
   botMuted: false,
   speakerOn: false,
   cameraOn: true,
+  cameraFacing: "back",
   lastFrameUri: null,
 };
 
@@ -120,6 +122,8 @@ interface Actions {
   setMicMuted(on: boolean): void;
   setSpeakerOn(on: boolean): void;
   setCameraOn(on: boolean): void;
+  /** Switch between the rear camera and the selfie camera. */
+  flipCamera(): void;
   dismissSummary(): void;
 }
 
@@ -463,6 +467,7 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
         if (!s1.micMuted) void listener.current?.setMuted(false);
         listener.current?.flush();   // "tap once you've explained it": only acts if they were mid-sentence
       },
+      flipCamera: () => patch((p) => ({ cameraFacing: p.cameraFacing === "front" ? "back" : "front" })),
       setBotMuted: (on) => {
         patch({ botMuted: on });
         if (on) {

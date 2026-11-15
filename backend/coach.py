@@ -315,6 +315,7 @@ def _ask(image_b64: str, current_step: int, session: str = "") -> CoachView:
 
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
+_last_frame: dict[str, tuple[bytes, float]] = {}   # session -> (jpeg, when)
 _frame_inflight: set[str] = set()        # sessions with a vision call running: a second frame is dropped, not queued
 
 
@@ -325,6 +326,7 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
         raise HTTPException(400, "empty image")
     if len(data) > MAX_IMAGE_BYTES:
         raise HTTPException(413, "image too large")
+    _last_frame[session] = (data, time.time())      # the newest picture, for a spoken question about what the camera sees
     if session in _frame_inflight:       # the previous frame is still being read: never stack Claude calls behind it
         raise HTTPException(429, "still reading the previous frame")
     if session not in _plans:
@@ -340,25 +342,8 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
         on_keyboard = _demo(session)["plan"].get("device", "keyboard") == "keyboard"
         data, crop = await asyncio.to_thread(_keyboard_crop, data) if on_keyboard else (data, {"cropped": False})
         view = await asyncio.to_thread(_ask, base64.standard_b64encode(data).decode(), current_step, session)
-        timing["ask"] = round((time.perf_counter() - t1) * 1000)
-        if view.keyboard_visible or crop.get("cropped"):      # Claude sees a keyboard, or the detector found one
-            _start_layout_read(session, data)        # the first good frame of the keyboard: read its layout in the background
-        gap_suspected = bool(view.missing_keys or view.gap_left or view.gap_right or view.gap_x is not None)
-        first_pass = resolve_gap(view)               # a layout-validated read (both neighbours in one row) counts
-        if first_pass and (not confirmed or first_pass == _gap_cache[session]["key"]):
-            _remember_gap(session, first_pass)       # a confirmed key is only ever changed by the zoomed second look
-        cached = _cached_gap(session, first_pass) if gap_suspected else None
-        verified = None
-        if gap_suspected and not cached and not _verify_resting(session):
-            t2 = time.perf_counter()
-            verified = await asyncio.to_thread(verify_gap, data, view)
-            timing["verify"] = round((time.perf_counter() - t2) * 1000)
-            if verified:
-                _remember_gap(session, verified)
-            else:
-                _verify_missed(session)
-        elif gap_suspected and not cached:
-            crop["verify_resting"] = True
+        gap_suspected = on_keyboard and bool(view.missing_keys or view.gap_left or view.gap_right or view.gap_x is not None)
+        verified = await asyncio.to_thread(verify_gap, data, view) if gap_suspected else None
     finally:
         _frame_inflight.discard(session)
     if verified:
@@ -711,6 +696,7 @@ class ViewState(BaseModel):
 _view_state: dict[str, ViewState] = {}
 _history: dict[str, list[dict]] = {}      # recent conversation per session (user / assistant turns)
 CONVERSE_MODEL = os.getenv("CONVERSE_MODEL", "claude-haiku-5-5")
+_LOOK = re.compile(r"\b(see|look|looking|show|camera|view|picture|this|that|these|those|here|which|what'?s|what is|visible|holding)\b", re.I)
 
 
 @router.post("/state")
@@ -770,7 +756,15 @@ def _converse_prompt() -> str:
 
 def _converse(text: str, session: str) -> Turn:
     hist = _history.setdefault(session, [])
-    messages = hist[-8:] + [{"role": "user", "content": f"[live state]\n{_context(session)}\n\n[they said] {text}"}]
+    body = f"[live state]\n{_context(session)}\n\n[they said] {text}"
+    pic = _last_frame.get(session)
+    if pic and time.time() - pic[1] < 10 and (session not in _plans or _LOOK.search(text)):
+        # a question about what is in view (or no repair yet, so nothing else has looked): answer from the picture itself
+        content = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.standard_b64encode(pic[0]).decode()}},
+                   {"type": "text", "text": "[the camera's latest picture is above: answer questions about what is in view from it]\n" + body}]
+    else:
+        content = body
+    messages = hist[-8:] + [{"role": "user", "content": content}]
     try:
         resp = _client().beta.messages.parse(
             model=CONVERSE_MODEL, max_tokens=400, thinking=_thinking(CONVERSE_MODEL), output_config={"effort": "low"},

@@ -13,22 +13,35 @@ import { CallEndButton, Icon, icons, images, Txt, Waveform } from "./ui";
 const PICTURE_SIZE = "1280x720";
 
 /** Live rear camera with the design's tint and top / bottom scrims. */
+/** Flip between the rear and the selfie camera. */
+export function FlipButton() {
+  const { cameraFacing, flipCamera } = useSpanner();
+  return (
+    <Pressable onPress={flipCamera} hitSlop={10} accessibilityRole="button" accessibilityLabel={cameraFacing === "front" ? "Use the rear camera" : "Use the selfie camera"}
+      style={[styles.durationPill, { gap: 7 }]}>
+      <Icon src={icons.camera} size={14} color={camera.text} />
+      <Txt weight="medium" size={12} color={camera.text}>{cameraFacing === "front" ? "Selfie" : "Rear"} · flip</Txt>
+    </Pressable>
+  );
+}
+
 export const CameraBackdrop = forwardRef<
   CameraView,
   { children?: React.ReactNode; permitted: boolean; mode?: "full" | "hidden" }
 >(function CameraBackdrop({ children, permitted, mode = "full" }, ref) {
+  const { cameraFacing } = useSpanner();
   // In the 3D / 2D views the camera stays mounted (hidden) so frames keep flowing.
   if (mode === "hidden") {
     return (
       <View pointerEvents="none" style={{ position: "absolute", right: 0, top: 0, width: 64, height: 64, opacity: 0.01 }}>
-        {permitted ? <CameraView ref={ref} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} mute pictureSize={PICTURE_SIZE} /> : null}
+        {permitted ? <CameraView ref={ref} style={StyleSheet.absoluteFill} facing={cameraFacing} animateShutter={false} mute pictureSize={PICTURE_SIZE} /> : null}
       </View>
     );
   }
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: camera.surface }]}>
       {permitted ? (
-        <CameraView ref={ref} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} mute pictureSize={PICTURE_SIZE} />
+        <CameraView ref={ref} style={StyleSheet.absoluteFill} facing={cameraFacing} animateShutter={false} mute pictureSize={PICTURE_SIZE} />
       ) : (
         <Image source={images.liveCamera} style={StyleSheet.absoluteFill} contentFit="cover" />
       )}
@@ -49,10 +62,11 @@ export const CameraBox = forwardRef<CameraView, { permitted: boolean; variant: "
   ref,
 ) {
   const split = variant === "split";
+  const { cameraFacing } = useSpanner();
   return (
     <View pointerEvents="none" style={[{ borderRadius: radius.r12, overflow: "hidden", backgroundColor: camera.surface }, style]}>
       {permitted ? (
-        <CameraView ref={ref} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} mute pictureSize={PICTURE_SIZE} />
+        <CameraView ref={ref} style={StyleSheet.absoluteFill} facing={cameraFacing} animateShutter={false} mute pictureSize={PICTURE_SIZE} />
       ) : (
         <Image source={split ? images.liveCamera : images.pip} style={StyleSheet.absoluteFill} contentFit="cover" />
       )}
@@ -83,7 +97,8 @@ export function CallHeader() {
   const { startedAt, connected } = useSpanner();
   const elapsed = useElapsed(startedAt);
   return (
-    <View style={[styles.header, { justifyContent: "flex-end" }]}>
+    <View style={[styles.header, { justifyContent: "space-between" }]}>
+      <FlipButton />
       <View style={styles.durationPill}>
         <View style={[styles.liveDot, { backgroundColor: connected ? camera.accent : hudColors.warn }]} />
         <Txt weight="medium" size={12} color={camera.text}>{elapsed}</Txt>
