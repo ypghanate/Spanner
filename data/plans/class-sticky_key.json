@@ -1,0 +1,116 @@
+{
+ "fault": "The {KEY} key feels sticky, likely from dust, crumbs or dried spill inside the switch or under the keycap.",
+ "diagnosis": "A sticky key is usually debris or residue in or under the switch. I'll have you unplug the board, pull the {KEY} keycap, clean around the switch with compressed air, and test it. If it still sticks, we'll swap the switch.",
+ "difficulty": "easy",
+ "time_min": 15,
+ "tools_needed": [
+  "keycap puller",
+  "compressed air"
+ ],
+ "safety_notes": [
+  "Unplug the USB-C cable before opening any key.",
+  "Touch grounded metal or wear an anti-static strap before touching the board.",
+  "Hold compressed air upright and do not spray liquid onto the board."
+ ],
+ "steps": [
+  {
+   "title": "Unplug the keyboard",
+   "instruction": "Unplug the USB-C cable from the back of the keyboard. Touch grounded metal first.",
+   "kind": "cable-out",
+   "parts": [
+    "USB-C port"
+   ],
+   "expected_visual_state": "No cable is plugged into the USB-C port and the backlight is off.",
+   "common_mistakes": [
+    "Leaving the cable plugged in while working on the key.",
+    "Reaching for the board without grounding yourself first."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#1"
+   ]
+  },
+  {
+   "title": "Pull the keycap",
+   "instruction": "Hook the keycap puller under opposite edges of the {KEY} keycap and pull straight up. Set the keycap aside.",
+   "kind": "keycap-pull",
+   "parts": [
+    "keycap",
+    "switch"
+   ],
+   "expected_visual_state": "The {KEY} keycap is off and the bare switch with its cross-shaped stem is visible.",
+   "common_mistakes": [
+    "Pulling the wrong keycap.",
+    "Pulling at an angle, which stresses the stem or scratches the case."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#2"
+   ]
+  },
+  {
+   "title": "Clean the switch",
+   "instruction": "Blow compressed air around the {KEY} switch stem and into the gaps around it. Press the stem a few times while blowing.",
+   "kind": "socket-inspect",
+   "parts": [
+    "mechanical switch",
+    "plate"
+   ],
+   "expected_visual_state": "The compressed air nozzle is aimed at the bare {KEY} switch and no dust or crumbs are visible around the stem.",
+   "common_mistakes": [
+    "Tilting the can so liquid propellant sprays out.",
+    "Skipping the area around the stem where debris collects."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#5"
+   ]
+  },
+  {
+   "title": "Test the stem",
+   "instruction": "Press the {KEY} switch stem down several times. Check it springs back quickly and smoothly.",
+   "kind": "switch-test",
+   "parts": [
+    "mechanical switch"
+   ],
+   "expected_visual_state": "The stem returns to the same resting height after every press, with no sticking.",
+   "common_mistakes": [
+    "Pressing at an angle instead of straight down.",
+    "Skipping the check and refitting the keycap on a still-sticky switch."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#9"
+   ]
+  },
+  {
+   "title": "Refit the keycap",
+   "instruction": "Line the {KEY} keycap up with the stem and press it straight down until fully seated.",
+   "kind": "keycap-place",
+   "parts": [
+    "keycap"
+   ],
+   "expected_visual_state": "The {KEY} keycap is back on, at the same height and angle as its neighbours.",
+   "common_mistakes": [
+    "Placing the keycap rotated.",
+    "Not seating it fully so it sits higher than the others."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#10"
+   ]
+  },
+  {
+   "title": "Reconnect and test",
+   "instruction": "Plug the USB-C cable back in. Press the {KEY} key three times and check it registers once each press.",
+   "kind": "cable-in-test",
+   "parts": [
+    "USB-C port",
+    "backlight"
+   ],
+   "expected_visual_state": "The cable is plugged in, the backlight is on, and the {KEY} key springs back after each press.",
+   "common_mistakes": [
+    "Not testing the specific {KEY} key.",
+    "Not checking for double-typing."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#11"
+   ]
+  }
+ ]
+}

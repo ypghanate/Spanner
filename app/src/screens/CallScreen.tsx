@@ -63,7 +63,7 @@ export default function CallScreen() {
               new Promise<never>((_, no) => setTimeout(() => no(new Error("camera timeout (is the camera ready?)")), 4000)),
             ]);
           // no skipProcessing: it discards `quality`, which sent multi-MB photos several times a second
-          const pic = await shoot({ quality: 0.25, shutterSound: false }).catch(() => shoot({ quality: 0.25 }));
+          const pic = await shoot({ quality: 0.4, shutterSound: false }).catch(() => shoot({ quality: 0.4 }));
           fails = 0;
           setCapErr(null);
           // photos nothing uploaded are deleted at once so the cache does not fill up

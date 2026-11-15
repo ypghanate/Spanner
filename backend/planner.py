@@ -215,7 +215,8 @@ def _generate_claude(intake: Intake, complaint: str, refs: list[dict], errors: l
     system = _prompt("planner_steps.md").replace("{PARTS}", ", ".join(_pack()["parts"]))
     key = intake.target_key
     user = (f"Fault class: {intake.fault_class}\nSymptom: {intake.symptom}\n"
-            f"Key: {_key_label(key)} (id {key})\n" if key else
+            "Key: the key is decided later (the plan is reused for every key). Wherever you name it, write exactly "
+            "the token {KEY}, for example 'Pull the {KEY} keycap straight up'.\n" if key else
             f"Fault class: {intake.fault_class}\nSymptom: {intake.symptom}\nKey: none (not about one key)\n")
     user += f"The person said: {complaint!r}\n\nReference steps from the knowledge base:\n{_refs_text(refs)}"
     if errors:
@@ -257,6 +258,30 @@ def _intake_mock(complaint: str) -> Intake:
         m = re.search(r"\b([a-z0-9])\s+key\b", t) or re.search(r"\bkey\s+([a-z0-9])\b", t)
         key = m.group(1).upper() if m and m.group(1) not in ("a",) else ""
     return Intake(in_scope=True, fault_class=fault, target_key=key, symptom=complaint.strip()[:140])
+
+
+_OTHER_DEVICE = re.compile(r"\b(i ?phone|phone|ipad|tablet|laptop|mouse|head ?phones?|earbuds?|bike|bicycle|car|tv|monitor|printer)\b", re.I)
+
+
+def _intake_fast(complaint: str) -> Intake | None:
+    """The word rules, used instead of a Claude call when they are sure: a fault matched, the key found when the
+    fault needs one, and no other device mentioned. Saves 2-9 s on a clear sentence."""
+    t = complaint.lower()
+    if _OTHER_DEVICE.search(t) or not any(re.search(rx, t) for _, rx in _MOCK_KEYWORDS):
+        return None
+    intake = _intake_mock(complaint)
+    if intake.fault_class in KEY_FAULTS and intake.target_key not in _pack()["keys"]:
+        return None
+    return intake
+
+
+def _template_path(fault_class: str) -> Path:
+    """One plan per fault class, written with a {KEY} placeholder and reused for every key."""
+    return CACHE_DIR / f"class-{fault_class}.json"
+
+
+def _from_template(raw: str, key: str) -> GenPlan:
+    return GenPlan.model_validate(json.loads(raw.replace("{KEY}", _key_label(key or "F"))))
 
 
 def _generate_mock(intake: Intake) -> GenPlan:
@@ -370,7 +395,7 @@ def plan_repair(complaint: str, session: str = "") -> dict:
         return {"status": "refused", "say": "Stop there: that's not a safe home repair. Please call a qualified professional."}
 
     mock = _use_mock()
-    intake = _intake_mock(complaint) if mock else _intake_claude(complaint)
+    intake = _intake_mock(complaint) if mock else (_intake_fast(complaint) or _intake_claude(complaint))
     t_intake = time.perf_counter()
     if not intake.in_scope:
         return {"status": "refused", "say": intake.refusal_reason or "I can only help with keyboard repairs right now."}
@@ -381,19 +406,24 @@ def plan_repair(complaint: str, session: str = "") -> dict:
     if intake.needs_clarification or (intake.fault_class in KEY_FAULTS and not intake.target_key):
         return {"status": "clarify", "say": intake.question or "Which key is it?"}
 
-    sig = _signature(intake)
-    cache = CACHE_DIR / f"{sig}.json"
-    if not mock and cache.exists():
-        hit = json.loads(cache.read_text(encoding="utf-8"))
-        plan = RepairPlan.model_validate(hit)
-        return _wrap(plan, intake, cached=True, mock=False,
-                     timings={"intake_ms": round((t_intake - t0) * 1000), "total_ms": round((time.perf_counter() - t0) * 1000)})
+    cache = _template_path(intake.fault_class)
+    if not mock and cache.exists():                # written once per fault class, any key: no Claude call
+        gen = _from_template(cache.read_text(encoding="utf-8"), intake.target_key)
+        if not validate(gen, intake):
+            plan = assemble(gen, intake, [])
+            return _wrap(plan, intake, cached=True, mock=False,
+                         timings={"intake_ms": round((t_intake - t0) * 1000), "total_ms": round((time.perf_counter() - t0) * 1000)})
 
     refs = retrieve(intake, complaint)
     errors: list[str] = []
     gen: GenPlan | None = None
+    template = ""
     for attempt in range(2):
-        gen = _generate_mock(intake) if mock else _generate_claude(intake, complaint, refs, errors or None)
+        if mock:
+            gen = _generate_mock(intake)
+        else:
+            template = _generate_claude(intake, complaint, refs, errors or None).model_dump_json(indent=1)
+            gen = _from_template(template, intake.target_key)
         errors = validate(gen, intake)
         if not errors:
             break
@@ -407,5 +437,37 @@ def plan_repair(complaint: str, session: str = "") -> dict:
     plan = assemble(gen, intake, refs)
     if not mock:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        cache.write_text(plan.model_dump_json(indent=1), encoding="utf-8")
+        cache.write_text(template, encoding="utf-8")
     return _wrap(plan, intake, cached=False, mock=mock, timings=timings)
+
+
+# one sentence per fault class: the class plans are written before anyone asks (coach.mount runs warm())
+WARM = {"dead_key": "my F key doesn't work", "sticky_key": "my E key is sticky", "missing_keycap": "my G keycap is missing",
+        "spacebar_stabilizer": "my space bar rattles", "no_power": "my keyboard won't power on",
+        "backlight": "the keyboard backlight is dead", "other_keyboard_fault": "something is wrong with my keyboard"}
+
+
+def warm() -> list[str]:
+    """Write the plan for every fault class that has none yet (blocking; a few cents, once)."""
+    done: list[str] = []
+    if _use_mock():
+        return done
+    for fault, sentence in WARM.items():
+        if _template_path(fault).exists():
+            continue
+        try:
+            key = _intake_mock(sentence).target_key or DEFAULT_KEY.get(fault, "")
+            intake = Intake(in_scope=True, fault_class=fault, target_key=key, symptom=sentence)
+            refs, errors = retrieve(intake, sentence), None
+            for _ in range(2):                         # same as a live request: one retry told exactly what was wrong
+                raw = _generate_claude(intake, sentence, refs, errors).model_dump_json(indent=1)
+                errors = validate(_from_template(raw, key), intake)
+                if not errors:
+                    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                    _template_path(fault).write_text(raw, encoding="utf-8")
+                    done.append(fault)
+                    break
+            print(f"planner warm-up: {fault} {'ready' if not errors else 'failed: ' + '; '.join(errors)}", flush=True)
+        except Exception as e:
+            print(f"planner warm-up: {fault} failed: {e}", flush=True)
+    return done

@@ -5,9 +5,9 @@ import * as Speech from "expo-speech";
 import { absUrl } from "./config";
 
 const SPEECH_DB = -38; // louder than this counts as speech
-const SILENCE_MS = 700; // end of utterance (contract: about 0.7 s)
+const SILENCE_MS = 500; // end of utterance: shorter = snappier replies
 const MIN_SPEECH_MS = 350;
-const MAX_UTTERANCE_MS = 15000;
+const MAX_UTTERANCE_MS = 6000; // room chatter must not hold a clip open
 
 export interface Utterance {
   audioB64: string;

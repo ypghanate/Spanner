@@ -1,0 +1,118 @@
+{
+ "fault": "The {KEY} rattles when typed on because its stabilizer bar or stabilizer inserts are loose or dry.",
+ "diagnosis": "A rattling space bar is almost always the stabilizer bar rubbing or clicking against its clips. I will take the keycap off, check that the bar is seated in its clips, clear any debris, and put the keycap back on evenly.",
+ "difficulty": "easy",
+ "time_min": 10,
+ "tools_needed": [
+  "keycap puller",
+  "compressed air"
+ ],
+ "safety_notes": [
+  "Unplug the USB-C cable before touching anything under the keycap.",
+  "Touch grounded metal first to discharge static before reaching into the board.",
+  "Lift the keycap evenly and do not force the stabilizer bar, because it can bend or snap."
+ ],
+ "steps": [
+  {
+   "title": "Unplug the keyboard",
+   "instruction": "Unplug the USB-C cable from the back of the keyboard. Touch grounded metal first to discharge static.",
+   "kind": "cable-out",
+   "parts": [
+    "USB-C port"
+   ],
+   "expected_visual_state": "No cable is plugged into the USB-C port and the backlight is off.",
+   "common_mistakes": [
+    "Leaving the cable plugged in while working under the keycap.",
+    "Reaching for the board without grounding yourself first."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#1"
+   ]
+  },
+  {
+   "title": "Remove the keycap",
+   "instruction": "Hook the keycap puller under both ends of the {KEY} keycap and lift evenly. Set the keycap aside.",
+   "kind": "keycap-pull",
+   "parts": [
+    "keycap",
+    "space bar"
+   ],
+   "expected_visual_state": "The {KEY} keycap is off and set aside, and the switch and stabilizer bar are visible.",
+   "common_mistakes": [
+    "Lifting only one end, which bends the stabilizer bar.",
+    "Pulling at an angle, which stresses the switch stem or scratches the keycap."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#2"
+   ]
+  },
+  {
+   "title": "Check the stabilizer bar",
+   "instruction": "Look at the stabilizer bar under the {KEY}. Check that its ends are seated in both clips and that the bar is not bent.",
+   "kind": "stabilizer",
+   "parts": [
+    "stabilizer",
+    "plate"
+   ],
+   "expected_visual_state": "The stabilizer bar is visible, with both ends sitting in their clips and the bar straight.",
+   "common_mistakes": [
+    "Not noticing that one end has popped out of its clip.",
+    "Bending the wire bar while checking it."
+   ],
+   "source_ids": []
+  },
+  {
+   "title": "Clean out debris",
+   "instruction": "Blow compressed air around the stabilizer and the {KEY} switch to clear dust and crumbs. Hold the can upright.",
+   "kind": "socket-inspect",
+   "parts": [
+    "stabilizer",
+    "switch",
+    "plate"
+   ],
+   "expected_visual_state": "The area around the stabilizer and switch is clear of dust and crumbs.",
+   "common_mistakes": [
+    "Tilting the compressed air can, which sprays liquid.",
+    "Leaving crumbs trapped near the stabilizer clips."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#5"
+   ]
+  },
+  {
+   "title": "Put the keycap back",
+   "instruction": "Hook the {KEY} keycap onto the stabilizer ends first. Then press both ends down evenly until it seats.",
+   "kind": "keycap-place",
+   "parts": [
+    "keycap",
+    "stabilizer",
+    "space bar"
+   ],
+   "expected_visual_state": "The {KEY} keycap sits level at the same height as the surrounding keycaps.",
+   "common_mistakes": [
+    "Pressing down only one end so the keycap sits crooked.",
+    "Not seating the keycap fully so it sits higher than the others."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#10"
+   ]
+  },
+  {
+   "title": "Reconnect and test",
+   "instruction": "Plug the cable back in and press the {KEY} three times, including at both ends. Listen for the rattle.",
+   "kind": "cable-in-test",
+   "parts": [
+    "USB-C port",
+    "backlight"
+   ],
+   "expected_visual_state": "The cable is plugged in, the backlight is on, and the {KEY} presses cleanly with no rattle.",
+   "common_mistakes": [
+    "Testing only the middle of the key and not both ends.",
+    "Not checking that the key still registers once per press."
+   ],
+   "source_ids": [
+    "rk61_switch_replacement#11"
+   ]
+  }
+ ]
+}
