@@ -188,3 +188,30 @@ def test_fast_intake_only_when_sure():
     assert planner._intake_fast("one of my keys is dead") is None          # which key? ask Claude
     assert planner._intake_fast("my phone won't charge") is None           # not a keyboard
     assert planner._intake_fast("it's being weird") is None                # no fault words
+
+
+# ---------------------------------------------------------------- spoken turns (phone mic -> reply + action)
+def test_quick_commands_skip_claude():
+    from backend import coach
+
+    coach._view_state["q"] = coach.ViewState(session="q", screen="step", step=2, total=6)
+    for said, action in [("next", "next"), ("ok next please", "next"), ("go back", "back"), ("stop", "stop"), ("repeat", "repeat")]:
+        assert coach._quick_turn(said, "q").action == action
+    assert coach._quick_turn("which way do I pull it", "q") is None          # a real question goes to Claude
+    coach._view_state["q"] = coach.ViewState(session="q", screen="picking")
+    assert coach._quick_turn("next", "q") is None                           # on the device question, Claude decides
+    coach._view_state.clear()
+
+
+def test_spoken_turn_context_has_plan_step_and_camera():
+    from backend import coach
+
+    coach._plans["c"] = {"plan": {"title": "Space stabilizer fix", "fault": "rattle", "diagnosis": "loose bar",
+                                  "steps": [{"index": 1, "instruction": "Unplug it.", "expected_visual_state": "no cable",
+                                             "common_mistakes": ["leaving it in"]}]}}
+    coach._view_state["c"] = coach.ViewState(session="c", screen="step", step=1, total=1)
+    coach._latest["c"] = {"view": {"what_i_see": "hands near the cable", "ts": __import__("time").time(), "mistake": ""}}
+    assert "Space stabilizer fix" in coach._plan_text("c") and "Unplug it." in coach._plan_text("c")
+    assert "Step 1 of 1" in coach._context("c") and "hands near the cable" in coach._context("c")
+    for d in (coach._plans, coach._view_state, coach._latest):
+        d.pop("c", None)

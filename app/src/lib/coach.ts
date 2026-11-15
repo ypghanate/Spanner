@@ -48,6 +48,11 @@ export interface Latest {
   pose?: CoachPose;
   /** Changes whenever the laptop generates a new plan for this session (the user said what they want fixed). */
   plan_id?: string;
+  /** The laptop is talking right now: pause the microphone so it doesn't record Spanner's own voice. */
+  speaking?: boolean;
+  /** What the laptop has on screen: the phone follows it, so both always show the same step. */
+  screen?: "pairing" | "picking" | "ready" | "step" | "done";
+  screen_step?: number;
 }
 
 /** The laptop's QR encodes `${origin}/training/viewer/phone.html?s=<session>`. Anything else is not a pairing code. */
@@ -111,6 +116,15 @@ export class CoachClient {
     const res = await withTimeout(`${this.origin}${path}`, { method: "POST", body: fd }, ms);
     if (!res.ok) throw new Error(`${path} ${res.status}`);
     return (await res.json()) as T;
+  }
+
+  /** Tell the laptop something happened on the phone ("end" = the call was hung up: the laptop ends its guide too). */
+  async signal(signal: "stop" | "end"): Promise<void> {
+    await withTimeout(
+      `${this.origin}/coach/signal`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: this.session, signal }) },
+      3000,
+    );
   }
 
   /** One spoken utterance from this phone's microphone (base64 m4a). The laptop transcribes it and acts on it. */

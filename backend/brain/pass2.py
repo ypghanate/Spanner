@@ -32,10 +32,10 @@ import anthropic
 import cv2
 
 from backend.contracts import Alert, BrainResponse, RepairPlan, SituationReport
-from backend.rag import retrieve_repair_knowledge  # <-- CLEAN IMPORT HERE
+from backend.brain.rag import retrieve_repair_knowledge
 
 ROOT = Path(__file__).resolve().parents[2]
-MODEL = os.getenv("PASS2_MODEL", "claude-3-5-sonnet-20241022")
+MODEL = os.getenv("PASS2_MODEL", "claude-sonnet-5-5")
 
 # Set session.brain_state["repair_demo"] to one of these before starting.
 # Unknown demos are not silently treated as keyboard repairs.

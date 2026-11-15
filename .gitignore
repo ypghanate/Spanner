@@ -27,3 +27,7 @@ backend/venv/
 venv/
 .DS_Store
 backend/.DS_Store
+
+# local vector stores
+data/rag_chroma_db/
+extensive_repair_chroma_db/

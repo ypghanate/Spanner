@@ -4,7 +4,10 @@ from chromadb.utils import embedding_functions
 import anthropic
 
 # 1. Initialize ChromaDB Persistent Client & Default Embedding Function
-db_client = chromadb.PersistentClient(path="./extensive_repair_chroma_db")
+from pathlib import Path
+
+# kept under data/ (not wherever the server happened to be started)
+db_client = chromadb.PersistentClient(path=str(Path(__file__).resolve().parents[2] / "data" / "rag_chroma_db"))
 embedding_fn = embedding_functions.DefaultEmbeddingFunction()
 
 collection = db_client.get_or_create_collection(
@@ -118,6 +121,15 @@ else:
     print(f"ChromaDB already contains {collection.count()} documents. Skipping insertion.")
 
 
+def retrieve_repair_knowledge(query: str, top_k: int = 2) -> str:
+    """The guides most relevant to `query`, as text for a prompt (no Claude call: Pass 2 adds them to its own)."""
+    if not query.strip():
+        return ""
+    results = collection.query(query_texts=[query], n_results=top_k)
+    chunks = results["documents"][0] if results.get("documents") else []
+    return "\n\n---\n\n".join(chunks)
+
+
 # 4. Setup RAG Query Function with Claude
 anthropic_client = anthropic.Anthropic()
 
@@ -150,7 +162,7 @@ User Question: {user_question}"""
 
     # Call Claude API
     response = anthropic_client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model=os.getenv("RAG_MODEL", "claude-sonnet-5-5"),
         max_tokens=600,
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}]

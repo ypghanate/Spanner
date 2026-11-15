@@ -1059,7 +1059,15 @@ fetchJson(API + "/coach/health", 4000).then((d) => { elevenOK = !!d.tts; }).catc
 // While Spanner talks, the mic ignores what it hears (it would hear Spanner). That window must always end: the
 // estimate below is based on the text length, and every way a clip can stop (end, error, stall, abort) closes it.
 const speechMs = (text) => Math.min(45000, 2500 + text.split(/\s+/).length * 450);
+// tell the phone how long we'll be talking, so it pauses its microphone (it would only record our own voice)
+let lastSpeakReport = 0;
+function reportSpeaking(ms) {
+  if (!remoteOn) return;
+  const now = performance.now(); if (ms > 0 && now - lastSpeakReport < 300) return; lastSpeakReport = now;
+  fetch(API + "/coach/speaking", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: SESSION, seconds: ms / 1000 }) }).catch(() => {});
+}
 function stopSpeech() {
+  reportSpeaking(0);
   if ("speechSynthesis" in window) speechSynthesis.cancel();
   if (sayAudio) { try { sayAudio.pause(); } catch { /* already gone */ } sayAudio = null; }
   speakingUntil = 0;
@@ -1067,9 +1075,9 @@ function stopSpeech() {
 function browserSay(text) {
   if (!("speechSynthesis" in window)) { speakingUntil = 0; return; }
   const u = new SpeechSynthesisUtterance(text); if (voice) u.voice = voice; u.rate = 1.03; u.pitch = 0.92;
-  const done = () => { speakingUntil = performance.now() + 400; };
+  const done = () => { speakingUntil = performance.now() + 400; reportSpeaking(0); };
   u.onend = done; u.onerror = done;
-  speakingUntil = performance.now() + speechMs(text); currentSpeech = text; speechSynthesis.speak(u);
+  speakingUntil = performance.now() + speechMs(text); currentSpeech = text; reportSpeaking(speechMs(text)); speechSynthesis.speak(u);
 }
 function narrate(text, show = true) {
   if (!text) return;
@@ -1078,9 +1086,9 @@ function narrate(text, show = true) {
   stopSpeech();
   if (!elevenOK) return browserSay(text);
   const a = new Audio(API + "/coach/say?text=" + encodeURIComponent(text));
-  sayAudio = a; speakingUntil = performance.now() + speechMs(text) + 4000; currentSpeech = text;
+  sayAudio = a; speakingUntil = performance.now() + speechMs(text) + 4000; currentSpeech = text; reportSpeaking(speechMs(text) + 1000);
   const fallback = () => { if (sayAudio === a) { sayAudio = null; browserSay(text); } };
-  a.onended = () => { if (sayAudio === a) { sayAudio = null; speakingUntil = performance.now() + 400; } };
+  a.onended = () => { if (sayAudio === a) { sayAudio = null; speakingUntil = performance.now() + 400; reportSpeaking(0); } };
   a.onerror = a.onstalled = a.onabort = fallback;
   setTimeout(() => { if (sayAudio === a && a.paused && a.currentTime === 0) fallback(); }, 5000);   // never started playing
   a.play().catch(fallback);
@@ -1455,6 +1463,7 @@ function onMissingKeys(c) {
   }
   setBrokenKey(id, "camera: " + c.missing_keys.join(", ") + " missing");
 }
+let stepHoldUntil = 0;   // after a step change, ignore frames that were taken before it
 function onCoach(c) {
   $("camlat").textContent = `${(c.latency_ms / 1000).toFixed(1)} s${c.crop?.cropped ? " · zoomed" : ""}`;
   onMissingKeys(c);                          // before a plan exists this is the only thing the camera can start
@@ -1462,26 +1471,30 @@ function onCoach(c) {
   $("camconfbar").style.width = Math.round(c.confidence * 100) + "%";
   const stepTxt = c.step_index > 0 ? ` · <b>STEP ${c.step_index}</b> ${c.step_status.replace("_", " ")}` : "";
   seen(`<b>I SEE</b> ${c.what_i_see}${stepTxt}${c.mistake ? `<br><span class="bad">⚠ ${c.mistake}</span>` : ""}`);
-  if (!c.object_visible || c.step_index < 1) { agree = 0; return; }
-  // follow the user: jump to the step they're doing (two frames agree, or one very confident frame)
-  agree = c.step_index === lastDetect ? agree + 1 : 1; lastDetect = c.step_index;
+  if (!c.object_visible) { agree = 0; return; }
+  if (performance.now() < stepHoldUntil) return;      // we just moved on: this frame was taken before that
   if (c.confidence >= 0.6) maybeAutoShop(c);
-  const target = c.step_index - 1, sure = agree >= 2 || c.confidence >= 0.75;   // one confident frame is enough: every frame costs ~2-3 s
-  if (sure && target !== stepIdx && c.confidence >= 0.5) {
-    stopTour(); goStep(target, " · detected");
-  } else if (sure && target === stepIdx && c.step_status === "done" && lastDoneStep !== target) {
-    lastDoneStep = target;                    // step finished: show the next one
-    showTag(`keycap_${brokenKey}`, `STEP ${c.step_index} DONE ✓`, "ok", 2.2);
-    narrate(c.say || "Done. Next step.");
-    if (stepIdx < plan.steps.length - 1) setTimeout(() => goStep(stepIdx + 1, " · auto"), 1400);
-    else setTimeout(() => { if (!finished) finishRepair(); }, 1400);
-  }
-  if (c.mistake && performance.now() - lastMistakeAt > 8000) {
+  const cur = stepIdx + 1;
+  // something going wrong: say it straight away (camera reads are focused on the step on screen and its known mistakes)
+  if (c.mistake && c.confidence >= 0.4 && performance.now() - lastMistakeAt > 5000) {
     lastMistakeAt = performance.now(); flash();
     showTag(`keycap_${brokenKey}`, "⚠ " + c.mistake.toUpperCase().slice(0, 60), "red", 2.6);
-    narrate("Careful. " + c.mistake);
-  } else if (c.say && !c.mistake && sure && target === stepIdx && c.step_status !== "done") {
-    // light guidance only when nothing else is being said
+    narrate("Careful. " + (c.say || c.mistake));
+    return;
+  }
+  // the step on screen is done: praise it and move on by exactly one step (one confident frame is enough)
+  if (chosen && cur >= 1 && c.step_status === "done" && c.step_index >= cur && c.confidence >= 0.55 && lastDoneStep !== stepIdx) {
+    lastDoneStep = stepIdx; agree = 0; stepHoldUntil = performance.now() + 2500;
+    showTag(`keycap_${brokenKey}`, `STEP ${cur} DONE ✓`, "ok", 2.2);
+    narrate(c.say || "Nice. On to the next step.");
+    if (stepIdx < plan.steps.length - 1) setTimeout(() => goStep(stepIdx + 1, " · auto"), 900);
+    else setTimeout(() => { if (!finished) finishRepair(); }, 900);
+    return;
+  }
+  // they skipped ahead: only when two frames in a row agree on the same later step. Never jumps back on its own.
+  agree = c.step_index === lastDetect ? agree + 1 : 1; lastDetect = c.step_index;
+  if (chosen && c.step_index > cur && agree >= 2 && c.confidence >= 0.6) {
+    stopTour(); stepHoldUntil = performance.now() + 2500; goStep(c.step_index - 1, " · detected");
   }
 }
 
@@ -1531,8 +1544,48 @@ function startRemote() {
   if (linkState !== "live") showPair();
   remoteTick();   // does nothing if the loop is already running (saying "use my phone" twice must not start two)
 }
+/** The phone hung up: end the guide here too and go back to the start (a fresh session, ready to pair again). */
+function endFromPhone() {
+  remoteOn = false; stopSpeech(); stopTour();
+  heard("phone", "call ended");
+  try { sessionStorage.removeItem("spanner-session"); } catch { /* private window */ }
+  setTimeout(() => { location.href = location.pathname + location.search.replace(/([?&])s=[^&]*&?/, "$1"); }, 300);
+}
 function stopRemote() { remoteOn = false; hidePair(); $("cam").style.display = "none"; setLink(camOn ? "webcam" : "idle"); }
-let remoteLoop = false, lastDataAt = 0, pollFails = 0, lastUtterId = "", lastAlive = 0, phoneMic = false, seeded = false;
+let remoteLoop = false, lastDataAt = 0, pollFails = 0, lastUtterId = "", lastAlive = 0, phoneMic = false, seeded = false, lastReplyId = "", lastStateSent = "";
+// ---- the phone is the microphone: the server transcribes, decides what to do and what to say (one Claude turn with
+// the conversation so far and what is on screen); this laptop just does it and speaks.
+function screenState() {
+  return { session: SESSION, screen: linkState !== "live" ? "pairing" : pickOpen ? "picking" : finished ? "done" : stepIdx >= 0 ? "step" : "ready",
+    step: stepIdx + 1, total: plan?.steps?.length || 0, title: plan?.title || "" };
+}
+function reportState() {
+  const st = screenState(), key = JSON.stringify(st); if (key === lastStateSent) return; lastStateSent = key;
+  fetch(API + "/coach/state", { method: "POST", headers: { "content-type": "application/json" }, body: key }).catch(() => { lastStateSent = ""; });
+}
+const ACKS = ["Mm-hm.", "Okay.", "Let me see.", "Right."];
+function closePicker() { if (!pickOpen) return; pickOpen = false; $("pick").style.opacity = 0; setTimeout(() => { $("pick").style.display = "none"; }, 600); }
+async function onReply(r) {
+  if (!r.addressed || isEcho(r.text, 6000)) { heard(r.text, "not for me"); return; }
+  heard(r.text, r.action === "none" ? "talking" : r.action.replace(/_/g, " "));
+  if (r.action !== "stop" && performance.now() < speakingUntil) stopSpeech();
+  const viaCommand = { take_apart: "take it apart", reassemble: "put it back together", xray: "x-ray", zoom_in: "zoom in",
+    zoom_out: "zoom out", show_mistake: "show me the mistake", specs: "specs", sources: "sources" };
+  switch (r.action) {
+    case "pick_device": if (pickOpen && r.device) return chooseDevice(r.device, ""); break;
+    case "plan_repair": closePicker(); return requestRepair(r.complaint || r.text);
+    case "start": stopTour(); return goStep(0);
+    case "next": stopTour(); return advance();
+    case "back": stopTour(); return goStep(stepIdx - 1);
+    case "repeat": return $("say").onclick();
+    case "stop": return quiet("voice");
+    case "show_part": return command("show me the " + (r.part || "switch"));
+    case "shop_parts": return openShop(r.text);
+    case "shop_keyboards": return openShop("show me other keyboards " + r.text);
+    default: if (viaCommand[r.action]) return command(viaCommand[r.action]);
+  }
+  if (r.say) narrate(r.say);   // a conversational answer (or the picker asking again)
+}
 async function remoteTick() {
   if (remoteLoop) return; remoteLoop = true;
   while (remoteOn) {
@@ -1550,11 +1603,16 @@ async function remoteTick() {
       }
       // speech from the phone's microphone (transcribed on the laptop): the phone listens, this laptop speaks back
       if (d.utterance && d.utterance.id !== lastUtterId) {
-        lastUtterId = d.utterance.id;
+        lastUtterId = d.utterance.id; heard(d.utterance.text, "…");
         if (!phoneMic) { phoneMic = true; if (micOn) $("mic").onclick(); }   // the phone hears: this laptop's mic would only hear its own speaker
-        hearSpeech(d.utterance.text, 6000);   // the phone may have heard our own voice: transcription arrives a few seconds late
+        // a real reply usually lands within a second or two: if it hasn't after 0.7 s, acknowledge right away
+        const id = d.utterance.id, words = d.utterance.text.trim().split(/\s+/).length;
+        if (words >= 3 && !pickOpen && linkState === "live" && !isEcho(d.utterance.text, 6000))
+          setTimeout(() => { if (lastReplyId !== id && performance.now() > speakingUntil) narrate(ACKS[Math.floor(Math.random() * ACKS.length)], false); }, 700);
       }
-      if (d.signal && d.signal.ts !== lastSignalTs) { lastSignalTs = d.signal.ts; if (d.signal.signal === "stop") quiet("✋"); }
+      if (d.reply && d.reply.id !== lastReplyId) { lastReplyId = d.reply.id; onReply(d.reply); }
+      reportState();
+      if (d.signal && d.signal.ts !== lastSignalTs) { lastSignalTs = d.signal.ts; if (d.signal.signal === "stop") quiet("✋"); else if (d.signal.signal === "end") endFromPhone(); }
       if (poseTrack.on && d.pose && d.pose.ts !== lastPoseTs) { lastPoseTs = d.pose.ts; applyPose(d.pose); }
       if (fresh) { lastDataAt = performance.now(); if (linkState !== "live") hidePair(); }
       // staleness is judged on this laptop's own clock: no new photo for a few seconds means the phone stopped
@@ -1714,8 +1772,16 @@ setXray(true); setMode("scanning");
 
 // what do you want to fix? keyboard = the guided repair; the others open their hologram (device.html)
 let pickOpen = false;
+/** Pairing on the question page (nothing behind it is shown yet): the QR for the Spanner app, then the question. */
+async function pickPairCode() {
+  const { origin } = await phoneOrigin();
+  const url = `${origin}/training/viewer/phone.html?s=${SESSION}`;
+  $("pickq").textContent = "What do you want to fix?";
+  $("pickhint").textContent = "say it, or scan this with the Spanner app";
+  $("pickecho").innerHTML = `<img src="${API}/coach/qr?url=${encodeURIComponent(url)}" alt="Pairing code" style="width:220px;height:220px;border-radius:8px;margin-top:6px;background:#f2f2e9;padding:8px">`;
+}
 function showPicker() {
-  pickOpen = true; $("pick").style.display = "flex"; $("pick").style.opacity = 1; $("pickecho").textContent = ""; $("pickq").textContent = "What do you want to fix?";
+  pickOpen = true; $("pick").style.display = "flex"; $("pick").style.opacity = 1; $("pickecho").textContent = ""; $("pickq").textContent = "What do you want to fix?"; $("pickhint").textContent = "listening · just say it";
   narrate("What do you want to fix?");
 }
 const FAULT_WORDS = /(\bkeys?\b|keycaps?|space ?bar|enter|shift|backspace|switch(es)?|cable|charg\w*|power|lights?|backlight|led|dead|broken|stuck|sticky|rattl\w*|wobbl\w*|loose|missing|cracked|flicker\w*|double|chatter\w*|not (working|registering|typing)|doesn'?t|won'?t)/i;
@@ -1754,8 +1820,11 @@ if (INSTANT || QP.get("wake") === "0" || QP.get("pick") === "0") {
     // a second microphone): it is paired once the person has said what they want to fix, never before the question.
     removeEventListener("keydown", wake, true); $("pick").classList.remove("first"); $("pick").style.cursor = "default";
     voiceOn = true; $("voice").classList.add("on");
-    if (!micOn) $("mic").onclick();
-    $("pick").style.display = "flex"; $("pickhint").textContent = "listening"; narrate("What do you want to fix?");
+    if (!micOn) $("mic").onclick();          // this laptop listens from the first tap; the phone app takes over when it speaks
+    $("pick").style.display = "flex"; $("pickhint").textContent = "listening"; pickPairCode();
+    try { startRemote(); } catch (e) { console.error("wake:", e); }
+    narrate("What do you want to fix?");
+    const waitPhone = setInterval(() => { if (linkState === "live") { clearInterval(waitPhone); if (pickOpen) $("pickhint").textContent = "listening · phone connected"; } }, 500);
   };
   $("pick").addEventListener("pointerdown", wake, { once: true }); addEventListener("keydown", wake, { capture: true, once: true });
 }
