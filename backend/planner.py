@@ -357,7 +357,7 @@ def assemble(gen: GenPlan, intake: Intake, refs: list[dict]) -> RepairPlan:
             scene3d=[SceneCommand(**c) for c in scene3d_for_kind(s.kind, parts, key or "F")],
             sources=step_sources[:3], kind=s.kind))
     return RepairPlan(
-        object="Royal Kludge RK61 60% mechanical keyboard", fault=gen.fault, difficulty=gen.difficulty,
+        object="Mechanical keyboard", fault=gen.fault, difficulty=gen.difficulty,
         time_min=max(1, gen.time_min), tools_needed=gen.tools_needed, safety_notes=gen.safety_notes, steps=steps,
         sources=plan_sources[:6], generated=True, title=TITLES[intake.fault_class].format(K=_key_label(key or "F")),
         diagnosis=gen.diagnosis, target_key=key or None,

@@ -1,5 +1,5 @@
 {
- "fault": "The RK61 does not power on: no backlight and no response when plugged in.",
+ "fault": "The your keyboard does not power on: no backlight and no response when plugged in.",
  "diagnosis": "A keyboard that is completely dead is usually a cable, port or mode problem, not a bad switch. I will have you unplug it, check the cable and USB-C port, check the mode switch, then plug it back in and test.",
  "difficulty": "easy",
  "time_min": 10,
