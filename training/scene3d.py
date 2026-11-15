@@ -14,6 +14,7 @@ Units: 1 = 1 cm. y is up, x to the right, z towards the user (front edge).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -265,3 +266,86 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------- a pack for ANY keyboard layout (read from the camera)
+_KEY_IDS = {"esc": "ESC", "escape": "ESC", "backspace": "BACKSPACE", "bksp": "BACKSPACE", "tab": "TAB", "caps": "CAPS",
+            "capslock": "CAPS", "caps lock": "CAPS", "enter": "ENTER", "return": "ENTER", "shift": "SHIFT", "ctrl": "CTRL",
+            "control": "CTRL", "alt": "ALT", "win": "WIN", "windows": "WIN", "cmd": "WIN", "fn": "FN", "menu": "MENU",
+            "del": "DEL", "delete": "DEL", "ins": "INS", "insert": "INS", "home": "HOME", "end": "END", "pgup": "PGUP",
+            "page up": "PGUP", "pgdn": "PGDN", "page down": "PGDN", "space": "SPACE", "prtsc": "PRTSC", "scrlk": "SCRLK",
+            "pause": "PAUSE", "\\": "BACKSLASH", "[": "LBRACKET", "]": "RBRACKET", ";": "SEMICOLON", "'": "QUOTE", ",": "COMMA",
+            ".": "PERIOD", "/": "SLASH", "-": "MINUS", "=": "EQUAL", "`": "BACKTICK", "~": "BACKTICK",
+            "\u2191": "UP", "\u2193": "DOWN", "\u2190": "LEFT", "\u2192": "RIGHT"}
+_PAIRED = {"SHIFT", "CTRL", "ALT", "WIN"}
+
+
+def layout_rows_clean(rows: list[list[tuple[str, float]]]) -> list[list[tuple[str, str, float]]]:
+    """Camera-read rows [(legend, width_u)] -> [(id, label, width_u)] with unique ids and every row the same width."""
+    out, seen = [], {}
+    for r in rows:
+        cleaned = []
+        for legend, w in r:
+            label = (legend or "").strip() or "?"
+            base = _KEY_IDS.get(label.lower()) or re.sub(r"[^A-Z0-9]", "", label.upper()) or "KEY"
+            cleaned.append([base, label, max(0.75, min(float(w or 1), 7.0))])
+        out.append(cleaned)
+    target = max(sum(w for _, _, w in r) for r in out)
+    for r in out:
+        diff = target - sum(w for _, _, w in r)
+        if abs(diff) > 0.01:
+            widest = max(r, key=lambda k: k[2]); widest[2] = round(max(0.75, widest[2] + diff), 3)
+    for r in out:                                         # unique ids: paired keys are left/right, other repeats numbered
+        for k in r:
+            seen.setdefault(k[0], []).append(k)
+    for base, ks in seen.items():
+        if len(ks) > 1:
+            for i, k in enumerate(ks):
+                k[0] = (("L" if i == 0 else "R" if i == 1 else f"R{i}") + base) if base in _PAIRED else f"{base}_{i + 1}"
+    return [[(i, lab, w) for i, lab, w in r] for r in out]
+
+
+def layout_pack(rows: list[list[tuple[str, float]]], name: str = "Keyboard") -> dict:
+    """The viewer's pack.json for a keyboard whose layout was read from the camera: same part vocabulary, same layers,
+    same explode offsets as the hand-built RK68, with the keys where the real keyboard has them."""
+    layout = layout_rows_clean(rows)
+    width_u = max(sum(w for _, _, w in r) for r in layout)
+    width, depth = width_u * U, len(layout) * U
+    case_w, case_d = width + 1.12, depth + 0.98
+    wall_x, wall_z = (case_w - width) / 2, (case_d - depth) / 2
+    nodes: dict[str, list[str]] = {g: [] for g in EXPLODE}
+    keys: dict[str, dict] = {}
+    for row, r in enumerate(layout):
+        x, z = 0.0, row * U + U / 2
+        for kid, label, w in r:
+            cx, cz = x + w * U / 2 - width / 2, z - depth / 2
+            keys[kid] = {"label": label, "width_u": w, "row": row, "x": round(cx, 3), "z": round(cz, 3)}
+            nodes["keycaps"].append(f"keycap_{kid}"); nodes["switches"].append(f"switch_{kid}")
+            nodes["hotswap_sockets"].append(f"socket_{kid}"); nodes["leds"].append(f"led_{kid}")
+            if w >= 2:
+                nodes["stabilizers"].append(f"stabilizer_{kid}")
+            x += w * U
+    for g, n in (("plate", "plate"), ("pcb", "pcb"), ("battery", "battery"), ("case", "case"),
+                 ("usb_c_port", "usb_c_port"), ("mode_switch", "mode_switch")):
+        nodes[g].append(n)
+    back_z = -case_d / 2
+    f = max(1.0, width / 30.48)
+    space = next((k for k in keys if k == "SPACE"), None)
+    return {
+        "object": name, "model_file": "", "units": "cm", "layout": f"{sum(len(r) for r in layout)} keys, read from the camera",
+        "dimensions_cm": [round(case_w, 2), 3.9, round(case_d, 2)], "key_unit_cm": U,
+        "case_cm": [round(case_w, 2), CASE_H, round(case_d, 2)], "key_area_cm": [round(width, 3), round(depth, 3)],
+        "wall_cm": [round(wall_x, 3), round(wall_z, 3)], "layers_y": Y,
+        "ports": {"usb_c_port": [round(-width / 2 + 2.5, 3), 1.15, round(back_z - 0.1, 3)],
+                  "mode_switch": [round(width / 2 - 2.5, 3), 1.15, round(back_z - 0.1, 3)]},
+        "groups": nodes, "explode_offsets_cm": EXPLODE, "keys": keys,
+        "parts": {"keycap": "keycaps", "mechanical switch": "switches", "switch": "switches", "hot-swap socket": "hotswap_sockets",
+                  "socket": "hotswap_sockets", "switch pins": "switches", "plate": "plate", "PCB": "pcb", "stabilizer": "stabilizers",
+                  "space bar": "keycap_SPACE" if space else "keycaps", "case": "case", "USB-C port": "usb_c_port", "battery": "battery",
+                  "LED": "leds", "backlight": "leds", "mode switch": "mode_switch"},
+        "views": {k: [round(c * f, 2) for c in v] for k, v in {"iso": [0, 22, 30], "top": [0, 36, 0.1], "side": [34, 8, 0], "front": [0, 6, 34],
+                                                              "back": [0, 10, -32], "detail": [3.5, 8, 10], "socket": [0.5, 6, 4]}.items()},
+        "specs": {},
+        "layout_id": hashlib.sha1(json.dumps(layout).encode()).hexdigest()[:8],
+        "rows": [[lab for _, lab, _ in r] for r in layout],
+    }

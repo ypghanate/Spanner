@@ -59,7 +59,7 @@ class CoachView(BaseModel):
     switch_removed: bool = Field(default=False, description="True if a switch has been pulled out and the empty socket is visible.")
     gap_left: str = Field(default="", description="If there is a gap: the printed legend of the key immediately LEFT of the gap in the same row (it is visible: read it exactly). Empty if none or unsure.")
     gap_right: str = Field(default="", description="If there is a gap: the printed legend of the key immediately RIGHT of the gap in the same row. Empty if none or unsure.")
-    gap_row: Literal["number", "top", "home", "bottom", "space", ""] = Field(default="", description="Row of the gap: number (1-0), top (Q-P), home (A-L), bottom (Z-M), space (modifiers), or empty.")
+    gap_row: str = Field(default="", description="Which row the gap is in, counting from the top row of the keyboard: \"1\" is the top row. Empty if unsure.")
     gap_x: float | None = Field(default=None, description="If there is a gap: its centre, as a fraction of the image width (0 = left, 1 = right). null if none.")
     gap_y: float | None = Field(default=None, description="If there is a gap: its centre, as a fraction of the image height (0 = top, 1 = bottom). null if none.")
 
@@ -96,7 +96,7 @@ def _system_generic(demo: dict) -> str:
     return chr(10).join(lines)
 
 
-def _system(demo: dict) -> str:
+def _system(demo: dict, rows: dict[str, list[str]] | None = None) -> str:
     if demo.get("generic"):
         return _system_generic(demo)
     plan = demo["plan"]
@@ -116,9 +116,7 @@ def _system(demo: dict) -> str:
         "(keycap puller = wire loops, switch puller = two prongs, tweezers). The current step shown on screen "
         "is a hint, not the answer: move forward or back only when the frame shows it.",
         "Report a mistake only if you can actually see it. Keep what_i_see and say short and concrete.",
-        "The keyboard is a Royal Kludge RK68, 68-key ANSI 65% layout (rows: Esc 1-0 - = Backspace Del / Tab Q-P [ ] \\ PgUp / "
-        "Caps A-L ; ' Enter PgDn / Shift Z-M , . / Shift \u2191 End / Ctrl Win Alt Space Alt Fn Ctrl \u2190 \u2193 \u2192). "
-        "If a keycap is missing you will see a gap with the "
+        _layout_sentence(rows) + "If a keycap is missing you will see a gap with the "
         "switch top or its stem. Then READ the legends of the keys immediately left and right of the gap in the same "
         "row (they are visible) into gap_left / gap_right, and the row into gap_row; the missing key is the one between "
         "them. Be precise: a wrong key is worse than none.",
@@ -163,7 +161,97 @@ def _keyboard_crop(data: bytes, max_w: int = 1280) -> tuple[bytes, dict]:
     return (buf.tobytes() if ok else data), info
 
 
-# the RK68's 68-key ANSI 65% layout, row by row, as printed legends (the ground truth for "which key is the gap")
+# The layout of the keyboard in front of the camera, read once per session from the first good frame (see read_layout):
+# rows of printed legends, top to bottom. It replaces every hardcoded key table: any keyboard, any model, F-row or not.
+_layouts: dict[str, dict] = {}
+_layout_busy: set[str] = set()
+
+
+class KeyRead(BaseModel):
+    legend: str = Field(description="The main printed legend as printed ('Q', 'F5', 'Esc'). Keys with two legends ('1 !'): the lower or main one. Icon-only keys: a short standard name (Esc, Del, Fn, Win, Menu, Home, End, PgUp, PgDn, Ins, PrtSc) or an arrow symbol (\u2190 \u2191 \u2193 \u2192).")
+    width_u: float = Field(description="Key width in units relative to a normal letter key (1.0): Tab 1.5, Caps 1.75, Enter 2.25, Backspace 2, Shift 2.25/1.75, Space 6.25.")
+
+
+class LayoutRead(BaseModel):
+    keyboard: str = Field(default="", description="What this keyboard is, if a model name or a standard size is recognisable (e.g. '75% 84-key', 'full size', '60%').")
+    rows: list[list[KeyRead]] = Field(description="Every row from the TOP row (the F-row or number row) to the bottom row, every key left to right, including any key that is currently missing (give its legend by position).")
+
+
+def read_layout(data: bytes) -> dict:
+    """One Sonnet look at the keyboard: its rows of keys. ~6-10 s, once per session, in the background."""
+    resp = _client().beta.messages.parse(
+        model=VERIFY_MODEL, max_tokens=5000, thinking=_thinking(VERIFY_MODEL),
+        system=("You read the layout of a keyboard from a photo so a 3D model of it can be built. List every row from the top "
+                "row to the bottom row, and every key in each row from left to right, with its printed legend and its width in key "
+                "units. Do not skip the F-row (Esc F1..F12) if there is one, and do not invent keys that are not there. Count carefully: "
+                "a typical keyboard has 5 to 6 rows and 60 to 104 keys. If a keycap is missing (a gap), still list that position with "
+                "the legend that must be there by the keys around it."),
+        messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.standard_b64encode(data).decode()}},
+            {"type": "text", "text": "Read the layout of this keyboard, row by row."}]}],
+        output_format=LayoutRead)
+    out = resp.parsed_output
+    if out is None or not (3 <= len(out.rows) <= 7):
+        raise RuntimeError("the layout read gave no usable rows")
+    rows = [[(k.legend, k.width_u) for k in r if k.legend.strip()] for r in out.rows if r]
+    n = sum(len(r) for r in rows)
+    if not 40 <= n <= 120:
+        raise RuntimeError(f"the layout read has {n} keys: not a believable keyboard")
+    from training.scene3d import layout_pack
+
+    pack = layout_pack(rows, out.keyboard or "Keyboard")
+    return {"rows": pack["rows"], "pack": pack, "id": pack["layout_id"], "keyboard": out.keyboard, "keys": n, "ts": time.time()}
+
+
+def _start_layout_read(session: str, data: bytes) -> None:
+    if session in _layouts or session in _layout_busy or _plans.get(session, {}).get("generic"):
+        return
+    _layout_busy.add(session)
+
+    def run() -> None:
+        t0 = time.perf_counter()
+        try:
+            _layouts[session] = read_layout(data)
+            from .planner import register_keys
+
+            register_keys(_layouts[session]["pack"]["keys"])
+            _record_layout_timing(session, t0, True)
+        except Exception as e:
+            print(f"layout read failed: {str(e)[:160]}", flush=True)
+            _layouts[session] = {"error": str(e)[:160], "ts": time.time()}
+            _record_layout_timing(session, t0, False)
+        finally:
+            _layout_busy.discard(session)
+    import threading
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def _record_layout_timing(session: str, t0: float, ok: bool) -> None:
+    try:
+        from training.feedback import record_stage_timing
+
+        record_stage_timing(session, "keyboard_layout", round((time.perf_counter() - t0) * 1000), ok)
+    except Exception:
+        pass
+
+
+def _rows_for(session: str) -> dict[str, list[str]] | None:
+    """The session's camera-read rows as {row name: legends}; None until the layout has been read."""
+    lay = _layouts.get(session)
+    if lay and lay.get("rows"):
+        return {f"row{i + 1}": r for i, r in enumerate(lay["rows"])}
+    return None
+
+
+def _layout_sentence(rows: dict[str, list[str]] | None) -> str:
+    if not rows:
+        return "The keyboard is a mechanical keyboard; name keys exactly by their printed legends. "
+    body = " / ".join(f"row {i + 1} (top = 1): " + " ".join(r) for i, r in enumerate(rows.values()))
+    return f"The keyboard in front of the camera has these rows, read from the camera: {body}. "
+
+
+# (fallback only, before the layout has been read) the RK68's 68-key ANSI 65% layout, row by row
 LAYOUT = {
     "number": ["Esc", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "Backspace", "Del"],
     "top": ["Tab", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "[", "]", "\\", "PgUp"],
@@ -185,17 +273,20 @@ def _legend(x: str) -> str:
     return _ALIAS.get(x.lower(), x.upper() if len(x) == 1 else x.capitalize())
 
 
-def resolve_gap(view: "CoachView") -> str | None:
-    """The missing key from its visible neighbours: left and right legends two apart in one layout row."""
+def resolve_gap(view: "CoachView", rows: dict[str, list[str]] | None = None) -> str | None:
+    """The missing key from its visible neighbours: left and right legends two apart in one row of the keyboard's layout
+    (the camera-read one when there is one). Ambiguous neighbours (two matches naming different keys) resolve to nothing."""
+    rows = rows or LAYOUT
     left, right = _legend(view.gap_left), _legend(view.gap_right)
-    rows = [view.gap_row] if view.gap_row in LAYOUT else list(LAYOUT)
-    for row in rows:
-        keys = LAYOUT[row]
-        if left in keys and right in keys:
-            i, j = keys.index(left), keys.index(right)
-            if j - i == 2:
-                return keys[i + 1]
-    return None
+    if not left or not right:
+        return None
+    found: set[str] = set()
+    for name, keys in rows.items():
+        norm = [_legend(k) for k in keys]
+        for i in range(len(norm) - 2):
+            if norm[i] == left and norm[i + 2] == right:
+                found.add(keys[i + 1])
+    return found.pop() if len(found) == 1 else None
 
 
 class GapRead(BaseModel):
@@ -204,7 +295,7 @@ class GapRead(BaseModel):
     right: str = Field(default="", description="Printed legend of the key immediately RIGHT of the gap, same row.")
     above: str = Field(default="", description="Legend of the key directly above the gap (next row up), if readable.")
     below: str = Field(default="", description="Legend of the key directly below the gap, if readable.")
-    row: Literal["number", "top", "home", "bottom", "space", ""] = ""
+    row: str = ""
 
 
 VERIFY_MODEL = os.getenv("COACH_VERIFY_MODEL", "claude-sonnet-5-5")
@@ -229,7 +320,7 @@ def _zoom(data: bytes, gx: float, gy: float, frac: float = 0.34) -> bytes | None
     return buf.tobytes() if ok else None
 
 
-def verify_gap(data: bytes, view: "CoachView") -> str | None:
+def verify_gap(data: bytes, view: "CoachView", session: str = "") -> str | None:
     """Second look with a stronger model on a zoomed crop: which key is missing, from the legends around the gap."""
     located = view.gap_x is not None and view.gap_y is not None and 0 <= view.gap_x <= 1 and 0 <= view.gap_y <= 1
     zoom = _zoom(data, view.gap_x, view.gap_y) if located else data      # no location: the stronger model reads the whole crop
@@ -237,9 +328,7 @@ def verify_gap(data: bytes, view: "CoachView") -> str | None:
         return None
     resp = _client().beta.messages.parse(
         model=VERIFY_MODEL, max_tokens=300, thinking=_thinking(VERIFY_MODEL),
-        system=("Close-up of part of a Royal Kludge RK68, a 68-key ANSI 65% mechanical keyboard. Rows: number (Esc 1-0 - = Backspace Del), "
-                "top (Tab Q-P [ ] \\ PgUp), home (Caps A-L ; ' Enter PgDn), bottom (Shift Z-M , . / Shift \u2191 End), "
-                "space (Ctrl Win Alt Space Alt Fn Ctrl \u2190 \u2193 \u2192). For arrow keys report the arrow symbol. "
+        system=("Close-up of part of a mechanical keyboard. " + _layout_sentence(_rows_for(session)) + "For arrow keys report the arrow symbol. "
                 "If a keycap is missing you see a gap with the switch top or stem. Read the printed legends of the keys around "
                 "the gap EXACTLY as printed. Do not infer the missing key; only report what you can read."),
         messages=[{"role": "user", "content": [
@@ -251,13 +340,13 @@ def verify_gap(data: bytes, view: "CoachView") -> str | None:
         return None
     fake = CoachView(object_visible=True, what_i_see="", step_index=0, step_status="in_progress", mistake="", confidence=0,
                      say="", gap_left=g.left, gap_right=g.right, gap_row=g.row)
-    key = resolve_gap(fake)
+    rows_ctx = _rows_for(session)
+    key = resolve_gap(fake, rows_ctx)
     if key:
         return key
     # one neighbour plus the key above or below pins the column too (ANSI stagger: above-row index == same index)
-    for row_name, keys in LAYOUT.items():
-        if g.row and row_name != g.row:
-            continue
+    for row_name, keys in (rows_ctx or LAYOUT).items():
+        keys = [_legend(k) for k in keys]
         left, right = _legend(g.left), _legend(g.right)
         cands = [keys[keys.index(left) + 1] for _ in [0] if left in keys and keys.index(left) + 1 < len(keys)] +                 [keys[keys.index(right) - 1] for _ in [0] if right in keys and keys.index(right) - 1 >= 0]
         if len(cands) == 1 and (g.above or g.below):
@@ -309,7 +398,7 @@ def _ask(image_b64: str, current_step: int, session: str = "", model: str | None
     hint = _focus(demo, current_step)
     resp = _client().beta.messages.parse(
         model=model, max_tokens=2048,
-        system=[{"type": "text", "text": _system(demo), "cache_control": {"type": "ephemeral"}}],
+        system=[{"type": "text", "text": _system(demo, _rows_for(session)), "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": image_b64}},
             {"type": "text", "text": hint}]}],
@@ -320,7 +409,7 @@ def _ask(image_b64: str, current_step: int, session: str = "", model: str | None
         raise HTTPException(502, f"vision model gave no answer (stop_reason={resp.stop_reason})")
     out = resp.parsed_output
     out.step_index = max(0, min(out.step_index, len(demo["plan"]["steps"])))
-    resolved = resolve_gap(out)
+    resolved = resolve_gap(out, _rows_for(session))
     if resolved:                                   # neighbours beat a read of the absent legend
         out.missing_keys = [resolved]
     elif out.missing_keys and (out.gap_left or out.gap_right):
@@ -385,6 +474,10 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
     _frame_inflight.add(session)
     t0 = time.perf_counter()
     timing: dict[str, int] = {}
+    try:                                 # the last frame the phone sent, for looking at what the coach actually sees
+        d = ROOT / "data" / "live" / "frames"; d.mkdir(parents=True, exist_ok=True); (d / f"{session}.jpg").write_bytes(data)
+    except Exception:
+        pass
     try:
         confirmed = _key_confirmed(session)
         data, crop = await asyncio.to_thread(_keyboard_crop, data, 1024 if confirmed else 1280)
@@ -393,15 +486,17 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
         t1 = time.perf_counter()
         view = await asyncio.to_thread(_ask, base64.standard_b64encode(data).decode(), current_step, session)
         timing["ask"] = round((time.perf_counter() - t1) * 1000)
+        if view.keyboard_visible or crop.get("cropped"):      # Claude sees a keyboard, or the detector found one
+            _start_layout_read(session, data)        # the first good frame of the keyboard: read its layout in the background
         gap_suspected = bool(view.missing_keys or view.gap_left or view.gap_right or view.gap_x is not None)
-        first_pass = resolve_gap(view)               # a layout-validated read (both neighbours in one row) counts
+        first_pass = resolve_gap(view, _rows_for(session))   # a layout-validated read (both neighbours in one row) counts
         if first_pass and (not confirmed or first_pass == _gap_cache[session]["key"]):
             _remember_gap(session, first_pass)       # a confirmed key is only ever changed by the zoomed second look
         cached = _cached_gap(session, first_pass) if gap_suspected else None
         verified = None
         if gap_suspected and not cached and not _verify_resting(session):
             t2 = time.perf_counter()
-            verified = await asyncio.to_thread(verify_gap, data, view)
+            verified = await asyncio.to_thread(verify_gap, data, view, session)
             timing["verify"] = round((time.perf_counter() - t2) * 1000)
             if verified:
                 _remember_gap(session, verified)
@@ -429,7 +524,8 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
         plan = _demo(session)["plan"]          # generated plans have their own step numbering: log them under their own id
         rid = f"{current_repair_id()}:{plan['fault_signature']}" if plan.get("generated") else current_repair_id()
         record_live_mistake(session, rid, view.step_index, view.mistake, view.what_i_see)
-    out = {**view.model_dump(), "latency_ms": latency, "model": crop.get("model", COACH_MODEL), "ts": time.time(), "crop": crop}
+    out = {**view.model_dump(), "latency_ms": latency, "model": crop.get("model", COACH_MODEL), "ts": time.time(), "crop": crop,
+           "layout_id": (_layouts.get(session) or {}).get("id")}
     _latest.setdefault(session, {})["view"] = out
     return out
 
@@ -641,13 +737,27 @@ async def speaking(sp: Speaking):
 _speaking: dict[str, float] = {}
 
 
+@router.get("/layout")
+async def layout(session: str):
+    """The keyboard layout read from this session's camera: status, the rows of legends and the 3D pack built from them."""
+    lay = _layouts.get(session)
+    if lay and "pack" in lay:
+        return {"status": "ready", "id": lay["id"], "keyboard": lay["keyboard"], "keys": lay["keys"], "rows": lay["rows"], "pack": lay["pack"]}
+    if lay:
+        return {"status": "failed", "error": lay.get("error", "")}
+    return {"status": "reading" if session in _layout_busy else "waiting"}
+
+
 @router.get("/latest")
 async def latest(session: str):
     """The phone's last results for this session: the coach's view, the newest utterance, signals, and whether the
     laptop is talking right now (judged on the server's clock, so phone and laptop clocks don't matter)."""
     st = _view_state.get(session)
     shown = {"screen": st.screen, "screen_step": st.step if st.screen == "step" else 0} if st else {}
-    return {**_latest.get(session, {}), **shown, "speaking": _speaking.get(session, 0) > time.time()}
+    lay = _layouts.get(session)
+    return {**_latest.get(session, {}), **shown, "speaking": _speaking.get(session, 0) > time.time(),
+            "layout": {"status": "ready" if lay and "pack" in lay else "failed" if lay else "reading" if session in _layout_busy else "waiting",
+                       "id": lay.get("id") if lay else None}}
 
 
 @router.get("/plan")
