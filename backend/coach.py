@@ -886,7 +886,13 @@ def mount(app) -> None:
         asyncio.get_running_loop().run_in_executor(None, warm)
 
     @app.on_event("startup")
-    async def _warm_shop() -> None:   # (main.py already warms the YOLO detector)
+    async def _warm_detector() -> None:   # the coach's keyboard crop needs YOLO loaded: the first frame must not pay 15 s
+        from backend.vision import detect as det
+
+        asyncio.get_running_loop().run_in_executor(None, det.warm)
+
+    @app.on_event("startup")
+    async def _warm_shop() -> None:
         if os.getenv("SHOP_WARMUP", "1") == "1" and os.getenv("LINKUP_API_KEY"):   # live Linkup + Tavily, cached for the demo
             from .shop import warm as warm_shop
 
