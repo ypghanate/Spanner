@@ -1257,13 +1257,13 @@ function verifyBox(v) {
       <span class="badge ${o.verified ? "ok" : "no"}">${esc(o.badge).toUpperCase()}</span>
       <div class="ev"><a href="${esc(o.url)}" target="_blank">buy ↗</a>${(o.evidence || []).slice(0, 4).map((u, i) => `<a href="${esc(u)}" target="_blank">[${i + 1}]</a>`).join("")}</div></div>`).join("")}</div></div>`;
 }
-async function openShop(raw, auto = false) {
+async function openShop(raw, auto = false, refresh = false) {
   const id = ++shopReq, el = $("shop"); clearTimeout(verifyTimer);
   $("side").style.display = "none"; $("insp").style.display = "none";
   el.style.display = "block";
   const autoTag = auto ? `<span class="auto">● SPANNER STARTED THIS ON ITS OWN</span>` : "";
   el.innerHTML = `<h3>SEARCHING THE WEB LIVE${autoTag}</h3><div class="searching">LINKUP · TAVILY · “${esc(raw)}”</div>`;
-  if (!auto) narrate("Searching live.");
+  if (!auto && !refresh) narrate("Searching live.");
   // replacement parts: the deep verification agent runs alongside the quick search
   let verified = null, spoken = false, verifyPolls = 0;
   const isPart = !/(other|another|alternative|different|new|better) keyboards?|keyboards? (instead|to buy)|instead of|upgrade|should i buy|what else could i buy/i.test(raw);
@@ -1286,6 +1286,8 @@ async function openShop(raw, auto = false) {
     const r = await fetchT(API + "/coach/shop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: raw }) }, 75000);
     if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 120)}`);
     const d = await r.json(); if (id !== shopReq) return;
+    // offers came back before every photo / price was found: the server finishes them; show the full set shortly
+    if (d.partial) setTimeout(() => { if (id === shopReq) openShop(raw, auto, true); }, 5000);
     const src = `LIVE · LINKUP + TAVILY · ${(d.latency_ms / 1000).toFixed(1)} s${d.cached ? " · CACHED" : ""}`;
     const autoTag = auto ? `<span class="auto">● SPANNER STARTED THIS ON ITS OWN</span>` : "";
     const img = (u) => (u ? `<img src="${esc(u)}" referrerpolicy="no-referrer" onerror="this.remove()">` : "");
@@ -1417,11 +1419,13 @@ async function coachTick() {
 }
 
 let autoShopped = false;
+const AUTO_PART = { dead: "replacement switch for my RK61", sticky: "replacement switch for my RK61",
+  missing: "replacement keycaps for my RK61", spacebar: "replacement stabilizers for my RK61", no: "a replacement USB-C cable for my RK61" };
 function maybeAutoShop(c) {
   const kind = plan.steps[c.step_index - 1]?.kind;
   if (autoShopped || !kind) return;
-  if ((kind === "switch-pull" && c.step_status === "done") || ["socket-inspect", "new-switch-inspect"].includes(kind)) {
-    autoShopped = true; openShop("replacement switch for my RK61", true);
+  if ((kind === "switch-pull" && c.step_status === "done") || ["socket-inspect", "new-switch-inspect", "stabilizer"].includes(kind)) {
+    autoShopped = true; openShop(AUTO_PART[plan?.fault_signature?.split("-")[0]] || "replacement switch for my RK61", true);
   }
 }
 // the key the camera sees missing becomes the key we repair (two frames must agree; exact legend match only)

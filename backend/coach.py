@@ -705,6 +705,12 @@ class PlanReq(BaseModel):
     complaint: str
 
 
+# the replacement part each kind of fault is most likely to need (shop.classify maps the words to a search)
+PART_FOR_FAULT = {"dead_key": "replacement switches", "sticky_key": "replacement switches",
+                  "missing_keycap": "replacement keycaps", "spacebar_stabilizer": "replacement stabilizers",
+                  "no_power": "a replacement USB-C cable"}
+
+
 @router.post("/plan/generate")
 async def generate_plan(req: PlanReq):
     """What the user said they want fixed -> a Claude-written plan for that fault (slow: 5-10 s with the real model).
@@ -723,6 +729,12 @@ async def generate_plan(req: PlanReq):
         _plans[req.session] = {"broken_key": out["broken_key"], "plan": out["plan"], "parts_card": out.get("parts_card"),
                                "plan_id": out["plan_id"]}
         _latest.setdefault(req.session, {})["plan_id"] = out["plan_id"]
+        # search for the part this fault needs now, in the background: by the time they ask, it is already there
+        part_query = PART_FOR_FAULT.get(out.get("fault_class", ""))
+        if part_query and os.getenv("LINKUP_API_KEY"):
+            from .shop import prefetch
+
+            prefetch(part_query)
     from training.feedback import record_stage_timing
 
     record_stage_timing(req.session, "planner", round((time.perf_counter() - t0) * 1000), out["status"] == "ready")
