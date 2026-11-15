@@ -115,6 +115,15 @@ export class CoachClient {
     return (await res.json()) as T;
   }
 
+  /** Tell the laptop something happened on the phone ("end" = the call was hung up: the laptop ends its guide too). */
+  async signal(signal: "stop" | "end"): Promise<void> {
+    await withTimeout(
+      `${this.origin}/coach/signal`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: this.session, signal }) },
+      3000,
+    );
+  }
+
   /** One spoken utterance from this phone's microphone (base64 m4a). The laptop transcribes it and acts on it. */
   async utterance(audioB64: string): Promise<{ text: string }> {
     const res = await withTimeout(

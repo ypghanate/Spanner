@@ -1522,6 +1522,13 @@ function startRemote() {
   if (linkState !== "live") showPair();
   remoteTick();   // does nothing if the loop is already running (saying "use my phone" twice must not start two)
 }
+/** The phone hung up: end the guide here too and go back to the start (a fresh session, ready to pair again). */
+function endFromPhone() {
+  remoteOn = false; stopSpeech(); stopTour();
+  heard("phone", "call ended");
+  try { sessionStorage.removeItem("spanner-session"); } catch { /* private window */ }
+  setTimeout(() => { location.href = location.pathname + location.search.replace(/([?&])s=[^&]*&?/, "$1"); }, 300);
+}
 function stopRemote() { remoteOn = false; hidePair(); $("cam").style.display = "none"; setLink(camOn ? "webcam" : "idle"); }
 let remoteLoop = false, lastDataAt = 0, pollFails = 0, lastUtterId = "";
 async function remoteTick() {
@@ -1538,7 +1545,7 @@ async function remoteTick() {
         lastUtterId = d.utterance.id;
         hearSpeech(d.utterance.text, 6000);   // the phone may have heard our own voice: transcription arrives a few seconds late
       }
-      if (d.signal && d.signal.ts !== lastSignalTs) { lastSignalTs = d.signal.ts; if (d.signal.signal === "stop") quiet("✋"); }
+      if (d.signal && d.signal.ts !== lastSignalTs) { lastSignalTs = d.signal.ts; if (d.signal.signal === "stop") quiet("✋"); else if (d.signal.signal === "end") endFromPhone(); }
       if (poseTrack.on && d.pose && d.pose.ts !== lastPoseTs) { lastPoseTs = d.pose.ts; applyPose(d.pose); }
       if (fresh) { lastDataAt = performance.now(); if (linkState !== "live") hidePair(); }
       // staleness is judged on this laptop's own clock: no new photo for a few seconds means the phone stopped

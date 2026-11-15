@@ -7,8 +7,8 @@ import { absUrl } from "./config";
 // Noise gate that adapts to the room: speech must be clearly louder than the background (a busy hackathon floor),
 // and the utterance ends when the level drops back near that background. A fixed threshold let room chatter count
 // as speech, so clips never ended and ran to the cap (slow replies full of other people's words).
-const SPEECH_OVER_FLOOR_DB = 12; // this much above the room's noise = someone talking into the phone
-const QUIET_OVER_FLOOR_DB = 6; // back within this of the noise = they stopped
+const SPEECH_OVER_FLOOR_DB = 16; // this much above the room's noise = someone talking into the phone (raised: busy rooms)
+const QUIET_OVER_FLOOR_DB = 8; // back within this of the noise = they stopped
 const MIN_SPEECH_DB = -42; // never treat a very quiet room's tiny sounds as speech
 const SILENCE_MS = 500; // end of utterance: shorter = snappier replies
 const MIN_SPEECH_MS = 350;

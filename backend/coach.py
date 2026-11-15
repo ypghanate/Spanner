@@ -495,7 +495,7 @@ async def net():
 
 class Signal(BaseModel):
     session: str
-    signal: Literal["stop"]
+    signal: Literal["stop", "end"]     # stop = stop talking (✋); end = the phone hung up the call
 
 
 @router.post("/signal")

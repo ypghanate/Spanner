@@ -332,6 +332,7 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
   const endCall = useCallback(async () => {
     const prev = stateRef.current;
     const t = tracker.current;
+    void client.current?.signal("end").catch(() => {}); // hang up the laptop's guide too
     teardown();
     const total = prev.plan?.steps.length ?? 0;
     const done = t.complete ? total : Math.max(0, t.step - 1);
