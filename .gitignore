@@ -21,3 +21,15 @@ mlruns/
 training/adaption/data/
 *.egg-info/
 data/certs/
+backend/venv/
+venv/
+.DS_Store
+backend/.DS_Store
+backend/venv/
+venv/
+.DS_Store
+backend/.DS_Store
+backend/venv/
+venv/
+.DS_Store
+backend/.DS_Store
