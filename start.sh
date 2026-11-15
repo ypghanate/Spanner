@@ -13,9 +13,9 @@ EXPO_LOG="$RUN_DIR/expo.log"
 : >"$BACKEND_LOG"; : >"$TUNNEL_LOG"; : >"$EXPO_LOG"
 
 BACKEND_PORT=8000
-HEALTH_PATH="/coach/health"   # adjust if your health route differs
-VIEWER_PATH="/trainer"        # adjust to the route that shows the pairing QR
-API_ENV_VAR="EXPO_PUBLIC_API_URL"  # adjust to the variable your app reads
+HEALTH_PATH="/coach/health"
+VIEWER_PATH="/training/viewer/"   # laptop viewer: hologram + pairing QR
+API_ENV_VAR="EXPO_PUBLIC_BACKEND_URL"  # read by app/src/lib/config.ts
 
 BACKEND_PID=""
 TUNNEL_PID=""
@@ -145,8 +145,14 @@ echo "Starting Expo (this can take up to a minute)..."
 EXPO_PID=$!
 
 EXPO_URL=""
-for _ in $(seq 1 180); do
-  EXPO_URL="$(strip_ansi <"$EXPO_LOG" | grep -Eo 'exp://[A-Za-z0-9._-]+\.exp\.direct[^[:space:]]*' | head -n 1 || true)"
+for _ in $(seq 1 240); do
+  CLEAN="$(strip_ansi <"$EXPO_LOG")"
+  # Older Expo prints exp://<id>.exp.direct; Expo 58 prints "Waiting on https://<host>.on.expo.app" (Expo Go uses exp://<host>).
+  EXPO_URL="$(printf '%s\n' "$CLEAN" | grep -Eo 'exp://[A-Za-z0-9._-]+\.exp\.direct[^[:space:]]*' | head -n 1 || true)"
+  if [[ -z "$EXPO_URL" ]]; then
+    EXPO_HOST="$(printf '%s\n' "$CLEAN" | sed -nE 's#.*Waiting on https://([A-Za-z0-9.-]+\.expo\.app).*#\1#p' | head -n 1)"
+    [[ -n "$EXPO_HOST" ]] && EXPO_URL="exp://$EXPO_HOST"
+  fi
   [[ -n "$EXPO_URL" ]] && break
   kill -0 "$EXPO_PID" 2>/dev/null || die "Expo stopped. See $EXPO_LOG."
   sleep 1
