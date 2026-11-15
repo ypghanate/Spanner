@@ -155,9 +155,30 @@ def test_linkup_queries_follow_linkup_rules():
 from training import scene3d  # noqa: E402
 
 
-def test_layout_is_a_real_rk61():
-    assert sum(len(r) for r in scene3d.LAYOUT) == 61
-    assert all(abs(sum(w for *_, w in row) - 15) < 1e-9 for row in scene3d.LAYOUT)  # every row is 15 units wide
+def test_layout_is_a_real_rk68():
+    assert sum(len(r) for r in scene3d.LAYOUT) == 68
+    assert all(abs(sum(w for *_, w in row) - 16) < 1e-9 for row in scene3d.LAYOUT)  # every row is 16 units wide (65%)
+
+
+def test_layout_pack_builds_a_pack_for_any_camera_read_layout():
+    """A keyboard with an F-row (six rows), read from the camera, becomes a viewer pack whose key ids are unique."""
+    rows = [[("Esc", 1)] + [(f"F{i}", 1) for i in range(1, 13)] + [("Del", 1.5)],
+            [("`", 1)] + [(c, 1) for c in "1234567890"] + [("-", 1), ("=", 1), ("Backspace", 2), ("Home", 1)],
+            [("Tab", 1.5)] + [(c, 1) for c in "QWERTYUIOP"] + [("[", 1), ("]", 1), ("\\", 1.5), ("PgUp", 1)],
+            [("Caps", 1.75)] + [(c, 1) for c in "ASDFGHJKL"] + [(";", 1), ("'", 1), ("Enter", 2.25), ("PgDn", 1)],
+            [("Shift", 2.25)] + [(c, 1) for c in "ZXCVBNM"] + [(",", 1), (".", 1), ("/", 1), ("Shift", 1.75), ("↑", 1), ("End", 1)],
+            [("Ctrl", 1.25), ("Win", 1.25), ("Alt", 1.25), ("Space", 6.25), ("Alt", 1), ("Fn", 1), ("Ctrl", 1), ("←", 1), ("↓", 1), ("→", 1)]]
+    pack = scene3d.layout_pack(rows, "test board")
+    assert len(pack["rows"]) == 6 and len(pack["keys"]) == sum(len(r) for r in rows)
+    assert {"F5", "LSHIFT", "RSHIFT", "LCTRL", "RCTRL", "LALT", "RALT", "UP", "SPACE"} <= set(pack["keys"])
+    assert len(pack["groups"]["keycaps"]) == len(pack["keys"]) and "keycap_F5" in pack["groups"]["keycaps"]
+    assert pack["key_area_cm"][0] > 30 and pack["layout_id"]
+
+
+def test_layout_rows_clean_makes_every_row_the_same_width():
+    rows = scene3d.layout_rows_clean([[("A", 1), ("B", 1)], [("Tab", 1.5), ("Space", 3)]])
+    widths = [sum(w for *_, w in r) for r in rows]
+    assert abs(widths[0] - widths[1]) < 1e-6
 
 
 @pytest.mark.parametrize("text,kind,ops", [

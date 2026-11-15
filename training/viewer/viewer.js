@@ -226,10 +226,14 @@ const SPEC_KEYS = {
 };
 const CALLOUT = { keycaps: "KEYCAPS", switches: "SWITCHES", stabilizers: "STABILIZERS", plate: "PLATE", hotswap_sockets: "HOT-SWAP SOCKETS",
                   leds: "RGB LEDS", pcb: "PCB", battery: "BATTERY", case: "CASE" };
-const ROWP = [{ h: 1.08, tilt: 7 }, { h: 0.98, tilt: 3 }, { h: 0.92, tilt: 0 }, { h: 0.96, tilt: -5 }, { h: 0.98, tilt: -7 }];
+const ROWP_BASE = [{ h: 1.08, tilt: 7 }, { h: 0.98, tilt: 3 }, { h: 0.92, tilt: 0 }, { h: 0.96, tilt: -5 }, { h: 0.98, tilt: -7 }];
+// a board with an F-row has six rows: its top two share the first profile
+const ROWP = new Proxy(ROWP_BASE, { get: (t, r) => (typeof r === "string" && /^\d+$/.test(r) ? t[Math.max(0, Math.min(4, Number(r) - Math.max(0, ((typeof pack !== "undefined" && pack?.rows?.length) || 5) - 5)))] : t[r]) });
 
 // ------------------------------------------------------------------ state
 let pack, plan, card, brokenKey = "F", K, stepIdx = -1, xray = false, touring = false, selected = null, hovered = null;
+// any object learned live (object mode): see the block before the picker
+const objectFlow = { on: false, asking: false, status: null, timer: null, twin: null, twinKind: "", pictures: {}, photoShown: false, glbShown: false };
 let rgbOn = true, voiceOn = false, micOn = false, mistakeOn = false, flying = false, lastInput = performance.now();
 const parts = {};         // name -> { obj, group, base: Vector3 }
 const amount = {};        // group -> explode amount 0..1
@@ -328,6 +332,32 @@ function buildSwitch(name) {
 }
 function buildPart(name, group, obj, base) { obj.name = name; obj.position.copy(base); scene.add(obj); parts[name] = { obj, group, base: base.clone() }; }
 
+function teardownKeyboard() {
+  for (const p of Object.values(parts)) scene.remove(p.obj);
+  for (const store of [parts, capTop, ledMat, switchParts]) for (const k of Object.keys(store)) delete store[k];
+  hiCache.clear();
+}
+let layoutShown = "", layoutBusy = false, planKey = "";
+/** The camera read this keyboard's layout (every row, every key, F-row or not): build the hologram from it, so the key a person
+ *  pulls exists on the model and can be named, shown and repaired. */
+async function applyLayout(np) {
+  if (!np?.keys || np.layout_id === layoutShown) return;
+  layoutShown = np.layout_id; stopTour(); runId++; clearTags(); clearArrow(); setHighlight([]); hideTools(); pulseT0 = 0;
+  np.specs = pack.specs || {}; np.explode_offsets_cm.spare = 0;
+  teardownKeyboard(); pack = np;
+  brokenKey = pack.keys[planKey] ? planKey : pack.keys[brokenKey] ? brokenKey : (pack.keys.J ? "J" : Object.keys(pack.keys)[0]);
+  K = pack.keys[brokenKey]; buildKeyboard();
+  if (tools.plug) { tools.plug.position.copy(plugPos("in")); tools.plug.visible = !objectFlow.on; }
+  if (dimLabel) { const [dw, dh, dd] = pack.dimensions_cm; dimLabel.div.textContent = `${Math.round(dw * 10)} × ${Math.round(dd * 10)} × ${Math.round(dh * 10)} mm · ${Object.keys(pack.keys).length} KEYS (read from your camera)`; dimLabel.obj.position.set(0, -0.4, CD / 2 + 2.2); }
+  world = { ...INITIAL }; setRGB(true);
+  heard("camera", `read your keyboard: ${Object.keys(pack.keys).length} keys, ${pack.rows.length} rows`);
+  if (!objectFlow.on) { await rotateTo("iso"); if (stepIdx >= 0) goStep(stepIdx, "", true); }
+}
+async function fetchLayout() {
+  if (layoutBusy) return; layoutBusy = true;
+  try { const d = await fetchJson(API + "/coach/layout?session=" + SESSION, 12000); if (d.status === "ready") await applyLayout(d.pack); }
+  catch { /* the next frame tries again */ } finally { layoutBusy = false; }
+}
 function buildKeyboard() {
   U = pack.key_unit_cm; [W, D] = pack.key_area_cm; [CW, CH, CD] = pack.case_cm; [WX, WZ] = pack.wall_cm; Y = pack.layers_y;
   for (const [kid, k] of Object.entries(pack.keys)) {
@@ -801,7 +831,8 @@ function buildStages() {
 const stageNow = () => (stepIdx >= 0 ? STAGES[stageOf[stepIdx]] : null);
 function setMode(t) {
   const g = stageNow(), el = $("mode");
-  el.textContent = /^(assembled|scanning)$/.test(t) && stepIdx < 0 ? "Auto-follow · keyboard overview"
+  const overview = objectFlow.on ? (objectFlow.status?.model || objectFlow.status?.object || "your object") + " · twin" : "keyboard overview";
+  el.textContent = /^(assembled|scanning)$/.test(t) && stepIdx < 0 ? "Auto-follow · " + overview
     : /^repair/.test(t) && g ? "Auto-follow · " + fillK(g.mode) : t.charAt(0).toUpperCase() + t.slice(1);
 }
 function telemetry() { $("telemetry").textContent = `${Object.keys(parts).length - 1} parts · ${selected ?? "none selected"}`; }
@@ -840,7 +871,7 @@ function setReady() {
   $("helper").textContent = "Your phone stays on camera and voice.\nYour laptop follows the same repair.";
   $("sd").textContent = ""; $("sm").textContent = ""; $("tools").innerHTML = "";
   $("ctaLabel").textContent = "Say “start”"; $("foot").textContent = "The 3D view follows at your pace.";
-  $("sceneTitle").textContent = "Keyboard overview";
+  $("sceneTitle").textContent = objectFlow.on ? (objectFlow.status?.model || "Your object") + " · 3D twin" : "Keyboard overview";
   caption(`Hi, I’m Spanner.\nShow me the keyboard and we’ll begin.`);
   renderStages();
 }
@@ -914,7 +945,7 @@ async function goStep(i, note = "", silent = false) {
   $("sm").textContent = s.common_mistakes?.length ? `⚠ ${s.common_mistakes[0]}` : "";
   warnLearned(s);
   $("tools").innerHTML = (TOOL_OF[s.kind] || "HANDS").split(" · ").map((t) => `<span class="chip">${t}</span>`).join("");
-  dots();
+  renderStepPicture(); dots();
   if (!silent) narrate(`Step ${s.index}. ${s.instruction}`, false);   // the card already shows the short coach line
   await applyState(stateBefore(stepIdx), 450);
   if (id !== runId) return;
@@ -1058,7 +1089,7 @@ let elevenOK = false, speakingUntil = 0, sayAudio = null, currentSpeech = "";   
 fetchJson(API + "/coach/health", 4000).then((d) => { elevenOK = !!d.tts; }).catch(() => {});
 // While Spanner talks, the mic ignores what it hears (it would hear Spanner). That window must always end: the
 // estimate below is based on the text length, and every way a clip can stop (end, error, stall, abort) closes it.
-const speechMs = (text) => Math.min(45000, 2500 + text.split(/\s+/).length * 450);
+const speechMs = (text) => Math.min(45000, 1500 + text.split(/\s+/).length * 330);
 // tell the phone how long we'll be talking, so it pauses its microphone (it would only record our own voice)
 let lastSpeakReport = 0;
 function reportSpeaking(ms) {
@@ -1074,7 +1105,7 @@ function stopSpeech() {
 }
 function browserSay(text) {
   if (!("speechSynthesis" in window)) { speakingUntil = 0; return; }
-  const u = new SpeechSynthesisUtterance(text); if (voice) u.voice = voice; u.rate = 1.03; u.pitch = 0.92;
+  const u = new SpeechSynthesisUtterance(text); if (voice) u.voice = voice; u.rate = 1.2; u.pitch = 0.92;
   const done = () => { speakingUntil = performance.now() + 400; reportSpeaking(0); };
   u.onend = done; u.onerror = done;
   speakingUntil = performance.now() + speechMs(text); currentSpeech = text; reportSpeaking(speechMs(text)); speechSynthesis.speak(u);
@@ -1098,7 +1129,7 @@ $("voice").onclick = () => { voiceOn = !voiceOn; $("voice").classList.toggle("on
 setInterval(() => {
   const sp = performance.now() < speakingUntil, st = sp ? "speaking" : micOn ? "listening" : "idle", pill = $("captPill");
   if (pill.dataset.s === st + voiceOn) return; pill.dataset.s = st + voiceOn;
-  pill.className = st; $("captState").textContent = sp ? "Spanner is speaking" : micOn ? "Listening to you" : voiceOn ? "Voice on" : "Voice off · tap to wake";
+  pill.className = st; $("captState").textContent = sp ? "Spanner is speaking" : micOn ? (gateOpen() ? "Listening to you" : "Say “Spanner …”") : voiceOn ? "Voice on" : "Voice off · tap to wake";
 }, 250);
 $("captPill").onclick = () => { if (performance.now() < speakingUntil) stopSpeech(); else if (!micOn && !phoneMic) $("mic").onclick(); };
 $("say").onclick = () => { const s = plan.steps[stepIdx]; if (!s) return; if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); } narrate(`Step ${s.index}. ${s.instruction}`); };
@@ -1167,13 +1198,13 @@ async function command(raw) {
   else if (/step (\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven)/.test(t)) {
     const words = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven"], m = /step (\d+|\w+)/.exec(t);
     const n = parseInt(m[1]) || words.indexOf(m[1]) + 1; if (n > 0) { stopTour(); goStep(n - 1); said = `step ${n}`; }
-  } else { said = "…"; heard(raw, "thinking"); return intentFallback(raw); }
+  } else { said = "…"; heard(raw, "thinking"); return converseTurn(raw); }
   heard(raw, said);
 }
 // ---- every spoken sentence, from the laptop mic or the phone mic, comes in here
 const QUICK = /^(?:\s*(?:ok(?:ay)?|hey|spanner|please|and|now|just)[,\s]*)*(close|stop|quiet|shut up|stop talking|be quiet|enough|pause|next|back|calibrate|reset|rewind|x-?ray|lights (?:on|off)|take it apart|put it back|zoom (?:in|out))/i;
 const echoWords = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter((w) => w.length > 2));
-const STOCK = /what do you want to fix|i'm spanner|i am spanner|show it to me|step by step|replacement parts or other keyboards|heads up|people often|searching live|taking it apart|putting it back|starting over|let me work out the fix|scan the code/i;
+const STOCK = /what do you want to fix|i'm spanner|i am spanner|show it to me|step by step|replacement parts or other keyboards|heads up|people often|searching live|taking it apart|putting it back|starting over|let me work out the fix|scan the code|finding it and reading|reading the repair guides|already learned this repair|say start when|still reading the guides|written guides were|usable repair guide|the steps are ready|watched two repair videos/i;
 /** Spanner hearing its own voice: its stock phrases, or most of the words are in what it is saying (or just said). */
 function isEcho(text, graceMs = 1500) {
   if (performance.now() > speakingUntil + graceMs) return false;           // Spanner has been quiet: that was you
@@ -1186,16 +1217,55 @@ function isEcho(text, graceMs = 1500) {
 let lastActed = { text: "", t: 0 };
 /** While Spanner talks only a clean short command gets through (barge-in); its own voice is dropped.
  *  graceMs: how long after it stops talking an echo can still arrive (the phone's clips are transcribed a few s later). */
+// ---- whose voice? In a loud room the mic hears everyone, and the person pitching is talking to the audience, not to Spanner.
+// Spanner reacts to: its name ("Spanner, next"), an answer within ATTN_MS of its own voice or of the last accepted command,
+// and everything while the question page or a diagnostic question is open. Turn it off with ?gate=0 in a quiet room.
+const ATTN_MS = 10000, GATE_ON = QP.get("gate") !== "0";
+let attnUntil = performance.now() + (QP.get("attn") === "0" ? 0 : 60000);   // the first minute after opening is open: the question, the pairing
+const WAKE = /^\W*(?:(?:hey|ok|okay|hi)[ ,]+)?(?:spanner|spaner|spannar|spana|spenner|spanna)\b[ ,.:!?-]*/i;
+const gateOpen = () => !GATE_ON || pickOpen || objectFlow.asking || performance.now() < Math.max(attnUntil, speakingUntil ? speakingUntil + ATTN_MS : 0);
+function attentionGate(text) {
+  const m = text.match(WAKE);
+  if (m) return { ok: true, text: text.slice(m[0].length).trim(), named: true };
+  if (/\b(spanner|spaner|spannar)\b/i.test(text)) return { ok: true, text, named: true };
+  return { ok: gateOpen(), text };
+}
+const FILLERS = ["Mm-hm.", "Okay.", "Let me see.", "Right."]; let lastFiller = -1;
+const nextFiller = () => { let i; do { i = Math.floor(Math.random() * FILLERS.length); } while (i === lastFiller); lastFiller = i; return FILLERS[i]; };
+
+/** The mic often hears Spanner's own line followed by the person's words ("okay the airpods 3 I'm finding it... one of them is
+ *  quieter"): drop the part that is Spanner's sentence and keep what the person added. */
+function stripOwnVoice(text) {
+  if (!currentSpeech) return text;
+  const mine = currentSpeech.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter(Boolean);
+  const heard = text.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter(Boolean);
+  if (mine.length < 3 || heard.length < 3) return text;
+  // longest prefix of the heard words that overlaps Spanner's sentence by >= 60%
+  let best = 0;
+  for (let n = Math.min(heard.length, mine.length + 4); n >= 3; n--) {
+    const win = new Set(mine); let hit = 0; for (const w of heard.slice(0, n)) if (win.has(w)) hit++;
+    if (hit / n >= 0.6) { best = n; break; }
+  }
+  if (!best) return text;
+  const rest = heard.slice(best).join(" ").trim();
+  return rest.split(" ").length >= 2 ? rest : "";
+}
 function hearSpeech(text, graceMs = 1500) {
   const now = performance.now();
   if (!text || !text.trim()) return;
+  if (now < speakingUntil + graceMs) { const cut = stripOwnVoice(text); if (cut !== text) { heard(text, cut ? "→ " + cut : "that was me"); text = cut; } if (!text) return; }
   const key = text.toLowerCase().replace(/[^a-z0-9' ]/g, " ").replace(/\s+/g, " ").trim();   // "Next." and "next" are one command
-  if (key === lastActed.text && now - lastActed.t < 4000) return;   // the final of a command already run (or the phone and the laptop both heard it)
+  if (now - lastActed.t < 4000 && (key === lastActed.text || (lastActed.text.split(" ").length <= 2 && key.startsWith(lastActed.text + " ")))) return;   // the final of a command already run ("next" then "next step"), or the phone and the laptop both heard it
   if (now < speakingUntil) {                                        // Spanner is talking: only a clean short command barges in
     const q = text.match(QUICK);
     if (!q || isEcho(text, graceMs) || echoWords(currentSpeech).has(q[1].toLowerCase().split(" ")[0])) return;   // ignore silently
     text = q[0];
   } else if (isEcho(text, graceMs)) { heard(text, "ignored: that was me talking"); return; }   // just stopped: drop echoes, keep the rest
+  const gate = attentionGate(text);
+  if (QP.get("debug")) console.log("GATE", JSON.stringify(text), "->", gate.ok ? "accepted as " + JSON.stringify(gate.text) : "ignored");
+  if (!gate.ok) { heard(text, "not for me · say “Spanner …”"); return; }
+  if (gate.named && !gate.text) { attnUntil = now + ATTN_MS; heard("Spanner", "listening"); blip(880, 0.05); return; }   // just its name: open the window
+  text = gate.text; attnUntil = now + ATTN_MS; blip(1250, 0.035);                                              // instant acknowledgement: heard you
   lastActed = { text: key, t: now };
   if (now < speakingUntil) stopSpeech();
   setListen(true, "Listening · " + text.trim().slice(0, 40)); command(text);
@@ -1213,11 +1283,14 @@ $("mic").onclick = () => {
   let fails = 0, lastErr = "", recognizing = false, lastEvent = performance.now();
   const r = (rec = new SR()); r.continuous = true; r.interimResults = true; r.lang = "en-GB"; r.maxAlternatives = 1;
   r.onstart = () => { recognizing = true; lastEvent = performance.now(); };
+  let stable = null;
   r.onresult = (e) => {
     fails = 0; lastEvent = performance.now();
     const res = e.results[e.results.length - 1], text = res[0].transcript;
+    clearTimeout(stable);
     if (res.isFinal) hearSpeech(text);
     else if (QUICK.test(text)) hearSpeech(text.match(QUICK)[0]);      // "close" acts the moment it is heard
+    else if (text.trim().split(/\s+/).length >= 2) stable = setTimeout(() => hearSpeech(text), 750);   // Chrome only finalises in silence: in a loud room that never comes, so act when the words stop changing
   };
   r.onspeechend = () => { lastEvent = performance.now(); };
   r.onend = () => {
@@ -1284,9 +1357,9 @@ async function openShop(raw, auto = false, refresh = false) {
     }
     if (!verified || verified.status === "researching" || verified.refreshing) verifyTimer = setTimeout(pollVerify, 4000);
   };
-  if (isPart) pollVerify();
+  if (isPart && !objectFlow.on) pollVerify();   // the two-site verification agent knows the keyboard, not an object learned live
   try {
-    const r = await fetchT(API + "/coach/shop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: raw }) }, 75000);
+    const r = await fetchT(API + "/coach/shop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: raw, model: objectFlow.on ? (objectFlow.status?.model || objectFlow.status?.object || "") : "" }) }, 75000);
     if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 120)}`);
     const d = await r.json(); if (id !== shopReq) return;
     // offers came back before every photo / price was found: the server finishes them; show the full set shortly
@@ -1296,7 +1369,7 @@ async function openShop(raw, auto = false, refresh = false) {
     const img = (u) => (u ? `<img src="${esc(u)}" referrerpolicy="no-referrer" onerror="this.remove()">` : "");
     if (d.kind === "keyboard") {
       const ri = d.repair_instead ? `<div class="verify"><div class="vh">BEFORE YOU BUY · FIXING YOUR RK61 (LINKUP AGENT, ${esc(d.repair_instead.as_of).toUpperCase()})</div><div class="dec">${esc(d.repair_instead.headline).replace(/^(Repair it:)/, "<b>$1</b>")}</div></div>` : "";
-      el.innerHTML = `<h3>OTHER KEYBOARDS · VS YOUR RK61${autoTag}</h3><div class="sub">${src}</div>${ri}<div class="grid">${d.items.map((k, i) => `
+      el.innerHTML = `<h3>${d.generic ? "ALTERNATIVES" : "OTHER KEYBOARDS"} · VS YOUR ${esc((d.model || "RK68").toUpperCase())}${autoTag}</h3><div class="sub">${src}</div>${ri}<div class="grid">${d.items.map((k, i) => `
         <div class="it" style="animation-delay:${i * 70}ms">${img(k.image_url)}
           <div class="nm">${esc(k.name)}</div><div class="pr">${moneyGbp(k)}</div>
           <ul>${(k.pros || []).map((x) => `<li class="p">${esc(x)}</li>`).join("")}${(k.cons || []).map((x) => `<li class="c">${esc(x)}</li>`).join("")}</ul>
@@ -1305,7 +1378,7 @@ async function openShop(raw, auto = false, refresh = false) {
       narrate(`I found ${d.items.length} alternatives.${c ? ` The cheapest is the ${c.name} at about £${Math.round(c.price_gbp)}.` : ""}${d.repair_instead ? " But fixing yours is far cheaper." : ""}`);
     } else {
       const fit = d.items.filter((o) => o.compatible);
-      el.innerHTML = `<h3>REPLACEMENT ${esc(d.item.split(" (")[0]).toUpperCase()} · FOR YOUR RK61${autoTag}</h3><div class="sub">${src}</div><div id="vbox">${verifyBox(verified)}</div><div class="sub">MORE OPTIONS · QUICK SEARCH</div><div class="grid">${d.items.map((o, i) => `
+      el.innerHTML = `<h3>REPLACEMENT ${esc(d.item.split(" (")[0]).toUpperCase()} · FOR YOUR ${esc((d.model || "RK68").toUpperCase())}${autoTag}</h3><div class="sub">${src}</div><div id="vbox">${verifyBox(verified)}</div><div class="sub">MORE OPTIONS · QUICK SEARCH</div><div class="grid">${d.items.map((o, i) => `
         <div class="it" style="animation-delay:${i * 70}ms">${img(o.image_url)}
           <div class="nm">${esc(o.name)}</div><div class="pr">${moneyGbp(o)}</div><div class="rt">${esc(o.retailer)}</div>
           <span class="badge ${o.compatible ? "ok" : "no"}">${o.compatible ? "✓ FITS YOUR RK61" : "✗ WON'T FIT"}</span>
@@ -1326,6 +1399,21 @@ const INTENT_TEXT = { next: "next", back: "back", close: "close", take_apart: "t
   xray: "x-ray", reset: "reset", tour: "tour", stop: "stop", rewind: "rewind", show_mistake: "show me the mistake", fix_it: "fix it",
   camera_on: "camera on", camera_off: "camera off", zoom_in: "zoom in", zoom_out: "zoom out", lights_on: "lights on", lights_off: "lights off",
   specs: "specs", sources: "sources" };
+let turnSeq = 0;
+/** Words Spanner has no instant rule for: one call returns what to do and what to say. If it is slow, a short spoken
+ *  acknowledgement (never the same one twice in a row) fills the wait; the answer cuts it off. */
+async function converseTurn(raw) {
+  const id = ++turnSeq;
+  const filler = setTimeout(() => { if (id === turnSeq && performance.now() > speakingUntil) narrate(nextFiller(), false); }, 1500);
+  try {
+    await reportState();
+    const r = await fetchT(API + "/coach/converse", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: SESSION, text: raw }) }, 12000);
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json(); clearTimeout(filler);
+    if (id !== turnSeq) return;
+    lastReplyId = d.id; return onReply(d);
+  } catch (e) { clearTimeout(filler); return intentFallback(raw); }
+}
 async function intentFallback(raw) {
   try {
     const r = await fetchT(API + "/coach/intent", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: raw, current_step: stepIdx + 1 }) }, 10000);
@@ -1348,7 +1436,7 @@ async function loadPlan(d) {
   if (mistakeOn) { mistakeOn = false; $("mistake").classList.remove("on"); $("fixit").style.display = "none"; }
   await applyState({ ...INITIAL }, 0);          // restores the old key's cap and switch while brokenKey still points at it
   plan = d.plan; card = d.parts_card || null; chosen = true;
-  brokenKey = pack.keys[d.broken_key] ? d.broken_key : "F"; K = pack.keys[brokenKey];
+  planKey = d.broken_key || ""; brokenKey = pack.keys[d.broken_key] ? d.broken_key : (pack.keys.F ? "F" : Object.keys(pack.keys)[0]); K = pack.keys[brokenKey];
   for (const s of plan.steps) if (!s.kind) s.kind = "other";
   warnedSteps.clear(); world = { ...INITIAL }; agree = 0; lastDetect = 0; lastDoneStep = -1; stepIdx = -1; finished = false;
   $("sessTitle").textContent = plan.generated ? plan.title || "Repair" : KEYL() + " key replacement";
@@ -1470,6 +1558,7 @@ function onMissingKeys(c) {
 }
 let stepHoldUntil = 0;   // after a step change, ignore frames that were taken before it
 function onCoach(c) {
+  if (c.layout_id && c.layout_id !== layoutShown && !objectFlow.on) fetchLayout();
   $("camlat").textContent = `${(c.latency_ms / 1000).toFixed(1)} s${c.crop?.cropped ? " · zoomed" : ""}`;
   onMissingKeys(c);                          // before a plan exists this is the only thing the camera can start
   if (!chosen) return;                       // no plan yet: nothing to follow (and no "tell me what's wrong" on every frame)
@@ -1484,7 +1573,7 @@ function onCoach(c) {
   if (c.mistake && c.confidence >= 0.4 && performance.now() - lastMistakeAt > 5000) {
     lastMistakeAt = performance.now(); flash();
     showTag(`keycap_${brokenKey}`, "⚠ " + c.mistake.toUpperCase().slice(0, 60), "red", 2.6);
-    narrate("Careful. " + (c.say || c.mistake));
+    narrate(c.say || "Careful. " + c.mistake);
     return;
   }
   // the step on screen is done: praise it and move on by exactly one step (one confident frame is enough)
@@ -1561,12 +1650,12 @@ let remoteLoop = false, lastDataAt = 0, pollFails = 0, lastUtterId = "", lastAli
 // ---- the phone is the microphone: the server transcribes, decides what to do and what to say (one Claude turn with
 // the conversation so far and what is on screen); this laptop just does it and speaks.
 function screenState() {
-  return { session: SESSION, screen: linkState !== "live" ? "pairing" : pickOpen ? "picking" : finished ? "done" : stepIdx >= 0 ? "step" : "ready",
+  return { session: SESSION, screen: remoteOn && linkState !== "live" ? "pairing" : pickOpen ? "picking" : finished ? "done" : stepIdx >= 0 ? "step" : "ready",
     step: stepIdx + 1, total: plan?.steps?.length || 0, title: plan?.title || "" };
 }
 function reportState() {
-  const st = screenState(), key = JSON.stringify(st); if (key === lastStateSent) return; lastStateSent = key;
-  fetch(API + "/coach/state", { method: "POST", headers: { "content-type": "application/json" }, body: key }).catch(() => { lastStateSent = ""; });
+  const st = screenState(), key = JSON.stringify(st); if (key === lastStateSent) return Promise.resolve(); lastStateSent = key;
+  return fetch(API + "/coach/state", { method: "POST", headers: { "content-type": "application/json" }, body: key }).catch(() => { lastStateSent = ""; });
 }
 const ACKS = ["Mm-hm.", "Okay.", "Let me see.", "Right."];
 function closePicker() { if (!pickOpen) return; pickOpen = false; $("pick").style.opacity = 0; setTimeout(() => { $("pick").style.display = "none"; }, 600); }
@@ -1578,7 +1667,8 @@ async function onReply(r) {
     zoom_out: "zoom out", show_mistake: "show me the mistake", specs: "specs", sources: "sources" };
   switch (r.action) {
     case "pick_device": if (pickOpen && r.device) return chooseDevice(r.device, ""); break;
-    case "plan_repair": closePicker(); return requestRepair(r.complaint || r.text);
+    case "plan_repair": if (objectFlow.asking) return answerObject(r.text); if (!KEYBOARD_WORDS.test(r.complaint || r.text)) return startObject(r.complaint || r.text); closePicker(); return requestRepair(r.complaint || r.text);
+    case "none": if (objectFlow.asking) return answerObject(r.text); break;
     case "start": stopTour(); return goStep(0);
     case "next": stopTour(); return advance();
     case "back": stopTour(); return goStep(stepIdx - 1);
@@ -1775,6 +1865,103 @@ setXray(true); setMode("scanning");
   } catch (e) { console.error("intro / deep link:", e); setXray(false); window.__spannerReady = true; }
 })();
 
+// ------------------------------------------------------------------ any object, live: photo + specs (Linkup/Tavily), twin (fal),
+// sourced plan (web guides, then YouTube), diagnostic questions meanwhile. The keyboard keeps its own hologram; everything
+// else is "object mode": the keyboard hides, the twin stands in its place, the steps play as text + picture + voice.
+const KEYBOARD_WORDS = /key ?board|rk ?6[18]|rk ?84|keycap|space ?bar|\bkeys?\b/i;
+function setObjectMode(on) {
+  for (const p of Object.values(parts)) p.obj.visible = !on;
+  $("fx").classList.toggle("on", !on);         // the bloom is tuned for the keyboard's RGB; a white product twin would blow out
+  setRGB(!on);
+  hideTools(); if (tools.plug) tools.plug.visible = !on; if (dimLabel) dimLabel.div.style.display = on ? "none" : "";
+  for (const c of Object.values(callouts)) c.div.style.display = on ? "none" : "";
+  if (!on && objectFlow.twin) { scene.remove(objectFlow.twin); objectFlow.twin = null; objectFlow.twinKind = ""; }
+}
+function placeTwin(obj, kind) {
+  if (objectFlow.twin) scene.remove(objectFlow.twin);
+  const box = new THREE.Box3().setFromObject(obj), size = box.getSize(V3()), c = box.getCenter(V3());
+  const k = 16 / Math.max(size.x, size.y, size.z, 0.001); obj.scale.multiplyScalar(k);
+  const box2 = new THREE.Box3().setFromObject(obj), c2 = box2.getCenter(V3());
+  obj.position.sub(c2); obj.position.y += (box2.max.y - box2.min.y) / 2 + 0.6;
+  scene.add(obj); objectFlow.twin = obj; objectFlow.twinKind = kind; console.log("twin placed:", kind, size.x.toFixed(1), size.y.toFixed(1), size.z.toFixed(1));
+  // fill ~70% of the panel whatever the object's shape (a tall vacuum and a flat case need different distances)
+  const h = box2.max.y - box2.min.y, w = Math.max(box2.max.x - box2.min.x, box2.max.z - box2.min.z), fov = THREE.MathUtils.degToRad(camera.fov), asp = camera.aspect || 1.6;
+  const dist = Math.max((h / 2) / Math.tan(fov / 2), (w / 2) / (Math.tan(fov / 2) * asp)) / 0.72 + w / 2;
+  const tgt = V3(0, h / 2 + 0.6, 0); flyTo(tgt.clone().add(V3(0.55, 0.32, 0.8).normalize().multiplyScalar(dist)), tgt, 900, true); controls.autoRotate = true;
+}
+function twinFromPhoto(url) {
+  new THREE.TextureLoader().load(url, (tex) => {
+    if (objectFlow.twinKind === "glb") return;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const ar = tex.image.width / tex.image.height, h = 12, w = h * ar;
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true }));
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(w + 0.6, h + 0.6), new THREE.MeshBasicMaterial({ color: 0x253027, side: THREE.DoubleSide }));
+    back.position.z = -0.05; const g = new THREE.Group(); g.add(back, plane); placeTwin(g, "photo");
+  });
+}
+async function twinFromGlb(url) {
+  try {
+    const { GLTFLoader } = await import("https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js");
+    new GLTFLoader().load(url, (gltf) => {
+      gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; const m = o.material; if (m) { if ("envMapIntensity" in m) m.envMapIntensity = 0.5; if (m.emissive) m.emissive.setHex(0x000000); if (m.color) m.color.multiplyScalar(0.85); } } });
+      placeTwin(gltf.scene, "glb"); heard("fal", "3D twin ready"); setMode("3D twin · " + (objectFlow.status?.model || ""));
+    }, undefined, (e) => console.warn("twin glb failed:", e?.message || e));
+  } catch (e) { console.warn("GLTFLoader unavailable:", e); }
+}
+function objectSay(text) { if (text) { $("pickq").textContent = text; narrate(text); } }
+async function startObject(raw) {
+  objectFlow.on = true; objectFlow.asking = true; pickOpen = true;
+  $("pickhint").textContent = "listening"; $("pickecho").textContent = "“" + raw.trim() + "”";
+  if (!INSTANT && !remoteOn && !camOn) { if (QP.get("camera") === "1") toggleCamera(); else startRemote(); }
+  try {
+    const r = await fetchT(API + "/coach/object", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: SESSION, text: raw }) }, 30000);
+    const d = await r.json();
+    if (d.is_keyboard) { objectFlow.on = objectFlow.asking = false; return chooseDevice("keyboard", raw); }
+    objectFlow.status = d; objectSay(d.say); heard(raw, (d.model || d.object || "object") + " · learning the repair");
+    objectPoll();
+  } catch (e) { objectFlow.asking = false; objectSay("I couldn't start on that. Say the object and its model again."); }
+}
+async function answerObject(raw) {
+  try {
+    const r = await fetchT(API + "/coach/object/answer", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: SESSION, text: raw }) }, 30000);
+    const d = await r.json(); objectFlow.status = d; objectSay(d.say); heard(raw, "noted");
+  } catch (e) { heard(raw, "couldn't send that"); }
+}
+async function objectPoll() {
+  clearTimeout(objectFlow.timer);
+  if (!objectFlow.on) return;
+  try {
+    const st = await fetchJson(API + "/coach/object?session=" + SESSION, 8000);
+    const prev = objectFlow.status || {}; objectFlow.status = st;
+    if (st.photo_url && !objectFlow.photoShown) {      // the found product, shown on the question page only (never as a 2D sheet in the 3D panel)
+      objectFlow.photoShown = true;
+      $("pickecho").innerHTML = `<img src="${API + st.photo_url}" alt="" style="max-width:260px;max-height:200px;border-radius:10px;margin-top:8px;object-fit:contain;background:#fff;padding:6px">`;
+    }
+    if (st.twin_url && !objectFlow.glbShown) { objectFlow.glbShown = true; setObjectMode(true); twinFromGlb(API + st.twin_url); }
+    if (st.pictures && Object.keys(st.pictures).length !== Object.keys(objectFlow.pictures).length) { objectFlow.pictures = st.pictures; renderStepPicture(); }
+    if (st.plan_ready && !chosen) {
+      const pj = await fetchJson(API + "/coach/plan?session=" + SESSION, 10000);
+      if (pj.chosen && pj.plan?.steps?.length) {
+        setObjectMode(true); objectFlow.asking = false;
+        await loadPlan({ plan: pj.plan, parts_card: pj.parts_card, broken_key: "F" }); setObjectMode(true);   // loadPlan re-shows the keyboard's plug
+        $("sessTitle").textContent = st.model || st.object || pj.plan.title; $("sessSub").textContent = (st.fault || "") + (st.plan_source ? " · learned from " + st.plan_source : "");
+        closePicker(); caption(`${pj.plan.steps.length} steps, from ${st.plan_source}. Say “start” when you're ready.`);
+        narrate(`I've got it. ${pj.plan.steps.length} steps, learned from ${st.plan_source}. Say start when you're ready.`, false);
+      }
+    } else if (st.plan_ready && chosen && st.plan_source !== prev.plan_source && prev.plan_source) {
+      const pj = await fetchJson(API + "/coach/plan?session=" + SESSION, 10000);   // the YouTube pass landed: same repair, better steps
+      if (pj.plan?.steps?.length) { const keep = stepIdx; plan = pj.plan; for (const x of plan.steps) if (!x.kind) x.kind = "other"; buildStages(); if (keep >= 0) goStep(Math.min(keep, plan.steps.length - 1), "", true); narrate("I've watched two repair videos and updated the steps.", false); }
+    }
+    const done = st.phases && Object.values(st.phases).every((p) => ["ready", "failed", "skipped"].includes(p.status));
+    if (!done) objectFlow.timer = setTimeout(objectPoll, 3000);
+  } catch { objectFlow.timer = setTimeout(objectPoll, 4000); }
+}
+function renderStepPicture() {
+  const h = $("helper"); if (!objectFlow.on || stepIdx < 0) { if (objectFlow.on) h.innerHTML = ""; return; }
+  const url = objectFlow.pictures[String(plan.steps[stepIdx].index)];   // the step picture lives in the card, not the 3D panel
+  h.innerHTML = url ? `<img src="${API + url}" alt="" style="width:100%;border-radius:10px;margin:6px 0 8px;display:block">` : "";
+}
+
 // what do you want to fix? keyboard = the guided repair; the others open their hologram (device.html)
 let pickOpen = false;
 /** Pairing on the question page (nothing behind it is shown yet): the QR for the Spanner app, then the question. */
@@ -1802,16 +1989,14 @@ async function pickByVoice(raw) {   // free speech -> which device; Claude decid
   const t = raw.toLowerCase();
   let dev = /key ?board|rk ?61|keys?|keycap|space ?bar/.test(t) ? "keyboard" : /i ?phone/.test(t) ? "iphone15" : /head ?phone|momentum|sennheiser|ear ?phone/.test(t) ? "momentum4" : /i ?pad|tablet/.test(t) ? "ipad11" : null;
   $("pickecho").textContent = "“" + raw.trim() + "”";
-  if (!dev) {
-    try {
-      const r = await fetchT(API + "/coach/device", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: raw }) }, 12000);
-      const j = r.ok ? await r.json() : {}; dev = j.device && j.device !== "none" ? j.device : null;
-      if (!dev) { $("pickq").textContent = j.say || "I can fix a keyboard, an iPhone 15, Momentum 4 headphones or an iPad. Which one?"; narrate($("pickq").textContent); return; }
-    } catch { $("pickq").textContent = "Say: keyboard, iPhone, headphones, or iPad."; return; }
-  }
+  if (objectFlow.asking) return answerObject(raw);          // mid-conversation about an object: this is an answer
+  if (!dev) return startObject(raw);                        // anything else: Spanner learns it live
   chooseDevice(dev, raw);
 }
 if (QP.get("pick") === "1" && INSTANT) { pickOpen = true; $("pick").style.display = "flex"; }
+if (QP.get("kb")) fetchLayout();
+if (QP.get("twin")) { objectFlow.on = true; setObjectMode(true); twinFromGlb(QP.get("twin")); }   // test hook: ?twin=/data/objects/... shows any mesh
+if (QP.get("say")) { const seq = QP.get("say").split("|"); let i = 0; const go = () => { if (i < seq.length) { hearSpeech(seq[i++]); setTimeout(go, 2500); } }; setTimeout(go, 5000); }   // test hook: ?say=a|b|c feeds heard sentences
 // wake: browsers need one gesture before mic + speech; after that it's voice only
 // The question page is the first thing on screen (it covers the boot and the keyboard). One tap wakes the voice
 // (browsers need a gesture). With the phone as camera + microphone, pair it first, then ask: the question needs ears.
@@ -1824,7 +2009,7 @@ if (INSTANT || QP.get("wake") === "0" || QP.get("pick") === "0") {
     // One tap: this laptop listens and asks straight away. The phone is only the camera (and, with the Spanner app,
     // a second microphone): it is paired once the person has said what they want to fix, never before the question.
     removeEventListener("keydown", wake, true); $("pick").classList.remove("first"); $("pick").style.cursor = "default";
-    voiceOn = true; $("voice").classList.add("on");
+    voiceOn = true; $("voice").classList.add("on"); attnUntil = performance.now() + 60000;
     if (!micOn) $("mic").onclick();          // this laptop listens from the first tap; the phone app takes over when it speaks
     $("pick").style.display = "flex"; $("pickhint").textContent = "listening"; pickPairCode();
     try { startRemote(); } catch (e) { console.error("wake:", e); }
@@ -1833,3 +2018,4 @@ if (INSTANT || QP.get("wake") === "0" || QP.get("pick") === "0") {
   };
   $("pick").addEventListener("pointerdown", wake, { once: true }); addEventListener("keydown", wake, { capture: true, once: true });
 }
+if (QP.get("object")) { pickOpen = true; $("pick").classList.remove("first"); $("pick").style.display = "flex"; voiceOn = !INSTANT; startObject(QP.get("object")); }   // deep link: ?object=AirPods%20Pro%202...

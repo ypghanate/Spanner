@@ -95,9 +95,28 @@ class GenPlan(BaseModel):
 
 
 # ---------------------------------------------------------------- data the prompts need
+_EXTRA_KEYS: dict[str, dict] = {}       # keys the camera has read on the real keyboard (see coach.read_layout)
+
+
+def register_keys(keys: dict) -> None:
+    """The keys of a keyboard layout read from the camera: valid targets for a repair plan from now on."""
+    _EXTRA_KEYS.update({k: {"label": v.get("label", k)} for k, v in keys.items()})
+
+
 @lru_cache(maxsize=1)
-def _pack() -> dict:
+def _pack_file() -> dict:
     return json.loads((MODEL_DIR / "pack.json").read_text(encoding="utf-8"))
+
+
+def _pack() -> dict:
+    pack = dict(_pack_file())
+    extra = {f"F{i}": {"label": f"F{i}"} for i in range(1, 13)}         # an F-row is a legitimate target on any board that has one
+    extra.update({"INS": {"label": "Ins"}, "PRTSC": {"label": "PrtSc"}, "SCRLK": {"label": "ScrLk"}, "PAUSE": {"label": "Pause"},
+                  "HOME": {"label": "Home"}, "END": {"label": "End"}, "PGUP": {"label": "PgUp"}, "PGDN": {"label": "PgDn"}, "DEL": {"label": "Del"},
+                  "UP": {"label": "↑"}, "DOWN": {"label": "↓"}, "LEFT": {"label": "←"}, "RIGHT": {"label": "→"}})
+    extra.update(_EXTRA_KEYS)
+    pack["keys"] = {**extra, **pack["keys"]}
+    return pack
 
 
 def _key_label(key: str) -> str:
@@ -259,6 +278,9 @@ def _intake_mock(complaint: str) -> Intake:
         if re.search(rf"\b{re.escape(word)}\b", t):
             key = kid
             break
+    if not key:
+        m = re.search(r"\b(f(?:1[0-2]|[1-9]))\b", t)                      # an F-row key: F1 to F12
+        key = m.group(1).upper() if m else ""
     if not key:
         m = re.search(r"\b([a-z0-9])\s+key\b", t) or re.search(r"\bkey\s+([a-z0-9])\b", t)
         key = m.group(1).upper() if m and m.group(1) not in ("a",) else ""
