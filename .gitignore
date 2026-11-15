@@ -38,3 +38,8 @@ backend/.DS_Store
 data/rag_chroma_db/
 extensive_repair_chroma_db/
 data/shop_cache/
+
+# generated live by the any-object flow and the Adaption runs (large, rebuilt on demand)
+data/objects/
+data/models/adaption/
+data/media/
