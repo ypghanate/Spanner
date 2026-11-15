@@ -169,7 +169,7 @@ def _start_parts_job(session: Any) -> None:
   job = handle_parts_tool({
       "part": "mechanical switch (MX-compatible, 3-pin or 5-pin)",
       "fault": cfg["fault"],
-      "model": "Royal Kludge RK68"
+      "model": "Royal Kludge RK61"
   })
   session.brain_state["parts_job"] = job["job"]
 

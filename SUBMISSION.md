@@ -29,25 +29,7 @@ replacement part the moment you need one.
 
 ---
 
-## Main track: Voice, Vision & Generative Media (the track we entered, 15 Nov)
-
-Spanner is a product you talk to and that watches you. One tap, then voice only: it hears any phrasing (fast
-word rules, then Claude for the rest), it stops when you say stop or raise a palm to the camera, and it never
-reacts to its own voice (ElevenLabs out, echo filter in). The phone camera is its eyes: it names the key you
-pulled by reading the legends around the gap, follows you from step to step and warns you when it sees a
-mistake. What it shows is a 255-part hologram of the device that plays the exact motion of each step. Generated
-media: Claude writes the repair plan and the hologram choreography for whatever the person says is broken;
-ElevenLabs speaks it; and the fal prototype draws the step on the user's own keyboard (`fal/`).
-
-## Best use of fal (prototype)
-
-The camera frame of the user's keyboard, edited by fal to show the current step being done on *that* board,
-then animated. Real RK61 photo in, Nano Banana edit out in 12.6 s with the right key lifted and every other
-legend intact, Kling 2.1 clip in 117 s. Six models compared, two chosen (`fal/README.md`). Wired end to end
-(`/coach/visualize`, commit `d0dc745`), then taken out of the demo build because the clip takes two minutes
-and the venue network dropped fal's queue domain. Outputs and timings in `fal/`.
-
-## Main track (previous entry): Autonomous Agents
+## Main track: Autonomous Agents
 
 Spanner is an agent that looks, decides, acts and checks, step after step, without being driven.
 
@@ -132,37 +114,23 @@ Two web tools, two roles: Tavily for building knowledge, Linkup for acting on it
 
 ---
 
-## Best use of Adaption
+## Best use of Adaption (draft: fill in after the run)
 
 The most frequent decision Spanner makes is the step judge: from what the camera saw and the current step,
-which step is the user on, is it done, is a known mistake happening. We fine-tuned that judge with Adaption,
-measured it honestly against the untouched base model and against Claude Haiku, and the numbers are below.
+which step is the user on, is it done, is a known mistake happening. We fine-tuned that judge with Adaption.
 
-- **Data.** 907 examples derived with no hand-labelling from Claude-labelled segments of three RK61 repair
-  videos (status follows from the procedure's time ranges; synthetic rows marked as such), split by video:
-  745 train, 162 held out. Cleaned and rephrased with **Adaptive Data: quality grade C → A, score 6.0 → 9.6
-  (+60%)**. The expansion step produced prose answers for a JSON task, so 297 of its rows were dropped rather
-  than trained on. Every row carries its source (`training/adaption/data/dataset_card.md`).
-- **Model.** Qwen3.5-2B, LoRA (r 16), AutoScientist run `bcb8e3a0`: one iteration completed of two, 21 steps,
-  one epoch, best win rate 0.38 against its 0.70 target. A second run (`5c90b229`) is training on a
-  class-balanced set (1,052 rows, four classes at 263 each) for three epochs at lr 2e-4.
-- **Evaluation on the 162 held-out rows** (`training/eval_step_tracker.py`, logged to MLflow, on the
-  Databricks dashboard as "before, after Adaption, and Claude Haiku"):
+- **Data.** Real: Claude-labelled segments of three RK61 repair videos plus [N] frames from tonight's live
+  sessions, curated in Databricks; expanded and cleaned with Adaptive Data (quality score before/after:
+  [x → y]). Real frames are held out for evaluation and never trained on.
+- **Model.** [Qwen3.5-2B, LoRA] trained with AutoScientist ([k] iterations, best win rate [w]).
+- **In the product.** The judge runs on the laptop after Claude describes the frame: no API call for the
+  decision, works offline, [t] ms per decision, with Claude as automatic fallback (`training/step_tracker.py`).
+- **Evaluation against Claude Haiku** on held-out real frames (n = [n]): step accuracy [a vs b], mistakes
+  caught [c vs d], latency [t vs u]. Logged to MLflow and shown on the Databricks dashboard.
+- **Flywheel.** Every live mistake lands in Databricks; the next Adaption run trains on it.
 
-  | Judge | Step accuracy | Macro F1 | Mistakes caught | p50 per decision |
-  |---|---|---|---|---|
-  | Qwen3.5-2B, untouched (40 rows) | 0.38 | 0.23 | 0.00 | 8.3 s (CPU) |
-  | **Qwen3.5-2B + Adaption, run 1** | **0.58** | **0.58** | **0.45** | 9.3 s (CPU) |
-  | Claude Haiku 5.5 | 0.72 | 0.74 | 0.83 | 1.4 s (API) |
-
-  One round of Adaption took a 2B model from guessing (0.38, no mistake ever caught) to 0.58 with 45% of
-  mistakes caught. It does not beat Claude yet; run 2 is the attempt.
-- **In the product.** `training/step_tracker.py` has the fine-tuned judge as a backend (`local`, the
-  downloaded adapter merged into the base) with Claude as automatic fallback. On this ARM laptop with no GPU it
-  takes 9 s per decision, so the live demo keeps Claude as the default and the local judge is opt-in
-  (`STEP_TRACKER_LOCAL=1`). On a GPU the same model answers in well under a second.
-- **Flywheel.** Every live mistake lands in Databricks (`bronze_live_mistakes`); the next dataset build picks
-  it up, and the next Adaption run trains on it.
+If the run is not back by submission: "Dataset, evaluation harness and a training run in flight; results
+to follow", and the dashboard shows the empty scoreboard honestly.
 
 ---
 

@@ -1,11 +1,11 @@
-"""Live shopping on voice request: replacement parts for the RK68, or other keyboards. No mocks.
+"""Live shopping on voice request: replacement parts for the RK61, or other keyboards. No mocks.
 
     POST /coach/shop  {"query": "show me replacement keycaps"}   (the user's spoken words)
 
 - A replaceable part (keycap, switch, stabilizer, cable...): Linkup (structured search) finds real offers
-  with price and whether they fit the RK68, and why.
+  with price and whether they fit the RK61, and why.
 - Another keyboard ("show me other keyboards", "what else could I buy"): Linkup finds real alternatives
-  with price, pros and cons compared with the RK68.
+  with price, pros and cons compared with the RK61.
 - Tavily finds a real product photo for every item, in parallel.
 Results are cached per request for 30 min (same question in the demo = instant answer).
 """
@@ -24,7 +24,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/coach", tags=["shop"])
-MODEL = "Royal Kludge RK68"
+MODEL = "Royal Kludge RK61"
 _pool = ThreadPoolExecutor(max_workers=8)
 _search_pool = ThreadPoolExecutor(max_workers=4)
 CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "shop_cache"
@@ -77,13 +77,13 @@ def prefetch(text: str) -> None:
 _cache: dict[str, tuple[float, dict]] = {}
 
 PARTS = [  # (spoken words, part to search for)
-    (r"key ?caps?|caps?\b", "keycaps (MX-compatible, 65% / 68-key set or single keycaps)"),
+    (r"key ?caps?|caps?\b", "keycaps (MX-compatible, 60% / 61-key set or single keycaps)"),
     (r"switch", "mechanical switches (MX-compatible, hot-swap, 3-pin)"),
-    (r"stabili[sz]er|space ?bar", "stabilizers (2u / 6.25u, plate-mounted, 65% keyboard)"),
+    (r"stabili[sz]er|space ?bar", "stabilizers (2u / 6.25u, plate-mounted, 60% keyboard)"),
     (r"cable|usb", "USB-C cable for a mechanical keyboard"),
     (r"puller|tool", "keycap and switch puller tool"),
     (r"battery", "replacement battery"),
-    (r"case|shell", "65% keyboard case"),
+    (r"case|shell", "60% keyboard case"),
 ]
 
 
@@ -94,8 +94,8 @@ class PartOffer(BaseModel):
     currency: str = Field(description="ISO code, e.g. GBP, USD, EUR")
     url: str = Field(description="Product page URL")
     image_url: str = Field(description="Direct URL of the product image if present on the page, else empty")
-    compatible: bool = Field(description=f"True if it fits the {MODEL} (hot-swap, MX-style, 65% layout)")
-    compatibility: str = Field(description="One short sentence: why it fits or doesn't fit the RK68")
+    compatible: bool = Field(description=f"True if it fits the {MODEL} (hot-swap, MX-style, 60% layout)")
+    compatibility: str = Field(description="One short sentence: why it fits or doesn't fit the RK61")
 
 
 class PartSearch(BaseModel):
@@ -108,8 +108,8 @@ class KeyboardOption(BaseModel):
     currency: str
     url: str = Field(description="The manufacturer's official product page URL")
     image_url: str = Field(description="Direct URL of a product image if present, else empty")
-    pros: list[str] = Field(description="2-3 short pros of the keyboard itself compared with the RK68")
-    cons: list[str] = Field(description="1-3 short cons of the keyboard itself compared with the RK68")
+    pros: list[str] = Field(description="2-3 short pros of the keyboard itself compared with the RK61")
+    cons: list[str] = Field(description="1-3 short cons of the keyboard itself compared with the RK61")
 
 
 class KeyboardSearch(BaseModel):
@@ -218,7 +218,7 @@ def _clean_keyboard(k: dict) -> dict:
     k["pros"] = [x for x in k.get("pros", []) if not _META.search(x)][:3]
     k["cons"] = [x for x in k.get("cons", []) if not _META.search(x)][:3]
     cur = (k.get("currency") or "").upper()
-    if cur not in _MAJOR or not 25 <= float(k.get("price") or 0) <= 600:   # a real 65% board is £25-£600
+    if cur not in _MAJOR or not 25 <= float(k.get("price") or 0) <= 600:   # a real 60% board is £25-£600
         k["price"], k["currency"] = 0.0, ""                                  # re-read from the store page below
     return k
 
@@ -274,10 +274,10 @@ def _structured(query: str, schema) -> tuple[dict, list[dict]]:
 
 def _search_parts(part: str) -> tuple[list[dict], list[dict]]:
     res, sources = _structured(
-        (f"Buy {part} that fit the {MODEL} 65% hot-swappable mechanical keyboard. Find 4-6 real product "
+        (f"Buy {part} that fit the {MODEL} 60% hot-swappable mechanical keyboard. Find 4-6 real product "
                "pages whose price is shown on the page: the Royal Kludge store, AliExpress, eBay UK, KBDfans, "
                "Keychron, Akko, Epomaker, Mechanical Keyboards UK, at most 2 from Amazon. For each: name, retailer, "
-               "the listed price and currency, URL, product image URL, and whether it fits the RK68 and why."),
+               "the listed price and currency, URL, product image URL, and whether it fits the RK61 and why."),
         PartSearch)
     offers = PartSearch.model_validate(res or {"offers": []}).offers
     return [o.model_dump() for o in offers if o.url.startswith("http")][:6], sources
@@ -302,11 +302,11 @@ def _structured_deep(query: str, schema) -> tuple[dict, list[dict]]:
 
 def _search_keyboards() -> tuple[list[dict], list[dict]]:
     res, sources = _structured_deep(
-        (f"Best alternatives to the {MODEL} 65% mechanical keyboard to buy in 2026, from reviews on sites like "
+        (f"Best alternatives to the {MODEL} 60% mechanical keyboard to buy in 2026, from reviews on sites like "
                "RTINGS, The Verge, Tom's Hardware or PC Gamer: e.g. Keychron, Akko, Epomaker, Wooting, Royal Kludge. "
                "Find 4-5 real current models. For each: the price on the manufacturer's official store page (USD, "
                "GBP or EUR), that official product page URL, a product image URL, and 2-3 pros and 1-3 cons compared "
-               "with the RK68 about the keyboard itself (switches, build, connectivity, layout, software, price)."),
+               "with the RK61 about the keyboard itself (switches, build, connectivity, layout, software, price)."),
         KeyboardSearch)
     kbs = KeyboardSearch.model_validate(res or {"keyboards": []}).keyboards
     return [k.model_dump() for k in kbs if k.url.startswith("http")][:5], sources

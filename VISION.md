@@ -7,12 +7,6 @@ _Agreed with the team on 2026-11-14 (Imperial AI Hackathon, 14–15 Nov 2026)._
 
 ---
 
-## Update 2026-11-15: track switch (agreed with Alberto)
-- **Main track is now Voice, Vision & Generative Media** (team decision; bounties are gated, so the Databricks / Linkup / Tavily bounties are no longer contested; those layers stay in the product, not in the pitch's lead). Adaption and Figma are open to all and stay.
-- **fal:** the first use (redrawing the user's camera frame with the step done, then animating it) was built, tested and **dropped by Alberto on 15 Nov**. A different use of fal is to be decided.
-
----
-
 ## Goal
 Build **Spanner**, an iPhone app that lets anyone fix simple broken things by pointing their camera at them. Spanner sees what's wrong, researches how to fix it, then guides the user through the repair in real time, Jarvis-style: overlays on the live camera, 3D animations of the parts, generated step illustrations, and a voice that talks them through it, listens to their questions, knows how far they've got, and warns them when they make a mistake.
 When a part has to be replaced, a **Linkup research agent** finds the exact replacement for the user's model, checks that it fits, compares prices, pulls the official manual's specs and finds tutorials, **citing a source for every claim**. All the knowledge and data behind Spanner lives on **Databricks**.

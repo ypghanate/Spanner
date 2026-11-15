@@ -54,7 +54,7 @@ def cache_dir() -> Path:
 
 def tts_filename(text: str) -> str:
     s = get_settings()
-    key = f"{s.elevenlabs_voice_id}|{s.eleven_tts_model}|{s.eleven_tts_format}|{s.eleven_tts_speed}|{text}"
+    key = f"{s.elevenlabs_voice_id}|{s.eleven_tts_model}|{s.eleven_tts_format}|{text}"
     return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16] + ".mp3"
 
 
@@ -64,15 +64,12 @@ def _is_safe_name(filename: str) -> bool:
 
 async def _open_stream(text: str) -> AsyncIterator[bytes]:
     """The ElevenLabs call. Tests replace this."""
-    from elevenlabs import VoiceSettings
-
     s = get_settings()
     return _get_client().text_to_speech.stream(
         s.elevenlabs_voice_id,
         text=text,
         model_id=s.eleven_tts_model,
         output_format=s.eleven_tts_format,
-        voice_settings=VoiceSettings(speed=max(0.7, min(1.2, s.eleven_tts_speed))),
     )
 
 

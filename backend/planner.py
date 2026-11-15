@@ -33,7 +33,7 @@ log = logging.getLogger("spanner.planner")
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMPTS = Path(__file__).parent / "brain" / "prompts"
-MODEL_DIR = ROOT / "data" / "models" / "rk68"
+MODEL_DIR = ROOT / "data" / "models" / "rk61"
 CACHE_DIR = ROOT / "data" / "plans"
 MOCK_PLANS = ROOT / "fixtures" / "planner" / "plans.json"
 
@@ -95,28 +95,9 @@ class GenPlan(BaseModel):
 
 
 # ---------------------------------------------------------------- data the prompts need
-_EXTRA_KEYS: dict[str, dict] = {}       # keys the camera has read on the real keyboard (see coach.read_layout)
-
-
-def register_keys(keys: dict) -> None:
-    """The keys of a keyboard layout read from the camera: valid targets for a repair plan from now on."""
-    _EXTRA_KEYS.update({k: {"label": v.get("label", k)} for k, v in keys.items()})
-
-
 @lru_cache(maxsize=1)
-def _pack_file() -> dict:
-    return json.loads((MODEL_DIR / "pack.json").read_text(encoding="utf-8"))
-
-
 def _pack() -> dict:
-    pack = dict(_pack_file())
-    extra = {f"F{i}": {"label": f"F{i}"} for i in range(1, 13)}         # an F-row is a legitimate target on any board that has one
-    extra.update({"INS": {"label": "Ins"}, "PRTSC": {"label": "PrtSc"}, "SCRLK": {"label": "ScrLk"}, "PAUSE": {"label": "Pause"},
-                  "HOME": {"label": "Home"}, "END": {"label": "End"}, "PGUP": {"label": "PgUp"}, "PGDN": {"label": "PgDn"}, "DEL": {"label": "Del"},
-                  "UP": {"label": "↑"}, "DOWN": {"label": "↓"}, "LEFT": {"label": "←"}, "RIGHT": {"label": "→"}})
-    extra.update(_EXTRA_KEYS)
-    pack["keys"] = {**extra, **pack["keys"]}
-    return pack
+    return json.loads((MODEL_DIR / "pack.json").read_text(encoding="utf-8"))
 
 
 def _key_label(key: str) -> str:
@@ -261,13 +242,8 @@ _MOCK_KEYWORDS = [
     ("dead_key", r"dead|not (work|regist|typ)|doesn'?t (work|regist|type)|double|chatter|broken|switch"),
 ]
 _KEY_WORDS = {"space bar": "SPACE", "spacebar": "SPACE", "space": "SPACE", "enter": "ENTER", "return": "ENTER",
-              "backspace": "BACKSPACE", "escape": "ESC", "esc": "ESC", "tab": "TAB", "caps": "CAPS", "caps lock": "CAPS",
-              "left shift": "LSHIFT", "right shift": "RSHIFT", "shift": "LSHIFT",
-              # the RK68's right column and arrow cluster
-              "delete": "DEL", "del": "DEL", "page up": "PGUP", "pgup": "PGUP", "page down": "PGDN", "pgdn": "PGDN", "end": "END",
-              "up arrow": "UP", "arrow up": "UP", "up key": "UP", "down arrow": "DOWN", "arrow down": "DOWN", "down key": "DOWN",
-              "left arrow": "LEFT", "arrow left": "LEFT", "right arrow": "RIGHT", "arrow right": "RIGHT",
-              "windows": "WIN", "win key": "WIN", "fn": "FN", "function key": "FN", "control": "LCTRL", "ctrl": "LCTRL", "alt": "LALT"}
+              "backspace": "BACKSPACE", "escape": "ESC", "esc": "ESC", "tab": "TAB", "caps": "CAPS",
+              "left shift": "LSHIFT", "right shift": "RSHIFT", "shift": "LSHIFT"}
 
 
 def _intake_mock(complaint: str) -> Intake:
@@ -278,9 +254,6 @@ def _intake_mock(complaint: str) -> Intake:
         if re.search(rf"\b{re.escape(word)}\b", t):
             key = kid
             break
-    if not key:
-        m = re.search(r"\b(f(?:1[0-2]|[1-9]))\b", t)                      # an F-row key: F1 to F12
-        key = m.group(1).upper() if m else ""
     if not key:
         m = re.search(r"\b([a-z0-9])\s+key\b", t) or re.search(r"\bkey\s+([a-z0-9])\b", t)
         key = m.group(1).upper() if m and m.group(1) not in ("a",) else ""
@@ -384,7 +357,7 @@ def assemble(gen: GenPlan, intake: Intake, refs: list[dict]) -> RepairPlan:
             scene3d=[SceneCommand(**c) for c in scene3d_for_kind(s.kind, parts, key or "F")],
             sources=step_sources[:3], kind=s.kind))
     return RepairPlan(
-        object="Royal Kludge RK68 65% mechanical keyboard", fault=gen.fault, difficulty=gen.difficulty,
+        object="Royal Kludge RK61 60% mechanical keyboard", fault=gen.fault, difficulty=gen.difficulty,
         time_min=max(1, gen.time_min), tools_needed=gen.tools_needed, safety_notes=gen.safety_notes, steps=steps,
         sources=plan_sources[:6], generated=True, title=TITLES[intake.fault_class].format(K=_key_label(key or "F")),
         diagnosis=gen.diagnosis, target_key=key or None,
@@ -464,7 +437,7 @@ def plan_repair(complaint: str, session: str = "", device: str = "keyboard", dev
     timings = {"intake_ms": round((t_intake - t0) * 1000), "generate_ms": round((t_gen - t_intake) * 1000),
                "total_ms": round((t_gen - t0) * 1000)}
     if errors or gen is None:                    # fall back to the canonical procedure, honestly labelled
-        return {"status": "fallback", "say": "I couldn't plan that. Tell me again what's wrong.",
+        return {"status": "fallback", "say": "I couldn't write a custom plan for that, so here is the standard switch repair.",
                 "errors": errors, "timings": timings}
     plan = assemble(gen, intake, refs)
     if not mock:

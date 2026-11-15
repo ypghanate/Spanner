@@ -95,30 +95,6 @@ def _adaption(user: str) -> StepStatus:
     return parse_output(r.json()["choices"][0]["message"]["content"])
 
 
-LOCAL_ADAPTER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                             "data", "models", "adaption", "judge")
-
-
-def _local(user: str) -> StepStatus:
-    """The Adaption-trained judge on this machine (Qwen3.5-2B + the AutoScientist LoRA, CPU). No API call."""
-    from training.adaption.local_judge import judge
-
-    text, _ = judge(user)
-    return parse_output(text)
-
-
-def _base(user: str) -> StepStatus:
-    """The same base model WITHOUT the Adaption adapter: the 'before' in the before/after."""
-    from training.adaption.local_judge import judge
-
-    text, _ = judge(user, adapter=False)
-    return parse_output(text)
-
-
-def local_available() -> bool:
-    return os.path.isfile(os.path.join(LOCAL_ADAPTER, "adapter_model.safetensors")) and os.getenv("STEP_TRACKER_LOCAL", "0") == "1"   # opt-in: 9 s and 7 GB on this CPU
-
-
 def _rule(user: str) -> StepStatus:
     """Offline stand-in for tests (--mock): keyword overlap between camera text and done state."""
     done = set(re.findall(r"[a-z]{4,}", user.split("DONE LOOKS LIKE:")[1].split("\n")[0].lower()))
@@ -128,7 +104,7 @@ def _rule(user: str) -> StepStatus:
                       mistake="")
 
 
-BACKENDS = {"claude": _claude, "adaption": _adaption, "local": _local, "base": _base, "rule": _rule}
+BACKENDS = {"claude": _claude, "adaption": _adaption, "rule": _rule}
 
 
 def adaption_available() -> bool:
@@ -137,10 +113,7 @@ def adaption_available() -> bool:
 
 def check_input(user: str, backend: str | None = None) -> dict:
     """Run one prepared input. backend=None: Adaption if configured, else Claude (with fallback)."""
-    if backend:
-        order = [backend]
-    else:  # the fine-tuned judge first (hosted, then local), Claude as the fallback
-        order = (["adaption"] if adaption_available() else []) + (["local"] if local_available() else []) + ["claude"]
+    order = [backend] if backend else (["adaption", "claude"] if adaption_available() else ["claude"])
     last_err = None
     for name in order:
         t0 = time.perf_counter()
