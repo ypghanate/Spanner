@@ -21,3 +21,4 @@ mlruns/
 training/adaption/data/
 *.egg-info/
 data/certs/
+data/models/adaption/

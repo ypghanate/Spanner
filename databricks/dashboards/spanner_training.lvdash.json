@@ -38,12 +38,12 @@
     {
       "name": "eval_quality",
       "displayName": "Step judge accuracy",
-      "query": "SELECT CASE backend WHEN 'adaption' THEN 'Adaption fine-tune' WHEN 'claude' THEN 'Claude Haiku' ELSE backend END AS model, CASE metric WHEN 'accuracy' THEN 'Step accuracy' WHEN 'mistake_recall' THEN 'Mistakes caught' ELSE metric END AS metric, round(value, 3) AS value, n FROM ${catalog}.${schema}.gold_eval_scoreboard WHERE eval_name = 'step_tracker' AND metric IN ('accuracy', 'mistake_recall') ORDER BY metric, backend"
+      "query": "SELECT CASE backend WHEN 'adaption' THEN 'Adaption fine-tune (hosted)' WHEN 'local' THEN 'Adaption fine-tune' WHEN 'base' THEN 'Qwen3.5-2B before' WHEN 'claude' THEN 'Claude Haiku' ELSE backend END AS model, CASE metric WHEN 'accuracy' THEN 'Step accuracy' WHEN 'mistake_recall' THEN 'Mistakes caught' ELSE metric END AS metric, round(value, 3) AS value, n FROM ${catalog}.${schema}.gold_eval_scoreboard WHERE eval_name = 'step_tracker' AND metric IN ('accuracy', 'mistake_recall') ORDER BY metric, backend"
     },
     {
       "name": "eval_latency",
       "displayName": "Step judge latency",
-      "query": "SELECT CASE backend WHEN 'adaption' THEN 'Adaption fine-tune' WHEN 'claude' THEN 'Claude Haiku' ELSE backend END AS model, round(value, 0) AS latency_ms, n FROM ${catalog}.${schema}.gold_eval_scoreboard WHERE eval_name = 'step_tracker' AND metric = 'latency_p50_ms' ORDER BY backend"
+      "query": "SELECT CASE backend WHEN 'adaption' THEN 'Adaption fine-tune (hosted)' WHEN 'local' THEN 'Adaption fine-tune' WHEN 'base' THEN 'Qwen3.5-2B before' WHEN 'claude' THEN 'Claude Haiku' ELSE backend END AS model, round(value, 0) AS latency_ms, n FROM ${catalog}.${schema}.gold_eval_scoreboard WHERE eval_name = 'step_tracker' AND metric = 'latency_p50_ms' ORDER BY backend"
     }
   ],
   "pages": [
@@ -247,7 +247,7 @@
                 "y": {"fieldName": "value", "scale": {"type": "quantitative", "domain": {"min": 0, "max": 1}}, "displayName": "Share correct (0 to 1)"},
                 "color": {"fieldName": "model", "scale": {"type": "categorical"}, "displayName": "Model"}
               },
-              "frame": {"showTitle": true, "title": "Step judge: Adaption fine-tune against Claude Haiku", "showDescription": true, "description": "On held-out frames from real repair sessions. Empty until the evaluation has run."}}
+              "frame": {"showTitle": true, "title": "Step judge: before, after Adaption, and Claude Haiku", "showDescription": true, "description": "162 held-out rows from real repair videos, never trained on. Before = the untouched Qwen3.5-2B; after = the same model with the AutoScientist adapter."}}
           },
           "position": {"x": 0, "y": 30, "width": 7, "height": 6}
         },
