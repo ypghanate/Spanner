@@ -10,7 +10,7 @@ import type {
   SessionSummary,
 } from "../../types/contracts";
 import { CoachClient, CoachPose, CoachView, connect, Pairing, parsePairing, StepTracker } from "../lib/coach";
-import { SpeechPlayer } from "../lib/voice";
+import { SpeechPlayer, VoiceListener } from "../lib/voice";
 
 export interface HistoryItem {
   id: string;
@@ -120,7 +120,7 @@ const Ctx = createContext<(SpannerState & Actions) | null>(null);
 
 const POLL_MS = 300; // the laptop viewer polls /coach/latest at the same rate
 const POSE_MS = 250;
-const FRAME_MS = 1500;
+const FRAME_MS = 1200; // frames only: the hologram no longer follows the keyboard's rotation, so there is no pose stream
 
 export function SpannerProvider({ children }: { children: React.ReactNode }) {
   const [s, setS] = useState<SpannerState>(initial);
@@ -134,6 +134,7 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
   const client = useRef<CoachClient | null>(null);
   const speech = useRef<SpeechPlayer | null>(null);
   const tracker = useRef(new StepTracker());
+  const listener = useRef<VoiceListener | null>(null);
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
   const polling = useRef(false);
   const last = useRef({ view: null as CoachView | null, viewTs: 0, poseTs: 0, planId: "", say: "", poseAt: 0, frameAt: 0, poseBusy: false, frameBusy: false, uri: null as string | null });
@@ -251,9 +252,31 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
     [onPose, onView, patch, project, stopPolling],
   );
 
+  /** The phone is the microphone: it records each utterance and the laptop transcribes it, acts on it and speaks back. */
+  const startListening = useCallback(
+    (c: CoachClient) => {
+      void listener.current?.stop();
+      const l = new VoiceListener(
+        (u) => {
+          c.utterance(u.audioB64).catch((e) => patch({ error: "Voice failed: " + (e instanceof Error ? e.message : String(e)) }));
+        },
+        (level) => patch({ level }),
+        () => {},
+      );
+      listener.current = l;
+      l.start().then((ok) => {
+        if (!ok) patch({ error: "Microphone permission is off: Spanner can't hear you. Enable it in Settings." });
+        else void l.setMuted(stateRef.current.micMuted);
+      });
+    },
+    [patch],
+  );
+
   const teardown = useCallback(() => {
     stopPolling();
     speech.current?.stop();
+    void listener.current?.stop();
+    listener.current = null;
     client.current = null;
   }, [stopPolling]);
 
@@ -288,10 +311,12 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
           pairing: { origin: c.origin, session: c.session },
           sessionId: c.session,
           startedAt: Date.now(),
-          plan: plan.plan,
-          partsCard: plan.parts_card,
+          // until the person says what is wrong there is no repair: don't show the laptop's canned fallback plan
+          plan: plan.chosen === false ? null : plan.plan,
+          partsCard: plan.chosen === false ? null : plan.parts_card,
         });
         startPolling(c);
+        startListening(c);
         return null;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -356,16 +381,6 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
         const l = last.current;
         const now = Date.now();
         let used = false;
-        if (!l.poseBusy && now - l.poseAt >= POSE_MS) {
-          used = true;
-          l.poseBusy = true;
-          l.poseAt = now;
-          c.pose(uri)
-            .catch((e) => patch({ error: "Upload failed: " + (e instanceof Error ? e.message : String(e)) }))
-            .finally(() => {
-              l.poseBusy = false;
-            });
-        }
         if (!l.frameBusy && now - l.frameAt >= FRAME_MS) {
           used = true;
           l.frameBusy = true;
@@ -382,7 +397,10 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
       sendNow: () => {},
       interrupt: () => speech.current?.stop(),
       setView: (view) => patch({ view }),
-      setMicMuted: (on) => patch({ micMuted: on }),
+      setMicMuted: (on) => {
+        patch({ micMuted: on });
+        void listener.current?.setMuted(on);
+      },
       setSpeakerOn: (on) => {
         patch({ speakerOn: on });
         if (!on) speech.current?.stop();

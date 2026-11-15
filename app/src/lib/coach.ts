@@ -39,6 +39,8 @@ export interface CoachPlan {
   broken_key: string;
   plan: RepairPlan;
   parts_card: Record<string, unknown> | null;
+  /** False until the person has said what is wrong: `plan` is then only the canned fallback and nothing should start. */
+  chosen?: boolean;
 }
 
 export interface Latest {
@@ -98,22 +100,28 @@ export class CoachClient {
   }
 
   private async upload<T>(path: string, uri: string, extra: Record<string, string> = {}, ms = 20000): Promise<T> {
-    // Native multipart upload: the phone's fetch rejects the {uri, name, type} file object ("unsupported FormDataPart").
-    // Loaded lazily so the headless smoke test (plain node, no Expo) can still import this file.
-    const FS = await import("expo-file-system/legacy");
-    const task = FS.uploadAsync(`${this.origin}${path}`, uri, {
-      httpMethod: "POST",
-      uploadType: FS.FileSystemUploadType.MULTIPART,
-      fieldName: "image",
-      mimeType: "image/jpeg",
-      parameters: { session: this.session, ...extra },
-    });
-    const res = await Promise.race([
-      task,
-      new Promise<never>((_, no) => setTimeout(() => no(new Error(`${path} timed out`)), ms)),
-    ]);
-    if (res.status < 200 || res.status >= 300) throw new Error(`${path} ${res.status}`);
-    return JSON.parse(res.body) as T;
+    // The phone's fetch rejects a {uri, name, type} file object ("unsupported FormDataPart") and Expo's native
+    // uploadAsync hung on some networks, so read the photo into a real Blob and send it with the same fetch the
+    // polling already uses.
+    const blob = await (await withTimeout(uri, undefined, 5000)).blob();
+    const fd = new FormData();
+    fd.append("image", blob, "f.jpg");
+    fd.append("session", this.session);
+    for (const [k, v] of Object.entries(extra)) fd.append(k, v);
+    const res = await withTimeout(`${this.origin}${path}`, { method: "POST", body: fd }, ms);
+    if (!res.ok) throw new Error(`${path} ${res.status}`);
+    return (await res.json()) as T;
+  }
+
+  /** One spoken utterance from this phone's microphone (base64 m4a). The laptop transcribes it and acts on it. */
+  async utterance(audioB64: string): Promise<{ text: string }> {
+    const res = await withTimeout(
+      `${this.origin}/coach/utterance`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: this.session, audio_b64: audioB64, filename: "clip.m4a" }) },
+      20000,
+    );
+    if (!res.ok) throw new Error(`/coach/utterance ${res.status}`);
+    return (await res.json()) as { text: string };
   }
 
   /** Where is the keyboard and how is it turned? Fast and local on the laptop, drives the hologram's rotation. */

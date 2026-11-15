@@ -114,6 +114,19 @@ MAX_IMAGE_BYTES = 8 * 1024 * 1024
 _frame_inflight: set[str] = set()        # sessions with a vision call running: a second frame is dropped, not queued
 
 
+_previews: dict[str, bytes] = {}      # newest phone frame per session (JPEG), shown live in the viewer
+
+
+@router.get("/preview.jpg")
+async def preview(session: str):
+    from fastapi.responses import Response
+
+    data = _previews.get(session)
+    if not data:
+        raise HTTPException(404, "no frame yet")
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
 @router.post("/frame")
 async def frame(image: UploadFile = File(...), current_step: int = Form(0), session: str = Form("laptop")):
     data = await image.read()
@@ -123,6 +136,14 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
         raise HTTPException(413, "image too large")
     if session in _frame_inflight:       # the previous frame is still being read: never stack Claude calls behind it
         raise HTTPException(429, "still reading the previous frame")
+    _previews[session] = data            # what the phone sees, for the laptop viewer's camera panel
+    if session not in _plans:
+        # The person hasn't said what is wrong yet, so there is no repair to check frames against (and no Claude call
+        # to pay for). Answer with an idle view so the phone link still shows as live.
+        out = {"object_visible": False, "what_i_see": "", "step_index": 0, "step_status": "not_started", "mistake": "",
+               "confidence": 0.0, "say": "", "latency_ms": 0, "model": COACH_MODEL, "ts": time.time()}
+        _latest.setdefault(session, {})["view"] = out
+        return out
     _frame_inflight.add(session)
     t0 = time.perf_counter()
     try:
@@ -307,8 +328,39 @@ async def latest(session: str):
 
 @router.get("/plan")
 async def plan(session: str = ""):
-    """The session's own plan once Claude has written one, else the canned demo plan."""
-    return _demo(session)
+    """The session's own plan once Claude has written one. `chosen` is false while the person hasn't said what is wrong:
+    then this is only the canned demo plan, as a fallback for old clients, and nothing should start from it."""
+    return {**_demo(session), "chosen": session in _plans}
+
+
+class UtteranceReq(BaseModel):
+    session: str
+    audio_b64: str
+    filename: str = "clip.m4a"
+
+
+@router.post("/utterance")
+async def utterance(req: UtteranceReq):
+    """Speech from the phone's microphone (one m4a clip per utterance). It is transcribed here (ElevenLabs Scribe) and
+    handed to the laptop viewer through /coach/latest, so the phone listens and the laptop speaks back."""
+    from .voice import stt
+
+    try:
+        audio = base64.b64decode(req.audio_b64, validate=False)
+    except Exception:
+        raise HTTPException(400, "bad audio")
+    if not audio or len(audio) > 8_000_000:
+        raise HTTPException(400, "empty or too long")
+    try:
+        tr = await stt.transcribe(audio, req.filename)
+    except Exception as e:
+        if "speech_to_text" in str(e) and "permission" in str(e):
+            raise HTTPException(502, "the ElevenLabs key needs the Speech to Text permission turned on")
+        raise HTTPException(502, f"couldn't transcribe: {str(e)[:200]}")
+    text = tr.text.strip()
+    if text:
+        _latest.setdefault(req.session, {})["utterance"] = {"text": text, "id": f"{time.time():.3f}", "ts": time.time()}
+    return {"text": text}
 
 
 class PlanReq(BaseModel):

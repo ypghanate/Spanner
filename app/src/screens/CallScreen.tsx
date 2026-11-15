@@ -19,7 +19,7 @@ import {
 import { ControlsSheet, SheetVariant } from "../components/controls";
 import { Diagram2D } from "../components/diagram";
 
-const CAPTURE_GAP_MS = 120; // pause between photos; the upload throttles live in the provider (pose 4/s, coach frame ~every 1.5 s)
+const CAPTURE_GAP_MS = 400; // pause between photos; the provider throttles the upload to about one coach frame per 1.2 s
 
 const PHASE_TEXT = {
   identifying: "Looking · point the camera at the problem",
@@ -62,8 +62,8 @@ export default function CallScreen() {
               cam.current!.takePictureAsync(opts),
               new Promise<never>((_, no) => setTimeout(() => no(new Error("camera timeout (is the camera ready?)")), 4000)),
             ]);
-          // some devices reject skipProcessing / shutterSound: fall back to plain options before giving up
-          const pic = await shoot({ quality: 0.4, shutterSound: false, skipProcessing: true }).catch(() => shoot({ quality: 0.4 }));
+          // no skipProcessing: it discards `quality`, which sent multi-MB photos several times a second
+          const pic = await shoot({ quality: 0.25, shutterSound: false }).catch(() => shoot({ quality: 0.25 }));
           fails = 0;
           setCapErr(null);
           // photos nothing uploaded are deleted at once so the cache does not fill up

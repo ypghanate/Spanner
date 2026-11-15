@@ -830,8 +830,8 @@ function setGuidance(i) {
 function setReady() {
   finished = false; stepIdx = -1;
   $("sn").textContent = "READY";
-  $("head").innerHTML = "<span>Show me</span><span>the keyboard.</span>";
-  $("si").textContent = "Tell me what is wrong, or say “start” for the standard switch repair.";
+  $("head").innerHTML = chosen ? "<span>Ready when</span><span>you are.</span>" : "<span>What needs</span><span>fixing?</span>";
+  $("si").textContent = chosen ? "Say “start” to begin." : "Just tell me what’s wrong. For example: “my space bar rattles”.";
   $("helper").textContent = "Your phone stays on camera and voice.\nYour laptop follows the same repair.";
   $("sd").textContent = ""; $("sm").textContent = ""; $("tools").innerHTML = "";
   $("ctaLabel").textContent = "Say “start”"; $("foot").textContent = "The 3D view follows at your pace.";
@@ -892,7 +892,9 @@ function warnLearned(s) {
   setTimeout(() => { showTag(`switch_${brokenKey}`, "LEARNED · " + m.toUpperCase().slice(0, 48), "red", 3.2); narrate(`Heads up. People often ${m} at this step. That came from earlier repair sessions.`); }, 2200);
 }
 refreshLearned(); setInterval(refreshLearned, 30000);
+let chosen = false;   // true once a plan exists for what the person said is wrong (loadPlan), never before
 async function goStep(i, note = "", silent = false) {
+  if (!chosen) { narrate("Tell me what’s wrong first, and I’ll plan the repair."); return; }
   if (!plan.steps.length) return;
   if (mistakeOn) { mistakeOn = false; $("mistake").classList.remove("on"); $("fixit").style.display = "none"; }
   const id = ++runId;
@@ -1285,7 +1287,7 @@ async function loadPlan(d) {
   stopTour(); runId++; clearTags(); clearArrow(); setHighlight([]); hideTools(); pulseT0 = 0;
   if (mistakeOn) { mistakeOn = false; $("mistake").classList.remove("on"); $("fixit").style.display = "none"; }
   await applyState({ ...INITIAL }, 0);          // restores the old key's cap and switch while brokenKey still points at it
-  plan = d.plan; card = d.parts_card || null;
+  plan = d.plan; card = d.parts_card || null; chosen = true;
   brokenKey = pack.keys[d.broken_key] ? d.broken_key : "F"; K = pack.keys[brokenKey];
   for (const s of plan.steps) if (!s.kind) s.kind = "other";
   warnedSteps.clear(); world = { ...INITIAL }; agree = 0; lastDoneStep = -1; stepIdx = -1; finished = false;
@@ -1396,7 +1398,7 @@ function onCoach(c) {
 }
 
 // ---------------------------------------------------------------- phone camera: the laptop follows the phone's frames
-let remoteOn = false, lastViewTs = 0, lastPoseTs = 0, poseTrack = { on: true, zero: 0, yaw: 0, baseAz: null, flip: QP.get("flip") === "1" ? 1 : -1 };   // say "calibrate"; if the hologram turns the wrong way, add ?flip=1
+let remoteOn = false, lastViewTs = 0, lastPoseTs = 0, poseTrack = { on: false, zero: 0, yaw: 0, baseAz: null, flip: QP.get("flip") === "1" ? 1 : -1 };   // say "calibrate"; if the hologram turns the wrong way, add ?flip=1
 // ---- connection state, shown top right ("Connected to your phone")
 const LINK_TEXT = { idle: "Phone not connected", waiting: "Waiting for your phone…", live: "Connected to your phone", lost: "Phone connection lost · waiting for it to return",
   webcam: "Using this laptop’s camera", offline: "Can’t reach the Spanner server" };
@@ -1433,23 +1435,31 @@ async function showPair() {
 function hidePair() { pairRun++; $("pair").style.display = "none"; }
 function startRemote() {
   if (camOn) toggleCamera();
+  if (micOn) $("mic").onclick();   // the phone listens; this laptop's mic would only hear its own speaker
   setMode("live · phone camera");
-  $("cam").style.display = "block"; $("video").style.display = "none";
+  $("cam").style.display = "block"; $("video").style.display = "none"; $("remoteImg").style.display = "block";
   if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); }
   if (!remoteOn) { remoteOn = true; lastDataAt = 0; pollFails = 0; seen("Phone camera: waiting for frames."); setLink("waiting"); }
   if (linkState !== "live") showPair();
   remoteTick();   // does nothing if the loop is already running (saying "use my phone" twice must not start two)
 }
 function stopRemote() { remoteOn = false; hidePair(); $("cam").style.display = "none"; setLink(camOn ? "webcam" : "idle"); }
-let remoteLoop = false, lastDataAt = 0, pollFails = 0;
+let remoteLoop = false, lastDataAt = 0, pollFails = 0, lastUtterId = "";
 async function remoteTick() {
   if (remoteLoop) return; remoteLoop = true;
   while (remoteOn) {
     try {
       const d = await fetchJson(API + "/coach/latest?session=" + SESSION, 2500);
       pollFails = 0; let fresh = false;
-      if (d.view && d.view.ts !== lastViewTs) { lastViewTs = d.view.ts; fresh = true; onCoach(d.view); }
-      if (d.pose && d.pose.ts !== lastPoseTs) { lastPoseTs = d.pose.ts; fresh = true; applyPose(d.pose); }
+      if (d.view && d.view.ts !== lastViewTs) {
+        lastViewTs = d.view.ts; fresh = true; onCoach(d.view);
+        const img = $("remoteImg"); img.style.display = "block"; img.src = API + "/coach/preview.jpg?session=" + SESSION + "&t=" + d.view.ts;   // what the phone sees
+      }
+      // speech from the phone's microphone (transcribed on the laptop): the phone listens, this laptop speaks back
+      if (d.utterance && d.utterance.id !== lastUtterId) {
+        lastUtterId = d.utterance.id;
+        if (performance.now() > speakingUntil) command(d.utterance.text);   // ignore what the phone heard of our own voice
+      }
       if (fresh) { lastDataAt = performance.now(); if (linkState !== "live") hidePair(); }
       // staleness is judged on this laptop's own clock: no new photo for a few seconds means the phone stopped
       if (!lastDataAt) setLink("waiting");
@@ -1463,7 +1473,7 @@ async function remoteTick() {
 // Rotation of the real keyboard on the desk -> same rotation of the hologram (orbit the view around it).
 function calibratePose() { poseTrack.zero = poseTrack.lastAngle ?? 0; poseTrack.baseAz = controls.getAzimuthalAngle(); narrate("Aligned."); }
 function applyPose(p) {
-  if (!p.found) return;
+  if (!p.found || !poseTrack.on) return;
   poseTrack.lastAngle = p.angle;
   if (!poseTrack.on || flying || touring || motionPaused) return;
   if (poseTrack.baseAz === null) { poseTrack.baseAz = controls.getAzimuthalAngle(); poseTrack.zero = p.angle; }
@@ -1486,7 +1496,7 @@ async function toggleCamera() {
     camStream = await Promise.race([navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }),
       new Promise((_, no) => setTimeout(() => no(new Error("no answer to the camera prompt")), 20000))]);
   } catch (e) { heard("", "camera unavailable: " + (e.message || e)); return; }
-  remoteOn = false; hidePair(); $("video").style.display = "";
+  remoteOn = false; hidePair(); $("video").style.display = ""; $("remoteImg").style.display = "none";
   $("video").srcObject = camStream; $("cam").style.display = "block"; setLink("webcam");
   camStream.getVideoTracks()[0]?.addEventListener("ended", () => { if (camOn) { heard("", "camera stopped"); toggleCamera(); } });
   $("camera").classList.add("on"); camOn = true; agree = 0; lastDetect = 0;
@@ -1592,6 +1602,7 @@ setXray(true); setMode("scanning");
     if (QP.get("xray") === "1") setXray(true);
     if (QP.get("explode") === "1") await takeApart();
     if (QP.get("fix")) await requestRepair(QP.get("fix"));   // e.g. ?fix=my%20space%20bar%20rattles
+    if (QP.get("step")) chosen = true;   // screenshot deep link: play the canned plan without asking
     if (QP.get("step")) await goStep(Number(QP.get("step")) - 1, "", true);
     if (QP.get("mistake") === "1") await showMistake();
     if (QP.get("select") && parts[QP.get("select")]) { select(QP.get("select")); if (QP.get("pull") === "1") await $("pull").onclick(); if (QP.get("open") === "1") await $("open").onclick(); }
@@ -1611,7 +1622,7 @@ if (!INSTANT && QP.get("wake") !== "0") {
     removeEventListener("keydown", wake, true); w.removeEventListener("pointerdown", wake); w.remove();
     try {
       voiceOn = true; $("voice").classList.add("on");
-      if (!micOn) $("mic").onclick();
+      if (!micOn && QP.get("camera") === "1") $("mic").onclick();   // otherwise the phone's microphone is the one listening
       if (QP.get("camera") === "1") toggleCamera(); else startRemote();   // phone first; ?camera=1 uses this laptop's webcam
     } catch (e) { console.error("wake:", e); }
     narrate("Hi, I'm Spanner. Tell me what you want fixed, pair your phone, and I’ll guide you step by step. You can also ask me for replacement parts or other keyboards.");
