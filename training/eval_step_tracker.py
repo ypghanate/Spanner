@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from training import tracking  # noqa: E402
-from training.step_tracker import adaption_available, check_input  # noqa: E402
+from training.step_tracker import adaption_available, check_input, local_available  # noqa: E402
 
 EVAL_FILE = ROOT / "training" / "adaption" / "data" / "eval.jsonl"
 RESULTS = ROOT / "data" / "eval"
@@ -50,8 +50,15 @@ def evaluate(backend: str, rows: list[dict], workers: int) -> dict:
         except Exception:
             return truth, "failed", None
 
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        out = list(pool.map(one, rows))
+    if backend in ("local", "base"):  # one CPU model: sequential, and show progress
+        out = []
+        for i, row in enumerate(rows, 1):
+            out.append(one(row))
+            if i % 10 == 0 or i == len(rows):
+                print(f"  {backend}: {i}/{len(rows)}", flush=True)
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            out = list(pool.map(one, rows))
     pairs = [(t, p) for t, p, _ in out]
     lat = sorted(l for *_, l in out if l is not None)
     errors = [(t, p) for t, p in pairs if t == "error"]
@@ -79,7 +86,7 @@ def main() -> None:
         sys.exit("No eval set. Run `python -m training.adaption_dataset` first.")
     rows = [json.loads(l) for l in EVAL_FILE.read_text(encoding="utf-8").splitlines() if l.strip()]
     rows = rows[: a.limit] if a.limit else rows
-    backends = a.backends or (["claude", "adaption"] if adaption_available() else ["claude"])
+    backends = a.backends or (["claude"] + (["adaption"] if adaption_available() else []) + (["local"] if local_available() else []))
 
     RESULTS.mkdir(parents=True, exist_ok=True)
     results = []

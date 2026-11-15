@@ -1,0 +1,178 @@
+{
+ "card_id": "9d0ba5bba413",
+ "identity": {
+  "brand": "Royal",
+  "model": "Kludge RK68",
+  "model_number": "",
+  "year_or_revision": "",
+  "category": "",
+  "evidence": "typed: Royal Kludge RK68",
+  "confidence": 1.0
+ },
+ "part_needed": "stabilizers",
+ "fault": "one key no longer registers or double-types; replace the failed part",
+ "options": [
+  {
+   "offer": {
+    "part_name": "Durock Plate-Mount Stabilisers",
+    "part_number": "aduropt0915212",
+    "retailer": "Mechboards UK",
+    "price": 7.5,
+    "currency": "GBP",
+    "in_stock": "yes",
+    "url": "https://mechboards.co.uk/products/durock-plate-mount-stabilisers",
+    "compatible_models_listed": [
+     "Most plate-mount compatible 60%, 65%, 75% and TKL keyboards"
+    ]
+   },
+   "verdict": {
+    "fits": "yes",
+    "reason": "Mechboards says these are plate-mount stabilisers for most plate-mount 60%, 65%, 75% and TKL boards. Reddit RK68 owners say the RK68 uses plate-mount stabilisers and report fitting Durock plate-mount stabs to it, though no source names this exact Mechboards part number.",
+    "supporting_urls": [
+     "https://mechboards.co.uk/products/durock-plate-mount-stabilisers",
+     "https://www.reddit.com/r/MechanicalKeyboards/comments/ogspqa/lubed_rk68_stabs_this_is_my_first_time_lubing/",
+     "https://www.reddit.com/r/MechanicalKeyboards/comments/sseus2/looking_for_a_plate_for_my_rk68/",
+     "https://www.reddit.com/r/MechanicalKeyboards/comments/sc3jv3/i_am_beyond_happy_with_my_first_ever_mechanical/"
+    ]
+   },
+   "verified": true,
+   "independent_sources": 2
+  },
+  {
+   "offer": {
+    "part_name": "DUROCK Black Plate Mount Stabilizers (V2/V3; size configurations vary)",
+    "part_number": "1005001781468636",
+    "retailer": "AliExpress",
+    "price": 8.98,
+    "currency": "USD",
+    "in_stock": "unknown",
+    "url": "https://www.aliexpress.com/item/1005001781468636.html",
+    "compatible_models_listed": [
+     "Cherry MX keyboard plates",
+     "Standard ANSI 60%, 65%, 68%, 87%, and 104-key mechanical keyboards"
+    ]
+   },
+   "verdict": {
+    "fits": "yes",
+    "reason": "Reddit owners report that the RK68 uses plate-mount stabilizers and that Durock plate-mount stabilizers were installed in it, one saying they 'just popped in and stayed there'; this matches the listing's Cherry-style plate-mount design, though stabilizer sizes and RK68 revisions vary, so check the kit size and your board revision.",
+    "supporting_urls": [
+     "https://www.reddit.com/r/MechanicalKeyboards/comments/ogspqa/lubed_rk68_stabs_this_is_my_first_time_lubing/",
+     "https://www.reddit.com/r/MechanicalKeyboards/comments/sc3jv3/i_am_beyond_happy_with_my_first_ever_mechanical/",
+     "https://www.reddit.com/r/buildapcsales/comments/ms6glk/keyboard_royal_kludge_rk68_65_mechanical_keyboard/",
+     "https://www.reddit.com/r/MechanicalKeyboards/comments/sseus2/looking_for_a_plate_for_my_rk68/"
+    ]
+   },
+   "verified": false,
+   "independent_sources": 1
+  },
+  {
+   "offer": {
+    "part_name": "Durock Plate Mount V3 Stabilizers",
+    "part_number": "",
+    "retailer": "Divinikey",
+    "price": 2.95,
+    "currency": "EUR",
+    "in_stock": "no",
+    "url": "https://divinikey.com/products/durock-plate-mount-stabilizers",
+    "compatible_models_listed": [
+     "MX-compatible plates as thin as 1.2 mm"
+    ]
+   },
+   "verdict": {
+    "fits": "unclear",
+    "reason": "Reddit users say the RK68 uses plate-mount stabilizers and report fitting older Durock plate-mount stabs, but no source confirms the V3 version on the RK68, and Durock warns that some plates may not fit despite general Cherry MX clip-in compatibility.",
+    "supporting_urls": [
+     "https://www.reddit.com/r/MechanicalKeyboards/comments/ogspqa/lubed_rk68_stabs_this_is_my_first_time_lubing/",
+     "https://www.reddit.com/r/buildapcsales/comments/ms6glk/keyboard_royal_kludge_rk68_65_mechanical_keyboard/",
+     "https://www.amazon.com/DUROCK-Stabilizer-Innovative-Pre-clipped-Stabilizers/dp/B0CTHMMK33",
+     "https://divinikey.com/products/durock-plate-mount-stabilizers"
+    ]
+   },
+   "verified": false,
+   "independent_sources": 3
+  }
+ ],
+ "decision": null,
+ "recall": {
+  "status": "none_found",
+  "summary": "No official recall or safety notice naming the Royal Kludge RK68 appears in the provided sources; they contain only user forum complaints, manuals, reviews, and troubleshooting guides, with no manufacturer or government recall listings.",
+  "urls": []
+ },
+ "manual_url": "",
+ "manual": null,
+ "tutorials": [
+  {
+   "title": "Custom Modified Royal Kludge (RK 68) - YouTube",
+   "url": "https://www.youtube.com/watch?v=0-er_q3Dn04",
+   "chapter": "",
+   "start_s": 0
+  },
+  {
+   "title": "Royal Kludge RK68 Modification and Typing Sounds - YouTube",
+   "url": "https://www.youtube.com/watch?v=URxmF0YC4iE",
+   "chapter": "",
+   "start_s": 0
+  },
+  {
+   "title": "RK68 build - YouTube",
+   "url": "https://www.youtube.com/watch?v=GiU827RHbkg",
+   "chapter": "",
+   "start_s": 0
+  }
+ ],
+ "sources": [
+  "https://bedliner.com/view/RK-Royal-Kludge-RK68-Hot-Swappable-65-Mechanisch-Toetsenbord/979600",
+  "https://divinikey.com/products/durock-plate-mount-stabilizers",
+  "https://hub.sivo.it.com/keyboard-components/what-are-plate-mount-stabs/",
+  "https://keeb-finder.com/keyboards/rk68-68-wireless-gaming-keyboard",
+  "https://keebs.gg/builds/i-made-the-royal-kludge-rkg68-as-thoccy-as-possible-1169",
+  "https://keybumps.com/keyboard/royal-kludge-rk68-white.html",
+  "https://learningspring.org/Mechanische-Tastatur-68-Tasten-Hot-Swap-Leise-Rote-Schalter-483941",
+  "https://macmyths.com/royal-kludge-rk68-review-the-finest-article-for-extra-information/",
+  "https://manuals.plus/ae/1005010571425654",
+  "https://manuals.plus/category/rk-royal-kludge",
+  "https://mechboards.co.uk/collections/all",
+  "https://mechboards.co.uk/de/collections/newest-products?page=5&limit=40",
+  "https://mechboards.co.uk/products/durock-plate-mount-stabilisers",
+  "https://pricespy.co.uk/product.php?p=10535530",
+  "https://rkgamingstore.com/collections/68-keys",
+  "https://rkgamingstore.com/collections/kailh-switches",
+  "https://rkgamingstore.com/collections/rk-keyboard/products/s98-wireless-mechanical-keyboard",
+  "https://rkgamingstore.com/collections/rk-royal-kludge-mechanical-gaming-keyboard",
+  "https://rkgamingstore.com/collections/rk-smooth-mechanical-keyboards",
+  "https://rkgamingstore.com/products/l75-75-wireless-mechanical-keyboard",
+  "https://rkgamingstore.com/products/rk68-65-wireless-mechanical-keyboard",
+  "https://rkgamingstore.com/products/rk68-68-wireless-gaming-keyboard",
+  "https://rkgamingstore.com/products/s98-96-wireless-mechanical-keyboard-open-box?shpxid=cf068b2f-cda3-41d0-9360-f059ae3ac085",
+  "https://switchandclick.com/royal-kludge-rk68-review/",
+  "https://tao.hooos.com/search?w=RK68",
+  "https://us.amazon.com/DUROCK-Stabilizer-Innovative-Pre-clipped-Stabilizers/dp/B0CTHP7F8M",
+  "https://us.amazon.com/DUROCK-Stabilizer-Innovative-Pre-clipped-Stabilizers/dp/B0CTHPRY84",
+  "https://us.amazon.com/durock-stabilizers/s?k=durock+stabilizers",
+  "https://www.aliexpress.com/item/1005001781468636.html",
+  "https://www.aliexpress.com/item/1005006528731543.html",
+  "https://www.aliexpress.com/w/wholesale-rk68-royal-kludge.html",
+  "https://www.amazon.co.uk/RK-ROYAL-KLUDGE-RK68-Mechanical/dp/B09C5PW5G7",
+  "https://www.amazon.com/-/es/Cuxiu-96104108-625u/dp/B09VB9Y3CS",
+  "https://www.amazon.com/DUROCK-Stabilizer-Innovative-Pre-clipped-Stabilizers/dp/B0CTHMMK33",
+  "https://www.amazon.com/Stabilizers-Customized-Mounted-Mechanical-Keyboard/dp/B09VB9Y3CS",
+  "https://www.eurogamer.net/the-royal-kludge-rk68-can-be-had-for-just-46-at-amazon",
+  "https://www.gadgetexplained.com/2021/09/royal-kludge-rk-g68-review-blue-backlit.html",
+  "https://www.mechanicalkeyboards.biz/products/rk-royal-kludge-rk68-wired-65-mechanical.html",
+  "https://www.reddit.com/r/BudgetKeebs/comments/wd7mih/royal_kludge_have_open_box_deals_for_rk84_rk68_us/",
+  "https://www.reddit.com/r/MechanicalKeyboards/comments/ogspqa/lubed_rk68_stabs_this_is_my_first_time_lubing/",
+  "https://www.reddit.com/r/MechanicalKeyboards/comments/qfos2y/psa_multiple_royal_kludge_boards_are_currently_on/",
+  "https://www.reddit.com/r/MechanicalKeyboards/comments/sc3jv3/i_am_beyond_happy_with_my_first_ever_mechanical/",
+  "https://www.reddit.com/r/MechanicalKeyboards/comments/sseus2/looking_for_a_plate_for_my_rk68/",
+  "https://www.reddit.com/r/MechanicalKeyboardsUK/comments/tw5mwy/royal_kludge_rk68_upgrade/",
+  "https://www.reddit.com/r/buildapcsales/comments/ms6glk/keyboard_royal_kludge_rk68_65_mechanical_keyboard/",
+  "https://www.themaskedstudio.com/product/rk-g68/",
+  "https://www.walmart.com/browse/office-supplies/computer-keyboards-mice/royal-kludge/1229749_1070964_132959_1230184_1008621/YnJhbmQ6Um95YWwgS2x1ZGdl",
+  "https://www.walmart.com/browse/royal-kludge/YnJhbmQ6Um95YWwgS2x1ZGdl",
+  "https://www.youtube.com/watch?v=0-er_q3Dn04",
+  "https://www.youtube.com/watch?v=GiU827RHbkg",
+  "https://www.youtube.com/watch?v=URxmF0YC4iE"
+ ],
+ "searched_at": "2026-11-15T03:50:14.419631+00:00",
+ "mock": false
+}
