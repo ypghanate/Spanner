@@ -1113,6 +1113,21 @@ def mount(app) -> None:
                 tts.start(line)          # generated once, then served from the disk cache in ~50 ms
 
     @app.on_event("startup")
+    async def _warm_objects() -> None:  # the photo stage's HTTP client, image decoder and search client, built before the first object is asked
+        def go() -> None:
+            try:
+                from . import objects
+                from PIL import Image  # noqa: F401
+
+                c = objects._client()
+                c.get("https://www.google.com/generate_204", timeout=4)
+                from .shop import _tavily
+                _tavily()
+            except Exception:
+                pass
+        asyncio.get_running_loop().run_in_executor(None, go)
+
+    @app.on_event("startup")
     async def _warm_rag() -> None:      # chromadb + its embedding model: loaded in the background, never blocking the import or the first request
         from .brain.rag import warm as warm_rag
 

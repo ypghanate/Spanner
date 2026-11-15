@@ -39,6 +39,21 @@ router = APIRouter(prefix="/coach", tags=["objects"])
 _pool = ThreadPoolExecutor(max_workers=8)             # reading guides and videos (slow, many tasks)
 _media_pool = ThreadPoolExecutor(max_workers=6)       # photo, twin, step pictures: what the person is waiting to see
 _fetch_pool = ThreadPoolExecutor(max_workers=16)      # downloading the candidate photos
+
+
+def _client():
+    """One shared HTTP client for all the photo downloads. A new client per request builds a TLS context each time: with 16 in
+    parallel that took 10 s (measured), against 0.5 s for the same 16 images through one shared client."""
+    global _http
+    if _http is None:
+        import httpx
+
+        _http = httpx.Client(follow_redirects=True, timeout=8, limits=httpx.Limits(max_connections=32),
+                             headers={"User-Agent": "Mozilla/5.0 (Spanner repair coach)"})
+    return _http
+
+
+_http = None
 _jobs: dict[str, "Job"] = {}
 
 
@@ -99,6 +114,7 @@ class Job:
         self.session, self.first_text = session, text
         self.answers: list[str] = []
         self.said: list[str] = []           # everything Spanner said in this flow, so no line repeats
+        self.skip_video = False
         self.intake: Intake | None = None
         self.asked = 0
         self.slug = ""
@@ -232,11 +248,18 @@ class Job:
             except Exception as e:
                 print(f"tavily images: {str(e)[:100]}", flush=True)
                 return []
+        from concurrent.futures import wait
+
+        futs = [_fetch_pool.submit(one, q) for q in queries]
+        done, _ = wait(futs, timeout=3.5)
+        if not done:
+            done, _ = wait(futs, timeout=8, return_when="FIRST_COMPLETED")
         seen, out = set(), []
-        for imgs in _fetch_pool.map(one, queries):
-            for u in imgs:
-                if u and u not in seen:
-                    seen.add(u); out.append(u)
+        for f in futs:                                   # original order, finished queries only
+            if f in done:
+                for u in f.result():
+                    if u and u not in seen:
+                        seen.add(u); out.append(u)
         return out[:16]
 
     def _download_image(self, urls: list[str], name: str = "") -> Path:
@@ -251,13 +274,20 @@ class Job:
 
         def fetch(u):
             try:
-                r = httpx.get(u, timeout=12, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 (Spanner repair coach)"})
+                r = _client().get(u)
                 r.raise_for_status()
                 img = Image.open(io.BytesIO(r.content)).convert("RGB")
                 return (u, img) if img.width >= 300 and img.height >= 300 else None
             except Exception:
                 return None
-        cands = [c for c in _fetch_pool.map(fetch, [u for u in urls if str(u).startswith("http")]) if c]
+        from concurrent.futures import wait
+
+        futs = [_fetch_pool.submit(fetch, u) for u in urls if str(u).startswith("http")]
+        done, _ = wait(futs, timeout=4.5)
+        cands = [f.result() for f in futs if f in done and f.result()]
+        if len(cands) < 2:                               # too few so far: give the stragglers a little longer
+            done, _ = wait(futs, timeout=6)
+            cands = [f.result() for f in futs if f in done and f.result()]
         if not cands:
             raise RuntimeError("no usable product photo (none of the candidates loaded)")
         pick = 0
@@ -276,8 +306,10 @@ class Job:
                                 "vacuum), (2) every part touches the main body, nothing floating in the air beside or above it, (3) plain or white background, "
                                 "no hands, no people, no text, no collage, sharp, (4) a three-quarter or front view. If several qualify prefer the simplest "
                                 "outline. If NO image qualifies, answer NONE. Otherwise answer with the image number only."})
-                r = anthropic.Anthropic(timeout=25, max_retries=1).messages.create(model=PLAN_MODEL, max_tokens=5, messages=[{"role": "user", "content": content}])
-                verdict = r.content[0].text.strip().upper()
+                # Haiku, thinking off: 0.8 s against 1.8 s, and it answers with the bare number (Sonnet narrated its choice instead)
+                r = anthropic.Anthropic(timeout=25, max_retries=1).messages.create(model=INTAKE_MODEL, max_tokens=8, thinking={"type": "disabled"},
+                                                                                    messages=[{"role": "user", "content": content}])
+                verdict = "".join(b.text for b in r.content if getattr(b, "type", "") == "text").strip().upper()
                 if "NONE" in verdict:
                     raise RuntimeError("no clean single-object photo among the candidates; no twin (the step pictures carry the visuals)")
                 digits = "".join(ch for ch in verdict if ch.isdigit())
@@ -328,9 +360,11 @@ class Job:
         the raw photo if the edit fails."""
         import fal_client
 
+        import base64
+
         raw = (self.dir / "photo.jpg").read_bytes()
         clean = self.dir / "clean.png"
-        if clean.exists():
+        if clean.exists():                                   # the same product again: reuse the cleaned image
             return fal_client.upload(clean.read_bytes(), "image/png")
         t0 = time.time()
         try:
@@ -339,14 +373,21 @@ class Job:
                       f"The product is: {name}, the complete product as it is sold. Keep its exact design, colours, proportions and details: do "
                       "not add, remove or restyle any feature. Every part is connected to the body; nothing floats in the air; no hands, no text, "
                       "no shadows, no other objects.")
-            r = fal_client.subscribe(EDIT_MODEL, arguments={"prompt": prompt, "image_urls": [fal_client.upload(raw, "image/jpeg")]})
-            import httpx
-
+            # inline photo: no upload round trip (the editor accepts data URIs; measured 8.5 s end to end)
+            uri = "data:image/jpeg;base64," + base64.standard_b64encode(raw).decode()
+            r = fal_client.subscribe(EDIT_MODEL, arguments={"prompt": prompt, "image_urls": [uri]})
             img = (r.get("images") or [r.get("image")])[0]["url"]
-            data = httpx.get(img, timeout=60).content
-            clean.write_bytes(data)
+
+            def keep() -> None:                              # saved for reuse and for the pitch, off the critical path
+                import httpx
+
+                try:
+                    clean.write_bytes(httpx.get(img, timeout=60).content)
+                except Exception:
+                    pass
+            _fetch_pool.submit(keep)
             self.record("object_clean", t0, True)
-            return fal_client.upload(data, "image/png")
+            return img                                       # Tripo reads it straight from fal's CDN: no download, no re-upload
         except Exception as e:
             print(f"photo cleanup failed ({str(e)[:100]}): using the raw photo", flush=True)
             self.record("object_clean", t0, False)
@@ -358,6 +399,8 @@ class Job:
             return {"image_url": url, "ss_sampling_steps": 8, "slat_sampling_steps": 8, "mesh_simplify": 0.95, "texture_size": 512}
         if "hunyuan" in model:
             return {"input_image_url": url, "textured_mesh": True}
+        if "tripo" in model:
+            return {"image_url": url, "face_limit": 30000, "texture": "standard"}     # ~2 MB, not 14.5 MB: loads at once on any screen
         return {"image_url": url}
 
     def _twin_once(self, model: str, url: str, t0: float) -> bytes:
@@ -681,7 +724,7 @@ class Job:
             _media_pool.submit(self._guard, "photo", self.run_photo)
         elif self.phase["twin"]["status"] == "pending" and self.photo_url:
             _media_pool.submit(self._guard, "twin", self.run_twin)
-        if os.getenv("GEMINI_API_KEY"):
+        if os.getenv("GEMINI_API_KEY") and not self.skip_video:
             _pool.submit(self._guard, "plan_video", self.run_plan_video)
         else:
             self.set("plan_video", "skipped", why="no GEMINI_API_KEY")
@@ -720,6 +763,7 @@ def _claude():
 class ObjectReq(BaseModel):
     session: str
     text: str
+    fast: bool = False          # skip the slow video-watching pass (used by scripts/warm_objects.py)
 
 
 @router.post("/object")
@@ -731,6 +775,7 @@ async def start_object(req: ObjectReq):
             return await asyncio.to_thread(cur.answer, text) if cur.next_question() and not (_words(text) & _words(cur.first_text)) \
                 else {"say": cur._fresh(cur._progress_line()), **cur.public()}
     job = Job(req.session, text)
+    job.skip_video = req.fast
     _jobs[req.session] = job
     return await asyncio.to_thread(job.start, job.first_text)
 

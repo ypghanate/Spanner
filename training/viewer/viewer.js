@@ -1903,7 +1903,7 @@ async function twinFromGlb(url) {
     const { GLTFLoader } = await import("https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js");
     new GLTFLoader().load(url, (gltf) => {
       gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; const m = o.material; if (m) { if ("envMapIntensity" in m) m.envMapIntensity = 0.5; if (m.emissive) m.emissive.setHex(0x000000); if (m.color) m.color.multiplyScalar(0.85); } } });
-      placeTwin(gltf.scene, "glb"); heard("fal", "3D twin ready"); setMode("3D twin · " + (objectFlow.status?.model || ""));
+      placeTwin(gltf.scene, "glb"); twinWait(""); heard("fal", "3D twin ready"); setMode("3D twin · " + (objectFlow.status?.model || ""));
     }, undefined, (e) => console.warn("twin glb failed:", e?.message || e));
   } catch (e) { console.warn("GLTFLoader unavailable:", e); }
 }
@@ -1926,12 +1926,31 @@ async function answerObject(raw) {
     const d = await r.json(); objectFlow.status = d; objectSay(d.say); heard(raw, "noted");
   } catch (e) { heard(raw, "couldn't send that"); }
 }
+/** A small label over the 3D panel while fal builds the twin (never a picture: only text, only until the real model arrives). */
+function twinWait(text) {
+  let el = $("twinwait");
+  if (!el) {
+    el = Object.assign(document.createElement("div"), { id: "twinwait" });
+    el.style.cssText = "position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);padding:10px 16px;border-radius:10px;background:rgba(16,21,18,.78);border:1px solid var(--line);color:var(--text);font-size:14px;pointer-events:none;z-index:3;text-align:center";
+    $("viewport").appendChild(el);
+  }
+  el.style.display = text ? "block" : "none"; if (text) el.innerHTML = `<span style="color:var(--action)">●</span> ${esc(text)}`;
+}
+function phaseLine(st) {
+  const ph = st.phases || {};
+  if (ph.photo?.status === "running") return "finding the product";
+  if (ph.twin?.status === "running") return ph.twin.step === "cleaning the photo" ? "cleaning the photo with fal" : "building the 3D model with fal, about 75 s";
+  return "";
+}
 async function objectPoll() {
   clearTimeout(objectFlow.timer);
   if (!objectFlow.on) return;
   try {
     const st = await fetchJson(API + "/coach/object?session=" + SESSION, 8000);
     const prev = objectFlow.status || {}; objectFlow.status = st;
+    const line = phaseLine(st);
+    if (pickOpen && line) $("pickhint").textContent = line + "…";
+    twinWait(!objectFlow.glbShown && st.phases?.twin?.status === "running" && !pickOpen ? line + "…" : "");
     if (st.photo_url && !objectFlow.photoShown) {      // the found product, shown on the question page only (never as a 2D sheet in the 3D panel)
       objectFlow.photoShown = true;
       $("pickecho").innerHTML = `<img src="${API + st.photo_url}" alt="" style="max-width:260px;max-height:200px;border-radius:10px;margin-top:8px;object-fit:contain;background:#fff;padding:6px">`;
