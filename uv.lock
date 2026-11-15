@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.12.*"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -2428,6 +2428,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
+    { name = "qrcode", extra = ["pil"] },
     { name = "ultralytics" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "youtube-transcript-api" },
@@ -2442,7 +2443,6 @@ training = [
     { name = "google-genai" },
     { name = "linkup-sdk" },
     { name = "mlflow-skinny" },
-    { name = "qrcode", extra = ["pil"] },
     { name = "scipy" },
     { name = "tavily-python" },
     { name = "trimesh" },
@@ -2466,6 +2466,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
+    { name = "qrcode", extras = ["pil"], specifier = ">=8" },
     { name = "ultralytics" },
     { name = "uvicorn", extras = ["standard"] },
     { name = "youtube-transcript-api" },
@@ -2478,7 +2479,6 @@ training = [
     { name = "google-genai" },
     { name = "linkup-sdk", specifier = ">=0.24" },
     { name = "mlflow-skinny", specifier = ">=3.18" },
-    { name = "qrcode", extras = ["pil"], specifier = ">=8" },
     { name = "scipy" },
     { name = "tavily-python", specifier = ">=0.8" },
     { name = "trimesh" },
