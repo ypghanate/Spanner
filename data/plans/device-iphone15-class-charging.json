@@ -1,0 +1,111 @@
+{
+ "status": "ready",
+ "say": "",
+ "title": "iPhone 15 charging port cleaning and cable check",
+ "fault": "Phone won't charge",
+ "diagnosis": "Most often a no-charge fault on an iPhone 15 is lint packed into the USB-C port or a bad cable or adapter, so we'll rule those out first and clean the port. If it still won't charge, the port flex likely needs replacing, which is a harder job.",
+ "difficulty": "easy",
+ "time_min": 15,
+ "tools_needed": [
+  "Wooden or plastic toothpick",
+  "Known-good USB-C cable",
+  "Known-good power adapter",
+  "Flashlight"
+ ],
+ "safety_notes": [
+  "Never use metal pins or needles inside the port; they can short the contacts.",
+  "Stop and do not charge if the phone feels hot or the battery looks swollen."
+ ],
+ "steps": [
+  {
+   "title": "Unplug and power off",
+   "instruction": "Unplug any cable from the phone, remove the case, then hold the side button and a volume button and slide to power off.",
+   "expected_visual_state": "The screen is black, no cable is attached, and the case is off the phone.",
+   "common_mistakes": [
+    "Leaving the cable plugged in while cleaning",
+    "Skipping power off so the phone stays live"
+   ],
+   "focus": [
+    "power_button",
+    "usb_c"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Inspect the port",
+   "instruction": "Shine a flashlight into the USB-C port at the bottom edge. Look for lint, dust or debris packed inside.",
+   "expected_visual_state": "The phone is held bottom-edge up with the flashlight beam lighting the port opening.",
+   "common_mistakes": [
+    "Not looking with enough light and missing the lint",
+    "Mistaking the center tongue of the port for debris"
+   ],
+   "focus": [
+    "usb_c",
+    "frame"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Clean out the port",
+   "instruction": "Gently scrape along the inside walls of the port with a wooden toothpick and lift out the lint. Do not press on the center tongue.",
+   "expected_visual_state": "A toothpick is in the port and small lint is visible on its tip or on the table.",
+   "common_mistakes": [
+    "Using a metal pin that shorts or bends the contacts",
+    "Pushing lint deeper into the port",
+    "Prying against the center tongue"
+   ],
+   "focus": [
+    "usb_c"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Swap in a known-good cable and adapter",
+   "instruction": "Take a USB-C cable and power adapter you know work with another device. Plug them in firmly.",
+   "expected_visual_state": "A different cable is fully seated in the phone's port and connected to a wall adapter.",
+   "common_mistakes": [
+    "Reusing the original possibly frayed cable",
+    "Using a loose or low-power adapter",
+    "Not pushing the plug in all the way"
+   ],
+   "focus": [
+    "usb_c"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Check for charging",
+   "instruction": "Wait a minute, then look at the screen for the charging indicator. If nothing, wait 15 minutes with the phone powered on.",
+   "expected_visual_state": "The screen shows the lightning-bolt battery icon or charging animation.",
+   "common_mistakes": [
+    "Giving up after a few seconds on a fully drained battery",
+    "Charging on a wireless pad and thinking the port is fixed"
+   ],
+   "focus": [
+    "battery",
+    "display"
+   ],
+   "view": "keep",
+   "source_ids": []
+  },
+  {
+   "title": "Test again with a second cable",
+   "instruction": "If it is still not charging, try a different wall outlet and a second cable. If it still fails, book a repair for the port flex.",
+   "expected_visual_state": "The phone shows the charging icon, or the phone is still dead and you have ruled out cable and adapter.",
+   "common_mistakes": [
+    "Testing only one cable",
+    "Opening the phone without proper tools or replacement parts"
+   ],
+   "focus": [
+    "usb_c",
+    "battery"
+   ],
+   "view": "keep",
+   "source_ids": []
+  }
+ ]
+}

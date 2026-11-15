@@ -1,0 +1,173 @@
+{
+ "status": "ready",
+ "say": "",
+ "title": "iPhone 15 screen replacement",
+ "fault": "",
+ "diagnosis": "Your front glass is cracked, so we'll swap the whole display assembly. This is a hard repair, so go slowly and keep your screws organized.",
+ "difficulty": "hard",
+ "time_min": 75,
+ "tools_needed": [
+  "P2 pentalobe screwdriver",
+  "suction handle",
+  "plastic spudger",
+  "opening picks",
+  "Tri-point Y000 screwdriver",
+  "Phillips #000 screwdriver",
+  "tweezers",
+  "clear tape",
+  "replacement display assembly",
+  "heat pad or hair dryer"
+ ],
+ "safety_notes": [
+  "Power the phone off before opening it.",
+  "Wear safety glasses and cover the cracked glass with clear tape to avoid cuts and flying shards.",
+  "Do not use the phone if the battery looks swollen, and stop if it does.",
+  "Never pry near the battery or puncture it."
+ ],
+ "steps": [
+  {
+   "title": "Power off and tape the glass",
+   "instruction": "Hold the side button and a volume button, then slide to power off. Cover the cracked glass with clear tape.",
+   "expected_visual_state": "The screen is black and the front glass is covered with overlapping strips of clear tape.",
+   "common_mistakes": [
+    "Only locking the screen instead of fully powering off",
+    "Leaving glass uncovered so shards fall off while working"
+   ],
+   "focus": [
+    "display",
+    "power_button"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Remove the pentalobe screws",
+   "instruction": "Use the P2 pentalobe screwdriver to remove the two screws beside the USB-C port. Place them in a tray.",
+   "expected_visual_state": "The two screw holes beside the USB-C port are empty and the screws sit in a tray.",
+   "common_mistakes": [
+    "Using the wrong screwdriver and stripping the screw heads",
+    "Losing the tiny screws"
+   ],
+   "focus": [
+    "screws",
+    "usb_c"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Lift the display slightly",
+   "instruction": "Warm the edges of the display, then place the suction handle near the bottom edge and pull gently. Slide an opening pick into the gap.",
+   "expected_visual_state": "A small gap is visible along the bottom edge of the display with a pick inserted.",
+   "common_mistakes": [
+    "Pulling too hard and opening the display too far",
+    "Inserting the pick deep and damaging cables",
+    "Putting the suction cup on cracked glass without tape so it will not hold"
+   ],
+   "focus": [
+    "display",
+    "frame"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Disconnect the battery",
+   "instruction": "Open the display like a book to the left, without straining the cables. Remove the battery connector bracket and unlatch the battery connector with the spudger.",
+   "expected_visual_state": "The display stands slightly open and the battery connector bracket is removed with the connector lifted from its socket.",
+   "common_mistakes": [
+    "Skipping battery disconnection before touching other connectors",
+    "Opening the display past 90 degrees and tearing the display flex",
+    "Prying at the battery itself instead of the connector"
+   ],
+   "focus": [
+    "battery_bracket",
+    "battery",
+    "display"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Remove the display connector bracket",
+   "instruction": "Unscrew the four tri-point screws on the display connector bracket and lift it off. Disconnect the display and Face ID connectors with the spudger.",
+   "expected_visual_state": "The bracket is removed and the display is held by nothing but is lying free of the frame.",
+   "common_mistakes": [
+    "Mixing up screws of different lengths",
+    "Pulling the flex cables instead of unlatching the connectors by their sides"
+   ],
+   "focus": [
+    "display_bracket",
+    "display",
+    "front_camera"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Transfer the earpiece and sensors",
+   "instruction": "Move the earpiece speaker, front sensor parts and any brackets from the old display to the new one as needed. Match the position of each part carefully.",
+   "expected_visual_state": "The new display has the earpiece mesh and sensor parts mounted in the same positions as the old one.",
+   "common_mistakes": [
+    "Damaging the delicate earpiece mesh",
+    "Forgetting to move the proximity sensor parts or dust shield"
+   ],
+   "focus": [
+    "earpiece",
+    "front_camera",
+    "display"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Connect the new display",
+   "instruction": "Press the display and Face ID connectors into their sockets and refit the connector bracket with its four screws. Reconnect the battery connector and its bracket.",
+   "expected_visual_state": "The new display is connected, both brackets are screwed down, and the battery connector is seated flat.",
+   "common_mistakes": [
+    "Connectors not fully clicked in, causing a black screen or no touch",
+    "Closing the phone before testing"
+   ],
+   "focus": [
+    "display",
+    "display_bracket",
+    "battery_bracket",
+    "battery"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Close and fasten",
+   "instruction": "Lower the display onto the frame and press the edges until it clicks into place. Refit the two pentalobe screws.",
+   "expected_visual_state": "The display sits flush with the frame all around and the two screws are back beside the USB-C port.",
+   "common_mistakes": [
+    "Letting a cable get pinched under the display",
+    "Forcing the display down when a connector is not seated"
+   ],
+   "focus": [
+    "display",
+    "frame",
+    "screws"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Test the new screen",
+   "instruction": "Power on the phone and check the display, touch and Face ID. Swipe across the full screen and test the earpiece.",
+   "expected_visual_state": "The phone shows the Apple logo, then the lock screen, with the display bright, uncracked and responding to touch across the whole screen.",
+   "common_mistakes": [
+    "Not testing touch in all corners",
+    "Ignoring a Face ID or earpiece problem until later"
+   ],
+   "focus": [
+    "display",
+    "front_camera",
+    "earpiece"
+   ],
+   "view": "together",
+   "source_ids": []
+  }
+ ]
+}

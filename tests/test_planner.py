@@ -215,3 +215,71 @@ def test_spoken_turn_context_has_plan_step_and_camera():
     assert "Step 1 of 1" in coach._context("c") and "hands near the cable" in coach._context("c")
     for d in (coach._plans, coach._view_state, coach._latest):
         d.pop("c", None)
+
+
+# ---------------------------------------------------------------- other devices (iPhone / iPad / headphones)
+PHONE_PARTS = [{"name": n, "label": n.replace("_", " ").title(), "desc": f"the {n}", "group": "body"}
+               for n in ("frame", "display", "battery", "logic_board", "usb_c", "screws")]
+
+
+def test_device_plan_uses_only_the_devices_own_parts(monkeypatch, tmp_path):
+    from backend import device_planner as dp
+
+    def fake(complaint, device, parts, refs, errors):
+        return dp.DevPlan(status="ready", title="iPhone 15 screen replacement", fault="cracked screen", diagnosis="Cracked glass.",
+                          steps=[dp.DevStep(title="Power off", instruction="Switch it off.", expected_visual_state="Screen dark."),
+                                 dp.DevStep(title="Open", instruction="Remove the screws and lift the display.", expected_visual_state="Display lifted.",
+                                            focus=["screws", "display"], view="apart"),
+                                 dp.DevStep(title="Test", instruction="Power on.", expected_visual_state="Screen works.", view="together")])
+
+    monkeypatch.setattr(dp, "_generate_claude", fake)
+    monkeypatch.setattr(dp, "CACHE_DIR", tmp_path / "plans")
+    r = dp.plan_device_repair("my screen is cracked", "iphone15", PHONE_PARTS)
+    assert r["status"] == "ready" and r["plan"]["device"] == "iphone15" and r["broken_key"] is None
+    ops = [[c["op"] + ":" + (c.get("part") or "") for c in s["scene3d"]] for s in r["plan"]["steps"]]
+    assert ops[1] == ["explode:", "highlight:screws", "pulse:display"] and ops[2] == ["reset:"]
+    RepairPlan.model_validate(r["plan"])
+
+
+def test_device_plan_rejects_invented_parts_then_retries(monkeypatch, tmp_path):
+    from backend import device_planner as dp
+
+    calls = []
+
+    def fake(complaint, device, parts, refs, errors):
+        calls.append(errors)
+        part = "flux_capacitor" if not errors else "battery"
+        return dp.DevPlan(status="ready", title="t", fault="f", diagnosis="d",
+                          steps=[dp.DevStep(title=str(i), instruction="Do it.", expected_visual_state="Seen.", focus=[part]) for i in range(4)])
+
+    monkeypatch.setattr(dp, "_generate_claude", fake)
+    monkeypatch.setattr(dp, "CACHE_DIR", tmp_path / "plans")
+    r = dp.plan_device_repair("battery drains", "iphone15", PHONE_PARTS)
+    assert r["status"] == "ready" and len(calls) == 2 and "flux_capacitor" in calls[1][0]
+
+
+def test_device_clarify_and_common_fault_classes(monkeypatch, tmp_path):
+    from backend import device_planner as dp
+
+    monkeypatch.setattr(dp, "_generate_claude", lambda *a: dp.DevPlan(status="clarify", say="What is it doing?"))
+    monkeypatch.setattr(dp, "CACHE_DIR", tmp_path / "plans")
+    assert dp.plan_device_repair("it's broken", "iphone15", PHONE_PARTS) == {"status": "clarify", "say": "What is it doing?"}
+    assert dp.classify("iphone15", "my screen is cracked") == "screen" and dp.classify("momentum4", "the ear cushion is torn") == "cushion"
+    assert dp.classify("momentum4", "my screen is cracked") is None
+
+
+def test_device_endpoints_register_parts_and_switch_devices():
+    from fastapi.testclient import TestClient
+
+    from backend import coach
+    from backend.main import create_app
+
+    c = TestClient(create_app())
+    assert c.post("/coach/device/parts", json={"session": "d1", "device": "iphone15", "parts": PHONE_PARTS}).json()["parts"] == 6
+    r = c.post("/coach/plan/generate", json={"session": "d1", "complaint": "my screen is cracked", "device": "iphone15"}).json()
+    assert r["status"] == "ready" and r["plan"]["device"] == "iphone15"
+    assert "iphone15" in coach._context("d1") and "logic_board" in coach._context("d1")
+    assert "iPhone" in coach._system(coach._demo("d1")) and "keyboard" not in coach._system(coach._demo("d1")).lower()
+    c.post("/coach/device/parts", json={"session": "d1", "device": "ipad11", "parts": PHONE_PARTS})     # picked another device
+    assert "d1" not in coach._plans
+    coach._device_parts.pop("d1", None)

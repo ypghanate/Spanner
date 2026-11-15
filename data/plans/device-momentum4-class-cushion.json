@@ -1,0 +1,116 @@
+{
+ "status": "ready",
+ "say": "",
+ "title": "Sennheiser Momentum 4 ear cushion replacement",
+ "fault": "Torn ear cushion cover",
+ "diagnosis": "The protein-leather cover on your cushion has torn, which is the most common wear item on these headphones. We'll twist the old cushion off its clip ring, check the ring, and fit a new cushion. It's an easy job, and you don't need to open the cup.",
+ "difficulty": "easy",
+ "time_min": 10,
+ "tools_needed": [
+  "replacement ear cushion (matching Momentum 4 cushion)",
+  "dry microfiber cloth"
+ ],
+ "safety_notes": [
+  "Switch the headphones off and unplug any USB-C or 3.5 mm cable before you start."
+ ],
+ "steps": [
+  {
+   "title": "Power off and set up",
+   "instruction": "Hold the power button to switch the headphones off and unplug any cable. Lay them on a clean table with the torn cushion facing up.",
+   "expected_visual_state": "Headphones lie on a table with no cable attached, the status LED is off, and the torn cushion faces the camera.",
+   "common_mistakes": [
+    "Leaving a cable plugged in",
+    "Working on a cluttered surface where small flakes get lost"
+   ],
+   "focus": [
+    "cup_right",
+    "cushion_right"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Twist off the torn cushion",
+   "instruction": "Grip the cushion firmly and twist it a little counter-clockwise until it releases from the clip ring. Lift it straight off.",
+   "expected_visual_state": "The old cushion is detached and lying beside the headphones, with the bare clip ring visible on the ear cup.",
+   "common_mistakes": [
+    "Pulling the cushion straight up without twisting",
+    "Tugging on the headband or yoke rather than holding the cup steady",
+    "Using a metal tool that scratches the ring"
+   ],
+   "focus": [
+    "cushion_left",
+    "cushion_ring_left"
+   ],
+   "view": "apart",
+   "source_ids": [
+    "sony_wh1000xm4_ear_cushions#1"
+   ]
+  },
+  {
+   "title": "Inspect and clean the clip ring",
+   "instruction": "Check the clip ring for cracks and look over the driver mesh. Wipe away dust and flaked leather with a dry microfiber cloth.",
+   "expected_visual_state": "The clip ring and driver mesh are clean, with no flakes, and no tab or slot looks cracked or broken.",
+   "common_mistakes": [
+    "Pressing on the driver mesh",
+    "Using a wet cloth near the driver",
+    "Missing flakes of old leather in the groove"
+   ],
+   "focus": [
+    "cushion_ring_left",
+    "driver_left"
+   ],
+   "view": "keep",
+   "source_ids": [
+    "sony_wh1000xm4_ear_cushions#3"
+   ]
+  },
+  {
+   "title": "Fit the new cushion",
+   "instruction": "Line up the new cushion on the clip ring, matching its orientation. Press it on and twist it clockwise until it locks.",
+   "expected_visual_state": "The new cushion sits flush on the cup all the way around, with no gaps or lifted sections.",
+   "common_mistakes": [
+    "Fitting a left cushion on the right side",
+    "Not twisting far enough, so the cushion isn't locked",
+    "Leaving one section lifted"
+   ],
+   "focus": [
+    "cushion_left",
+    "cushion_ring_left"
+   ],
+   "view": "together",
+   "source_ids": [
+    "sony_wh1000xm4_ear_cushions__web_5243bb351118#4"
+   ]
+  },
+  {
+   "title": "Check the other side",
+   "instruction": "Look over the other cushion for tears or flattening. If it's worn, repeat the removal, cleaning and fitting on that side.",
+   "expected_visual_state": "Both ear cushions look intact and are seated flush with no gaps.",
+   "common_mistakes": [
+    "Replacing only one cushion when the other is also worn, leaving the pair mismatched",
+    "Skipping the clip ring check on the second side"
+   ],
+   "focus": [
+    "cushion_right",
+    "cushion_ring_right"
+   ],
+   "view": "keep",
+   "source_ids": [
+    "sony_wh1000xm4_ear_cushions#6"
+   ]
+  },
+  {
+   "title": "Test the fit",
+   "instruction": "Switch the headphones on and put them on your head. Check that both cushions feel snug and that the sound is full with no hiss or leaks.",
+   "expected_visual_state": "The headphones sit on the person's head with both cushions flush against the head, and the status LED is on.",
+   "common_mistakes": [
+    "Judging the seal without playing any audio",
+    "Not checking that a cushion is still firmly locked on"
+   ],
+   "focus": [],
+   "view": "together",
+   "source_ids": []
+  }
+ ]
+}

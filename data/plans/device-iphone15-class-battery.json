@@ -1,0 +1,150 @@
+{
+ "status": "ready",
+ "say": "",
+ "title": "iPhone 15 battery replacement",
+ "fault": "Battery drains too quickly, likely due to worn cell",
+ "diagnosis": "A battery that drains fast on an iPhone 15 is usually a worn cell, so I'll walk you through replacing it. This is a medium-difficulty repair, so go slowly with the adhesive tabs and the connectors.",
+ "difficulty": "medium",
+ "time_min": 45,
+ "tools_needed": [
+  "P2 pentalobe screwdriver",
+  "tri-point Y000 screwdriver",
+  "Phillips #000 screwdriver",
+  "suction handle",
+  "plastic spudger",
+  "replacement battery",
+  "tweezers",
+  "isopropyl alcohol (optional, to ease adhesive)"
+ ],
+ "safety_notes": [
+  "Never puncture or bend the battery; if it is swollen or damaged, stop and take it to a repair shop.",
+  "Let the battery drain below 25% before starting.",
+  "Keep metal tools away from the battery connector."
+ ],
+ "steps": [
+  {
+   "title": "Power off the phone",
+   "instruction": "Hold the side button and a volume button, then slide to power off. Unplug any cable and remove the case.",
+   "expected_visual_state": "The screen is completely black, with no cable attached and no case on the phone.",
+   "common_mistakes": [
+    "Only locking the screen instead of fully powering off",
+    "Leaving the charging cable plugged in"
+   ],
+   "focus": [
+    "power_button"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Remove the pentalobe screws",
+   "instruction": "Use the P2 pentalobe screwdriver to remove the two screws beside the USB-C port. Put them in a dish.",
+   "expected_visual_state": "Two empty screw holes are visible on the bottom edge next to the USB-C port, and the screws are in a tray.",
+   "common_mistakes": [
+    "Using the wrong screwdriver and stripping the heads",
+    "Losing the tiny screws"
+   ],
+   "focus": [
+    "screws",
+    "usb_c"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Lift the display",
+   "instruction": "Attach the suction handle near the bottom of the screen and pull gently while sliding a plastic spudger around the edge. Open the display like a book, hinged from the side, and don't pull it past about 90 degrees.",
+   "expected_visual_state": "The display is lifted and propped open at the side, still attached by its flex cables to the body.",
+   "common_mistakes": [
+    "Prying too hard and cracking the glass",
+    "Pulling the display fully away and tearing its flex cables"
+   ],
+   "focus": [
+    "display",
+    "frame"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Disconnect the battery connector",
+   "instruction": "Remove the screws on the display bracket, then the battery connector bracket. Use the spudger to pry the battery connector straight up.",
+   "expected_visual_state": "The display and battery connector brackets are off and the battery connector is disconnected from the board.",
+   "common_mistakes": [
+    "Disconnecting the battery before removing the brackets",
+    "Prying at an angle and bending the connector",
+    "Mixing up the different bracket screws"
+   ],
+   "focus": [
+    "battery_bracket",
+    "display_bracket",
+    "battery"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Release the battery adhesive",
+   "instruction": "Peel each of the four stretch-release tabs slowly, pulling them straight and flat along the battery. Lift the battery out when it comes free.",
+   "expected_visual_state": "The old battery is out of the frame, with the empty battery bay visible and the tabs peeled out.",
+   "common_mistakes": [
+    "Pulling tabs upward so they snap",
+    "Prying the battery with a metal tool",
+    "Pulling too fast so the tabs break"
+   ],
+   "focus": [
+    "battery",
+    "taptic",
+    "frame"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Fit the new battery",
+   "instruction": "Clean the bay, then press the new battery into place with its adhesive. Plug the connector in and press it down gently.",
+   "expected_visual_state": "The new battery is sitting flat in the bay with its connector seated and the tabs tucked in.",
+   "common_mistakes": [
+    "Leaving dust or old adhesive under the new battery",
+    "Not pressing the connector fully flat"
+   ],
+   "focus": [
+    "battery",
+    "battery_bracket"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Reassemble the phone",
+   "instruction": "Refit the brackets and display connectors, then close the display. Replace the two pentalobe screws.",
+   "expected_visual_state": "The display sits flush against the frame with both bottom screws in place.",
+   "common_mistakes": [
+    "Leaving the display connectors unseated",
+    "Trapping a cable as the display closes",
+    "Forgetting a bracket screw"
+   ],
+   "focus": [
+    "display",
+    "display_bracket",
+    "screws"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Power on and test",
+   "instruction": "Hold the side button until the Apple logo appears and charge to 100%. Check Settings, Battery, Battery Health for the new capacity.",
+   "expected_visual_state": "The phone boots to the home screen and the Battery Health screen shows a healthy capacity.",
+   "common_mistakes": [
+    "Judging the result before a full charge cycle",
+    "Ignoring a Battery Health message about an unknown part"
+   ],
+   "focus": [
+    "battery"
+   ],
+   "view": "together",
+   "source_ids": []
+  }
+ ]
+}
