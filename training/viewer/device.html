@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spanner · device hologram</title>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<style>
+  :root { --bg:#05080F; --cyan:#00E5FF; --cyan2:#00e5ff55; --ok:#3DFFA8; --warn:#FFC83D; --danger:#FF3D5A; --mono:"JetBrains Mono",ui-monospace,Consolas,monospace; }
+  html,body { margin:0; height:100%; background:var(--bg); overflow:hidden; font-family:system-ui,"Segoe UI",Inter,sans-serif; }
+  canvas#c { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  #labels { position:fixed; inset:0; pointer-events:none; }
+  .hud { position:fixed; font-family:var(--mono); color:var(--cyan); text-shadow:0 0 10px #00e5ff99; z-index:5; }
+  .panel { background:linear-gradient(180deg,#071320e8,#05080fe8); border:1px solid var(--cyan2); border-radius:4px; backdrop-filter:blur(10px); box-shadow:0 0 24px #00e5ff1a, inset 0 0 20px #00e5ff0d; }
+  .brackets::before,.brackets::after { content:""; position:absolute; width:14px; height:14px; border:2px solid var(--cyan); }
+  .brackets::before { left:-1px; top:-1px; border-right:0; border-bottom:0; } .brackets::after { right:-1px; bottom:-1px; border-left:0; border-top:0; }
+  #top { top:16px; left:20px; right:20px; display:flex; justify-content:space-between; align-items:flex-start; }
+  #brand { font-size:13px; letter-spacing:.32em; padding-top:6px; } #brand b { color:#fff; font-weight:600; }
+  #status { font-size:11px; letter-spacing:.16em; opacity:.85; text-align:right; line-height:1.6; }
+  #listen { font:10.5px var(--mono); letter-spacing:.14em; color:var(--cyan); opacity:.85; }
+  #listen.on::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:#ff3d5a; margin-right:6px; box-shadow:0 0 8px #ff3d5a; animation:blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity:.25; } }
+  #insp { right:20px; top:112px; width:320px; padding:14px 16px; display:none; text-shadow:none; color:#e6fbff; }
+  #insp h3 { margin:0 0 4px; font:600 13px var(--mono); letter-spacing:.12em; color:var(--cyan); text-shadow:0 0 10px #00e5ff88; }
+  #insp p { margin:6px 0 4px; font-size:13px; line-height:1.45; color:#bfeef7; }
+  #insp .k { font:10.5px var(--mono); letter-spacing:.12em; opacity:.7; margin-top:6px; }
+  .tag { font:600 10.5px var(--mono); letter-spacing:.14em; color:#05080f; background:var(--cyan); padding:3px 8px; border-radius:3px; box-shadow:0 0 12px #00e5ff; white-space:nowrap; }
+  .tag.red { background:var(--danger); color:#fff; box-shadow:0 0 12px var(--danger); }
+  .callout { font:10px var(--mono); letter-spacing:.18em; color:var(--cyan); opacity:.75; white-space:nowrap; text-shadow:0 0 8px #00e5ff; }
+  #note { left:20px; bottom:20px; max-width:560px; padding:12px 16px; font-size:13px; color:#e6fbff; text-shadow:none; line-height:1.45; }
+  #note b { font:600 11px var(--mono); letter-spacing:.2em; color:var(--cyan); display:block; margin-bottom:6px; }
+  #heard { position:fixed; left:50%; bottom:110px; transform:translateX(-50%); padding:8px 14px; font:12px var(--mono); color:#e6fbff; display:none; z-index:6; }
+  #wake { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; z-index:20; background:radial-gradient(#02121dcc, #000d); cursor:pointer; font:600 15px var(--mono); letter-spacing:.3em; color:var(--cyan); text-shadow:0 0 14px #00e5ff; }
+  #wake small { font:11px var(--mono); letter-spacing:.14em; opacity:.7; text-shadow:none; }
+</style></head>
+<body>
+<canvas id="c"></canvas><div id="labels"></div>
+<div class="hud" id="top"><div id="brand">SPANNER <b>//</b> <b id="dev">DEVICE</b> HOLOGRAM</div><div id="status"><span id="mode">STANDBY</span><br><span id="tele"></span><br><span id="listen">MIC OFF</span></div></div>
+<div class="hud panel brackets" id="insp"><h3 id="ih">PART</h3><p id="ip"></p><div class="k" id="ik"></div></div>
+<div class="hud panel brackets" id="note"><b id="nb">HOLOGRAM</b><span id="nt"></span></div>
+<div class="panel" id="heard"></div>
+<div id="wake">TAP TO WAKE SPANNER<small>then just talk: "take it apart", "show me the battery", "put it back", "x-ray", "keyboard"</small></div>
+<script type="module" src="./device.js"></script>
+</body></html>

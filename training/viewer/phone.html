@@ -17,7 +17,8 @@
 <div id="box"></div>
 <div id="hud"><span class="dot" id="dot"></span><span id="st">starting</span></div>
 <div id="start"><b>Spanner phone camera</b><small>Point the rear camera at the keyboard and your hands. Keep the whole keyboard in view and the screen on.</small><button id="go">Start the camera</button></div>
-<script>
+<script type="module">
+import { watchPalm } from "./gesture.js";
 const QP = new URLSearchParams(location.search), S = QP.get("s") || "phone", API = "";
 const v = document.getElementById("v"), st = document.getElementById("st"), dot = document.getElementById("dot"), box = document.getElementById("box");
 const c = document.createElement("canvas");
@@ -85,7 +86,10 @@ document.addEventListener("visibilitychange", async () => { if (document.visibil
 document.body.addEventListener("click", () => { if (running && !streaming()) openCamera(); });
 document.getElementById("go").onclick = async () => {
   if (!(await openCamera())) return;
-  document.getElementById("start").remove(); running = true; poseLoop(); frameLoop();
+  document.getElementById("start").remove(); running = true; if (QP.get("track") === "1") poseLoop(); frameLoop();   // the hologram stays still unless ?track=1
+  // ✋ raised open palm = "stop talking": the laptop picks the signal up from /coach/latest
+  watchPalm(v, () => { fetch(API + "/coach/signal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: S, signal: "stop" }) }).catch(() => {}); st.textContent = "✋ stop sent"; });
+  if (screen.orientation?.lock) screen.orientation.lock("landscape").catch(() => {});
 };
 </script>
 </body></html>
