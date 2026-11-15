@@ -95,7 +95,7 @@ class PartOffer(BaseModel):
     url: str = Field(description="Product page URL")
     image_url: str = Field(description="Direct URL of the product image if present on the page, else empty")
     compatible: bool = Field(description=f"True if it fits the {MODEL} (hot-swap, MX-style, 60% layout)")
-    compatibility: str = Field(description="One short sentence: why it fits or doesn't fit the RK61")
+    compatibility: str = Field(description="One short sentence: why it fits or doesn't fit your keyboard (say \"your keyboard\", never a model name)")
 
 
 class PartSearch(BaseModel):
@@ -108,8 +108,8 @@ class KeyboardOption(BaseModel):
     currency: str
     url: str = Field(description="The manufacturer's official product page URL")
     image_url: str = Field(description="Direct URL of a product image if present, else empty")
-    pros: list[str] = Field(description="2-3 short pros of the keyboard itself compared with the RK61")
-    cons: list[str] = Field(description="1-3 short cons of the keyboard itself compared with the RK61")
+    pros: list[str] = Field(description="2-3 short pros of the keyboard itself compared with your keyboard")
+    cons: list[str] = Field(description="1-3 short cons of the keyboard itself compared with your keyboard")
 
 
 class KeyboardSearch(BaseModel):
@@ -277,7 +277,7 @@ def _search_parts(part: str) -> tuple[list[dict], list[dict]]:
         (f"Buy {part} that fit the {MODEL} 60% hot-swappable mechanical keyboard. Find 4-6 real product "
                "pages whose price is shown on the page: the Royal Kludge store, AliExpress, eBay UK, KBDfans, "
                "Keychron, Akko, Epomaker, Mechanical Keyboards UK, at most 2 from Amazon. For each: name, retailer, "
-               "the listed price and currency, URL, product image URL, and whether it fits the RK61 and why."),
+               "the listed price and currency, URL, product image URL, and whether it fits and why (call the keyboard \"your keyboard\", not by model)."),
         PartSearch)
     offers = PartSearch.model_validate(res or {"offers": []}).offers
     return [o.model_dump() for o in offers if o.url.startswith("http")][:6], sources
@@ -306,7 +306,7 @@ def _search_keyboards() -> tuple[list[dict], list[dict]]:
                "RTINGS, The Verge, Tom's Hardware or PC Gamer: e.g. Keychron, Akko, Epomaker, Wooting, Royal Kludge. "
                "Find 4-5 real current models. For each: the price on the manufacturer's official store page (USD, "
                "GBP or EUR), that official product page URL, a product image URL, and 2-3 pros and 1-3 cons compared "
-               "with the RK61 about the keyboard itself (switches, build, connectivity, layout, software, price)."),
+               "with your keyboard about the keyboard itself (switches, build, connectivity, layout, software, price)."),
         KeyboardSearch)
     kbs = KeyboardSearch.model_validate(res or {"keyboards": []}).keyboards
     return [k.model_dump() for k in kbs if k.url.startswith("http")][:5], sources

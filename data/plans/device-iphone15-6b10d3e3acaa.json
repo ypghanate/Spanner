@@ -1,0 +1,151 @@
+{
+ "status": "ready",
+ "say": "",
+ "title": "iPhone 15 screen replacement",
+ "fault": "Cracked display",
+ "diagnosis": "Your display glass is cracked, so we'll replace the whole display assembly. This is a hard repair for a first-timer, so go slowly and take your time.",
+ "difficulty": "hard",
+ "time_min": 75,
+ "tools_needed": [
+  "P2 pentalobe screwdriver",
+  "Tri-point Y000 screwdriver",
+  "Phillips screwdriver",
+  "Suction handle",
+  "Plastic spudger",
+  "Heat pad or hair dryer",
+  "Replacement display",
+  "Tweezers",
+  "Clear tape"
+ ],
+ "safety_notes": [
+  "Power off the phone before opening it.",
+  "Wear safety glasses and tape over badly cracked glass to avoid cuts.",
+  "Never puncture or bend the battery; stop if it looks swollen."
+ ],
+ "steps": [
+  {
+   "title": "Power off and prep",
+   "instruction": "Hold the side button and a volume button, then slide to power off. Unplug any cable and put clear tape over the cracked glass.",
+   "expected_visual_state": "The screen is black, no cable is attached, and clear tape covers the cracks.",
+   "common_mistakes": [
+    "Skipping power off, which risks a short",
+    "Leaving cracked glass untaped so shards fall out"
+   ],
+   "focus": [
+    "display"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Remove bottom screws",
+   "instruction": "Use the P2 pentalobe screwdriver to remove the two screws beside the USB-C port. Put them in a tray.",
+   "expected_visual_state": "Two small screws sit in a tray and the screw holes next to the USB-C port are empty.",
+   "common_mistakes": [
+    "Losing the tiny screws",
+    "Using the wrong screwdriver and stripping the heads"
+   ],
+   "focus": [
+    "screws",
+    "usb_c"
+   ],
+   "view": "together",
+   "source_ids": []
+  },
+  {
+   "title": "Soften the adhesive and lift the display",
+   "instruction": "Warm the edges of the screen with a heat pad, then attach the suction handle and pull gently to open a small gap. Slide the plastic spudger into the gap.",
+   "expected_visual_state": "A thin gap is visible between the display and the frame with a spudger inside it.",
+   "common_mistakes": [
+    "Overheating the phone",
+    "Pulling too hard and cracking the screen more",
+    "Inserting the spudger deep and damaging internals"
+   ],
+   "focus": [
+    "display",
+    "frame"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Open the phone like a book",
+   "instruction": "Slide the spudger around the edges to release the adhesive. Swing the display open gently to the side, without pulling it far.",
+   "expected_visual_state": "The display is lifted and hinged open, with the ribbon cables still attached and the inside of the phone visible.",
+   "common_mistakes": [
+    "Opening the display too far and tearing the cables",
+    "Pushing the spudger in too deep around the edges"
+   ],
+   "focus": [
+    "display",
+    "frame"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Disconnect the battery",
+   "instruction": "Unscrew the battery bracket with the Phillips screwdriver and lift the battery connector with the spudger. Do this before touching any other connector.",
+   "expected_visual_state": "The battery bracket is removed and the battery connector is lifted free of its socket.",
+   "common_mistakes": [
+    "Prying at the battery itself",
+    "Skipping this and risking a short circuit",
+    "Mixing up the screws"
+   ],
+   "focus": [
+    "battery_bracket",
+    "battery"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Remove the old display",
+   "instruction": "Unscrew the display bracket and unplug the display connectors with the spudger. Lift the old display away.",
+   "expected_visual_state": "The old display is fully detached and lying beside the phone, and the connector sockets are visible and empty.",
+   "common_mistakes": [
+    "Pulling cables instead of lifting the connectors straight up",
+    "Mixing up screw positions"
+   ],
+   "focus": [
+    "display_bracket",
+    "display",
+    "screws"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Connect the new display",
+   "instruction": "Plug in the new display connectors and refit the display bracket. Then reconnect the battery.",
+   "expected_visual_state": "The new display is connected with the bracket screwed down and the battery connector clicked in.",
+   "common_mistakes": [
+    "Connectors not fully aligned or seated",
+    "Forgetting the bracket screws",
+    "Reconnecting the battery before checking the display connectors"
+   ],
+   "focus": [
+    "display",
+    "display_bracket",
+    "battery_bracket"
+   ],
+   "view": "apart",
+   "source_ids": []
+  },
+  {
+   "title": "Close up and test",
+   "instruction": "Press the display onto the frame, replace the bottom screws, and power on. Check touch response across the whole screen.",
+   "expected_visual_state": "The phone shows the Apple logo and then a clear, uncracked display that responds to touch everywhere.",
+   "common_mistakes": [
+    "Closing the phone with a cable trapped under the display",
+    "Not testing touch in the screen corners"
+   ],
+   "focus": [
+    "display",
+    "screws"
+   ],
+   "view": "together",
+   "source_ids": []
+  }
+ ]
+}

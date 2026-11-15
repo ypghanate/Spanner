@@ -1,4 +1,4 @@
-// SPANNER // RK61 repair hologram
+// SPANNER // keyboard repair hologram
 // A true-to-spec Royal Kludge RK61 built procedurally (every keycap, switch internals, sockets, LEDs,
 // plate with cut-outs, PCB, battery, case), playing the knowledge-base repair step by step with animated
 // tools, "what can go wrong" demos, voice narration and voice commands, in a Jarvis-style HUD.
@@ -199,7 +199,7 @@ function pcbTexture(pack, width, depth) {
     for (const [dx, dz] of [[-0.38, 0.2], [0.26, 0.38]]) { g.beginPath(); g.arc(px(k.x + dx), pz(k.z + dz), 9, 0, 7); g.fill(); }
   }
   g.fillStyle = "#111"; g.fillRect(px(-4.6), pz(-0.9), 150, 100);
-  g.fillStyle = "#e9efe9"; g.font = "bold 30px monospace"; g.fillText("RK61  REV 2.1  HOT-SWAP  3/5-PIN", 70, H - 34);
+  g.fillStyle = "#e9efe9"; g.font = "bold 30px monospace"; g.fillText("REV 2.1  HOT-SWAP  3/5-PIN", 70, H - 34);
   g.fillText("BAT 1450mAh", px(-8.2), pz(0.2));
   const t = new THREE.CanvasTexture(c); t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; return t;
 }
@@ -763,8 +763,15 @@ async function typeText(el, text) {
 }
 // ---- the five chapters of the Figma "Laptop companion": the real procedure's steps are grouped into them by kind
 // A plan Claude wrote for a fault that is not about one key (power, backlight) has no "{K} key".
-const KEYL = () => (plan?.generated && !plan.target_key ? "keyboard" : pack?.keys?.[brokenKey]?.label ?? brokenKey);
-const fillK = (t) => String(t ?? "").replaceAll("{K}", KEYL());
+// The key is only named once the person said which one (or the camera found the gap): until then "the key", never a guess.
+let keyKnown = !!QP.get("key");
+const KEYL = () => (plan?.generated && !plan.target_key ? "keyboard" : keyKnown ? pack?.keys?.[brokenKey]?.label ?? brokenKey : "the key");
+const fillK = (t) => {
+  const s = String(t ?? "");
+  if (keyKnown || (plan?.generated && !plan.target_key)) return s.replaceAll("{K}", KEYL());
+  return s.replaceAll("the {K} ", "the ").replaceAll("{K} keycap", "the keycap").replaceAll("{K} key", "the key").replaceAll("{K} switch", "the switch")
+    .replaceAll("Test {K}", "Test it").replaceAll("Give {K} a", "Give it a").replaceAll("{K} works", "it works").replaceAll("{K}", "the key");
+};
 const DEFAULT_STAGES = [
   { name: "Unplug", kinds: ["cable-out"], head: ["Start with", "the keyboard."], helper: "Your phone stays on camera and voice.\nYour laptop follows the same repair.",
     line: "Unplug your keyboard first.\nThen we’ll focus on the {K} key.", title: "Keyboard overview", mode: "keyboard overview", foot: "The 3D view follows at your pace." },
@@ -1034,7 +1041,7 @@ function showSide(tab) {
   $("side").dataset.tab = tab; $("side").style.display = "block"; $("insp").style.display = "none";
   const S = pack.specs || {};
   if (tab === "specs") {
-    $("sideh").textContent = "SPECIFICATIONS · " + (S.product_name || "RK61");
+    $("sideh").textContent = "SPECIFICATIONS · " + (S.product_name || "KEYBOARD");
     $("sidebody").innerHTML = `<table>${(S.specs || []).map((s) => `<tr><td>${s.name}</td><td>${s.value} ${s.unit || ""}<br><a class="src" href="${s.source_url}" target="_blank">${host(s.source_url)} ↗</a></td></tr>`).join("")}</table>
       <p style="margin-top:10px">${S.official_product_url ? `<a href="${S.official_product_url}" target="_blank">Official product page ↗</a> · ` : ""}${S.manual_url ? `<a href="${S.manual_url}" target="_blank">User manual (PDF) ↗</a>` : ""}</p>
       <p class="src">Specs researched live with Linkup; every value links to where it was read.</p>`;
@@ -1262,7 +1269,7 @@ function closePanels() { clearTimeout(verifyTimer); shopReq++; for (const id of 
 let shopReq = 0, verifyTimer = null;
 const cites = (d) => (d.sources?.length ? `<div class="cites">LINKUP READ ${d.sources_count} PAGES · ${d.sources.slice(0, 8).map((x) => `<a href="${esc(x.url)}" target="_blank">${esc(hostOf(x.url))} ↗</a>`).join("")}</div>` : "");
 function verifyBox(v) {
-  if (!v || v.status === "researching") return `<div class="verify pending"><div class="vh">LINKUP AGENT · VERIFYING<span class="dots"></span></div><div class="meta">checking fit on 2+ independent sites · safety recalls (last 2 years) · price of a new RK61 · repair or replace</div></div>`;
+  if (!v || v.status === "researching") return `<div class="verify pending"><div class="vh">LINKUP AGENT · VERIFYING<span class="dots"></span></div><div class="meta">checking fit on 2+ independent sites · safety recalls (last 2 years) · price of a new keyboard · repair or replace</div></div>`;
   if (v.status !== "ready" || !v.card) return "";
   const c = v.card, dec = c.decision;
   return `<div class="verify"><div class="vh">✓ VERIFIED BY THE LINKUP AGENT${v.fresh ? "" : " · " + esc(c.as_of).toUpperCase()}${v.refreshing ? " · REFRESHING" : ""}</div>
@@ -1307,8 +1314,8 @@ async function openShop(raw, auto = false, refresh = false) {
     const autoTag = auto ? `<span class="auto">● SPANNER STARTED THIS ON ITS OWN</span>` : "";
     const img = (u) => (u ? `<img src="${esc(u)}" referrerpolicy="no-referrer" onerror="this.remove()">` : "");
     if (d.kind === "keyboard") {
-      const ri = d.repair_instead ? `<div class="verify"><div class="vh">BEFORE YOU BUY · FIXING YOUR RK61 (LINKUP AGENT, ${esc(d.repair_instead.as_of).toUpperCase()})</div><div class="dec">${esc(d.repair_instead.headline).replace(/^(Repair it:)/, "<b>$1</b>")}</div></div>` : "";
-      el.innerHTML = `<h3>OTHER KEYBOARDS · VS YOUR RK61${autoTag}</h3><div class="sub">${src}</div>${ri}<div class="grid">${d.items.map((k, i) => `
+      const ri = d.repair_instead ? `<div class="verify"><div class="vh">BEFORE YOU BUY · FIXING YOUR KEYBOARD (LINKUP AGENT, ${esc(d.repair_instead.as_of).toUpperCase()})</div><div class="dec">${esc(d.repair_instead.headline).replace(/^(Repair it:)/, "<b>$1</b>")}</div></div>` : "";
+      el.innerHTML = `<h3>OTHER KEYBOARDS · VS YOUR KEYBOARD${autoTag}</h3><div class="sub">${src}</div>${ri}<div class="grid">${d.items.map((k, i) => `
         <div class="it" style="animation-delay:${i * 70}ms">${img(k.image_url)}
           <div class="nm">${esc(k.name)}</div><div class="pr">${moneyGbp(k)}</div>
           <ul>${(k.pros || []).map((x) => `<li class="p">${esc(x)}</li>`).join("")}${(k.cons || []).map((x) => `<li class="c">${esc(x)}</li>`).join("")}</ul>
@@ -1317,15 +1324,15 @@ async function openShop(raw, auto = false, refresh = false) {
       narrate(`I found ${d.items.length} alternatives.${c ? ` The cheapest is the ${c.name} at about £${Math.round(c.price_gbp)}.` : ""}${d.repair_instead ? " But fixing yours is far cheaper." : ""}`);
     } else {
       const fit = d.items.filter((o) => o.compatible);
-      el.innerHTML = `<h3>REPLACEMENT ${esc(d.item.split(" (")[0]).toUpperCase()} · FOR YOUR RK61${autoTag}</h3><div class="sub">${src}</div><div id="vbox">${verifyBox(verified)}</div><div class="sub">MORE OPTIONS · QUICK SEARCH</div><div class="grid">${d.items.map((o, i) => `
+      el.innerHTML = `<h3>REPLACEMENT ${esc(d.item.split(" (")[0]).toUpperCase()} · FOR YOUR KEYBOARD${autoTag}</h3><div class="sub">${src}</div><div id="vbox">${verifyBox(verified)}</div><div class="sub">MORE OPTIONS · QUICK SEARCH</div><div class="grid">${d.items.map((o, i) => `
         <div class="it" style="animation-delay:${i * 70}ms">${img(o.image_url)}
           <div class="nm">${esc(o.name)}</div><div class="pr">${moneyGbp(o)}</div><div class="rt">${esc(o.retailer)}</div>
-          <span class="badge ${o.compatible ? "ok" : "no"}">${o.compatible ? "✓ FITS YOUR RK61" : "✗ WON'T FIT"}</span>
+          <span class="badge ${o.compatible ? "ok" : "no"}">${o.compatible ? "✓ FITS YOUR KEYBOARD" : "✗ WON'T FIT"}</span>
           <div class="why">${esc(o.compatibility)}</div>
           <a href="${esc(o.url)}" target="_blank">${esc(hostOf(o.url))} ↗</a></div>`).join("")}</div>${cites(d)}`;
       if (!spoken) {
         const c = fit.filter((o) => o.price > 0).sort((a, b) => a.price - b.price)[0];
-        narrate(`${auto ? "Your old switch is out, so you'll need a new one. " : ""}${fit.length} of ${d.items.length} fit your RK61.${c ? ` Cheapest that fits: ${money(c.price, c.currency)}, from ${c.retailer}.` : ""} I'm verifying them now.`);
+        narrate(`${auto ? "Your old switch is out, so you'll need a new one. " : ""}${fit.length} of ${d.items.length} fit your keyboard.${c ? ` Cheapest that fits: ${money(c.price, c.currency)}, from ${c.retailer}.` : ""} I'm verifying them now.`);
       }
     }
   } catch (e) {
@@ -1361,9 +1368,10 @@ async function loadPlan(d) {
   await applyState({ ...INITIAL }, 0);          // restores the old key's cap and switch while brokenKey still points at it
   plan = d.plan; card = d.parts_card || null; chosen = true;
   brokenKey = pack.keys[d.broken_key] ? d.broken_key : "F"; K = pack.keys[brokenKey];
+  keyKnown = !!(plan.generated && plan.target_key);   // only a key the person named counts
   for (const s of plan.steps) if (!s.kind) s.kind = "other";
   warnedSteps.clear(); world = { ...INITIAL }; agree = 0; lastDoneStep = -1; stepIdx = -1; finished = false;
-  $("sessTitle").textContent = plan.generated ? plan.title || "Repair" : KEYL() + " key replacement";
+  $("sessTitle").textContent = plan.generated ? plan.title || "Repair" : keyKnown ? KEYL() + " key replacement" : "Keyboard repair";
   buildStages(); setReady(); setMode("assembled");
   await rotateTo("iso");
 }
@@ -1434,13 +1442,13 @@ async function coachTick() {
 }
 
 let autoShopped = false;
-const AUTO_PART = { dead: "replacement switch for my RK61", sticky: "replacement switch for my RK61",
-  missing: "replacement keycaps for my RK61", spacebar: "replacement stabilizers for my RK61", no: "a replacement USB-C cable for my RK61" };
+const AUTO_PART = { dead: "replacement switch", sticky: "replacement switch",
+  missing: "replacement keycaps", spacebar: "replacement stabilizers", no: "a replacement USB-C cable" };
 function maybeAutoShop(c) {
   const kind = plan.steps[c.step_index - 1]?.kind;
   if (autoShopped || !kind) return;
   if ((kind === "switch-pull" && c.step_status === "done") || ["socket-inspect", "new-switch-inspect", "stabilizer"].includes(kind)) {
-    autoShopped = true; openShop(AUTO_PART[plan?.fault_signature?.split("-")[0]] || "replacement switch for my RK61", true);
+    autoShopped = true; openShop(AUTO_PART[plan?.fault_signature?.split("-")[0]] || "replacement switch", true);
   }
 }
 // the key the camera sees missing becomes the key we repair (two frames must agree; exact legend match only)
@@ -1452,7 +1460,8 @@ function keyIdForLegend(legend) {
   return pack.keys[alias[L]] ? alias[L] : null;
 }
 function setBrokenKey(id, why) {
-  if (!pack.keys[id] || id === brokenKey) return;
+  if (!pack.keys[id] || (id === brokenKey && keyKnown)) return;
+  keyKnown = true;
   brokenKey = id; applyState(INITIAL, 0); clearTags(); clearArrow();
   select(null); setHighlight([`keycap_${id}`]); pulseT0 = performance.now(); focusPart(`keycap_${id}`);
   $("sk").textContent = `KEY ${pack.keys[id].label}`; showTag(`keycap_${id}`, `${pack.keys[id].label} · THIS IS THE KEY WE FIX`, "ok", 1.2);
@@ -1700,8 +1709,8 @@ try {
 pack = packJson; plan = planJson.plan; card = planJson.parts_card || null;
 brokenKey = QP.get("key") || planJson?.broken_key || "F"; K = pack.keys[brokenKey]; if (!K) { brokenKey = "F"; K = pack.keys.F; }
 for (const s of plan.steps) if (!s.kind) s.kind = "other";
-$("sessTitle").textContent = KEYL() + " key replacement";
-$("bootmsg").textContent = "Building " + (pack.object || "the model"); $("bootbar").style.width = "40%";
+$("sessTitle").textContent = keyKnown ? KEYL() + " key replacement" : "Keyboard repair";
+$("bootmsg").textContent = "Building the 3D model"; $("bootbar").style.width = "40%";
 buildKeyboard(); buildTools();
 tools.plug.visible = true; tools.plug.position.copy(plugPos("in"));
 for (const g of Object.keys(CALLOUT)) {
