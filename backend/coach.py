@@ -1113,6 +1113,12 @@ def mount(app) -> None:
                 tts.start(line)          # generated once, then served from the disk cache in ~50 ms
 
     @app.on_event("startup")
+    async def _warm_rag() -> None:      # chromadb + its embedding model: loaded in the background, never blocking the import or the first request
+        from .brain.rag import warm as warm_rag
+
+        asyncio.get_running_loop().run_in_executor(None, warm_rag)
+
+    @app.on_event("startup")
     async def _warm_plans() -> None:   # every fault class planned before anyone asks: planning becomes instant
         from .planner import warm
 
