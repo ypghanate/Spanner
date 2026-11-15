@@ -16,7 +16,8 @@ import json
 import os
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 from functools import lru_cache
 
 from fastapi import APIRouter, HTTPException
@@ -25,6 +26,54 @@ from pydantic import BaseModel, Field
 router = APIRouter(prefix="/coach", tags=["shop"])
 MODEL = "Royal Kludge RK68"
 _pool = ThreadPoolExecutor(max_workers=8)
+_search_pool = ThreadPoolExecutor(max_workers=4)
+CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "shop_cache"
+CACHE_TTL_S = 6 * 3600          # web prices move slowly; the demo must survive restarts
+ENRICH_BUDGET_S = 4.0           # wait this long for photos and missing prices, then answer and finish in the background
+_inflight: set[str] = set()
+
+
+def _cache_file(key: str) -> Path:
+    return CACHE_DIR / (re.sub(r"[^a-z0-9]+", "-", key.lower()).strip("-")[:80] + ".json")
+
+
+def _cache_get(key: str) -> dict | None:
+    hit = _cache.get(key)
+    if hit and time.time() - hit[0] < CACHE_TTL_S:
+        return hit[1]
+    f = _cache_file(key)
+    if f.exists() and time.time() - f.stat().st_mtime < CACHE_TTL_S:
+        try:
+            out = json.loads(f.read_text(encoding="utf-8"))
+            _cache[key] = (f.stat().st_mtime, out)
+            return out
+        except Exception:
+            return None
+    return None
+
+
+def _cache_put(key: str, out: dict) -> None:
+    _cache[key] = (time.time(), out)
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        _cache_file(key).write_text(json.dumps(out), encoding="utf-8")
+    except Exception as e:
+        print(f"shop cache write failed: {e}")
+
+
+def prefetch(text: str) -> None:
+    """Search ahead of the question (a repair was just planned): by the time they ask, the answer is cached."""
+    kind, item = classify(text)
+    key = f"{kind}|{item}"
+    if _cache_get(key) or key in _inflight:
+        return
+
+    def run():
+        try:
+            shop(text)
+        except Exception as e:
+            print(f"shop prefetch '{text}' failed: {e}")
+    _pool.submit(run)
 _cache: dict[str, tuple[float, dict]] = {}
 
 PARTS = [  # (spoken words, part to search for)
@@ -200,22 +249,27 @@ def _enrich(item: dict) -> dict:
 def _structured(query: str, schema) -> tuple[dict, list[dict]]:
     """Linkup structured search; standard first, then once more, then deep (results vary run to run).
     Returns (data, sources) - the sources are the pages Linkup read, shown as citations."""
-    last: dict = {}
-    sources: list[dict] = []
-    for depth in ("standard", "standard", "deep"):
+    def one(depth: str):
         try:
             res = _linkup().search(query=query, depth=depth, output_type="structured",
                                    structured_output_schema=schema, include_sources=True)
         except Exception as e:
             print(f"linkup {depth} search failed: {e}")
-            continue
-        last = _data(res)
-        sources = [{"title": getattr(x, "name", "") or "", "url": getattr(x, "url", "")}
-                   for x in (getattr(res, "sources", None) or []) if getattr(x, "url", "")]
-        items = next(iter(last.values()), []) if isinstance(last, dict) else []
-        if any(str(i.get("url", "")).startswith("http") for i in items):
-            return last, sources
-    return last, sources
+            return {}, [], False
+        data = _data(res)
+        srcs = [{"title": getattr(x, "name", "") or "", "url": getattr(x, "url", "")}
+                for x in (getattr(res, "sources", None) or []) if getattr(x, "url", "")]
+        items = next(iter(data.values()), []) if isinstance(data, dict) else []
+        return data, srcs, any(str(i.get("url", "")).startswith("http") for i in items)
+
+    # two standard searches side by side (results vary run to run): the first good one wins; deep only if both fail
+    last: tuple = ({}, [], False)
+    for fut in as_completed([_search_pool.submit(one, "standard") for _ in range(2)]):
+        last = fut.result()
+        if last[2]:
+            return last[0], last[1]
+    data, srcs, _ok = one("deep")
+    return (data, srcs) if data else (last[0], last[1])
 
 
 def _search_parts(part: str) -> tuple[list[dict], list[dict]]:
@@ -261,11 +315,19 @@ def _search_keyboards() -> tuple[list[dict], list[dict]]:
 def shop(text: str) -> dict:
     kind, item = classify(text)
     key = f"{kind}|{item}"
-    hit = _cache.get(key)
-    if hit and time.time() - hit[0] < 1800:
+    hit = _cache_get(key)
+    if hit and not hit.get("partial"):
         if kind == "part":
             verified_status(item)
-        return {**hit[1], "cached": True}
+        return {**hit, "cached": True}
+    _inflight.add(key)
+    try:
+        return _shop_live(kind, item, key)
+    finally:
+        _inflight.discard(key)
+
+
+def _shop_live(kind: str, item: str, key: str) -> dict:
     t0 = time.perf_counter()
     if kind == "part":
         verified_status(item)          # start the deep verification agent now; it runs while we search
@@ -281,18 +343,31 @@ def shop(text: str) -> dict:
         raise HTTPException(502, "Linkup found nothing for that, try asking again")
     if kind == "keyboard":
         items = [_clean_keyboard(i) for i in items]
-    items = list(_pool.map(_enrich, items))   # photo + price for each item, in parallel
+    # photo + price for each item, in parallel; answer after ENRICH_BUDGET_S and finish the rest in the background
+    futs = [_pool.submit(_enrich, i) for i in items]
+    done, pending = wait(futs, timeout=ENRICH_BUDGET_S)
+    out = _finish(kind, item, items, sources, t0, partial=bool(pending))
+    _cache_put(key, out)
+    if pending:
+        def complete():
+            wait(pending)
+            _cache_put(key, _finish(kind, item, items, sources, t0, partial=False))
+        _pool.submit(complete)
+    return out
+
+
+def _finish(kind: str, item: str, items: list[dict], sources: list[dict], t0: float, partial: bool) -> dict:
+    items = [dict(i) for i in items]
     for i in items:
         _to_gbp(i)
     items.sort(key=lambda i: (not i.get("compatible", True), i.get("price", 0) <= 0, i.get("price", 0)))
     out = {"kind": kind, "item": item, "items": items, "model": MODEL,
            "latency_ms": round((time.perf_counter() - t0) * 1000), "engines": ["linkup", "tavily"],
-           "sources": sources[:12], "sources_count": len(sources)}
+           "sources": sources[:12], "sources_count": len(sources), "partial": partial}
     if kind == "keyboard":             # "acts": before you buy a new one, what would fixing yours cost?
         card = _disk_card(PARTS[1][0])
         if card and card.get("decision"):
             out["repair_instead"] = {"headline": card["decision"]["headline"], "as_of": card["as_of"]}
-    _cache[key] = (time.time(), out)
     return out
 
 
@@ -363,12 +438,16 @@ async def shop_route(req: ShopRequest):
     return await asyncio.to_thread(shop, req.query)
 
 
-WARM = ["show me replacement switches", "show me replacement keycaps", "show me other keyboards"]  # parts ones also start verification
+WARM = ["show me replacement switches", "show me replacement keycaps", "show me replacement stabilizers",
+        "show me a replacement USB-C cable", "show me other keyboards"]  # parts ones also start verification
 
 
 def warm() -> None:
     """Run the demo's likely questions live once at startup, so the first ask on stage is instant."""
     for q in WARM:
+        kind, item = classify(q)
+        if _cache_get(f"{kind}|{item}"):
+            continue                     # already on disk from an earlier run: no need to pay for it again
         try:
             shop(q)
         except Exception as e:
