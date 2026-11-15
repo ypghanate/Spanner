@@ -75,10 +75,9 @@ else
   if lsof -nP -iTCP:"$BACKEND_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
     die "port $BACKEND_PORT is occupied by a server that is not Spanner"
   fi
-  if [[ ! -d "$ROOT/.venv" ]]; then
-    echo "Installing Python dependencies..."
-    (cd "$ROOT" && uv sync) || die "uv sync failed"
-  fi
+  # Always sync: it is a no-op when up to date, and picks up dependencies added by a pull (e.g. qrcode for the pairing QR).
+  echo "Checking Python dependencies..."
+  (cd "$ROOT" && uv sync --quiet) || die "uv sync failed"
   echo "Starting backend..."
   (
     cd "$ROOT"
