@@ -176,6 +176,20 @@
 
   /* the old button toolbar is voice-only: still wired (keys / voice / deep links) but not drawn */
   #legacy { display:none !important; }
+  /* fal: the current step drawn on the user's own keyboard (shown only when asked) */
+  #mine { left:50%; top:96px; transform:translateX(-50%); width:min(880px, calc(100% - 60px)); padding:12px 14px 10px; display:none; text-shadow:none; color:#e6fbff; z-index:6; }
+  #mine h3 { margin:0 0 8px; font:600 12px var(--mono); letter-spacing:.2em; color:var(--cyan); display:flex; justify-content:space-between; gap:12px; }
+  #mine h3 small { font:10.5px var(--mono); letter-spacing:.1em; opacity:.7; color:#e6fbff; }
+  #mine .media { position:relative; width:100%; aspect-ratio:16/9; background:#020a12; border:1px solid #0f2a35; border-radius:5px; overflow:hidden; }
+  #mine .media img, #mine .media video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; animation:rise .45s ease both; }
+  #mine .wait { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; font:12px var(--mono); letter-spacing:.16em; color:var(--cyan); text-align:center; padding:20px; }
+  #mine .wait .bar { width:220px; height:2px; background:#0f2a35; overflow:hidden; } #mine .wait .bar i { display:block; height:100%; width:40%; background:var(--cyan); animation:scan 1.4s ease-in-out infinite; }
+  @keyframes scan { 0% { transform:translateX(-100%); } 100% { transform:translateX(250%); } }
+  #mine .cap { margin-top:8px; font-size:13px; line-height:1.4; color:#bfeef7; }
+  #mine .meta { margin-top:4px; font:10.5px var(--mono); letter-spacing:.06em; opacity:.6; }
+  #mine .meta.bad { color:var(--danger); opacity:.9; }
+  #minebadge { display:none; margin:5px 2px 0; font:10px var(--mono); letter-spacing:.14em; color:#7fdcec; }
+  #minebadge.ready { color:var(--ok); } #minebadge.bad { color:var(--danger); }
 
   @media (max-height:860px) { #tools, #helper, #rule { display:none; } #head { font-size:30px; margin-top:14px; } #capt { margin-top:10px; padding:12px 14px; } #captText { font-size:16px; } #cta { margin-top:12px; height:50px; } #card { padding:20px; } }
   @media (max-height:720px) { #sd, #sm { display:none; } #head { font-size:26px; } #si { font-size:15px; } #stages .ss { display:none; } .stage { padding-top:14px; } #app { gap:12px; } }
