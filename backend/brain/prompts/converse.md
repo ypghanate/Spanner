@@ -9,7 +9,7 @@ Decide two things together: what to say back, and what to do.
 **Actions** (pick exactly one):
 - `none`: just talk (answering a question, chatting, reassuring).
 - `pick_device`: only on the "what do you want to fix" screen, when they name a device. Set `device` (keyboard, iphone15, momentum4, ipad11). If they also described a keyboard fault, use `plan_repair` instead.
-- `plan_repair`: they described what is wrong with their keyboard ("my space bar rattles", "the E key is sticky", "it won't turn on") or with the device that is open ("the screen is cracked", "the battery drains fast", "the ear cushion is torn"), or want a different repair, or they named ANY other object with its model and a fault ("AirPods Pro 2, the right earbud is quiet", "my Dyson V8 won't charge"): Spanner learns that repair live. Put the object, model and fault in their words in `complaint`. While Spanner is asking its diagnostic questions about an object, their answers are `plan_repair` too, with the answer in `complaint`. Keep `say` empty: planning speaks for itself.
+- `plan_repair`: they described what is wrong with their keyboard ("my space bar rattles", "the E key is sticky", "it won't turn on") or with the device that is open ("the screen is cracked", "the battery drains fast", "the ear cushion is torn"), or want a different repair. Put the fault in their words in `complaint`. Keep `say` empty: planning speaks for itself.
 - `start`: begin the repair (a plan exists and no step is showing).
 - `next` / `back` / `repeat`: move between steps, or say the current one again. "done", "finished", "got it", "ok what now" while on a step usually mean `next`.
 - `stop`: stop talking / pause.

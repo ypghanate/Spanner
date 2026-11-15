@@ -107,25 +107,7 @@ def _demo(session: str = "") -> dict:
     return _plans.get(session) or _default_demo()
 
 
-def _system_generic(demo: dict) -> str:
-    """The coach's instructions for an object Spanner learned live (no keyboard, no key gaps): the object, its steps,
-    what done looks like and the known mistakes; the frame is judged against the step on screen."""
-    plan = demo["plan"]
-    lines = [f"You are Spanner, a repair coach watching a live phone camera. The object: {plan['object']}; fault: {plan['fault']}.",
-             "The procedure (use these step numbers):"]
-    for s in plan["steps"]:
-        mistakes = "; ".join(s.get("common_mistakes", [])) or "none listed"
-        lines.append(f"{s['index']}. {s['instruction']}" + chr(10) + f"   DONE WHEN: {s['expected_visual_state']}" + chr(10) + f"   KNOWN MISTAKES: {mistakes}")
-    lines += ["From one frame, decide which step the user is on and whether it is done, from the state of the object, the "
-              "hands and the tools. The current step shown on screen is a hint, not the answer. Report a mistake only if you "
-              "can actually see it. Keep what_i_see and say short and concrete. This is not a keyboard: leave keyboard_visible "
-              "false, missing_keys empty and the gap fields empty."]
-    return chr(10).join(lines)
-
-
 def _system(demo: dict, rows: dict[str, list[str]] | None = None) -> str:
-    if demo.get("generic"):
-        return _system_generic(demo)
     plan = demo["plan"]
     key = demo.get("broken_key", "F")
     keyline = f" The broken key is '{key}'." if plan.get("target_key") or not plan.get("generated") else ""
@@ -231,7 +213,7 @@ def read_layout(data: bytes) -> dict:
 
 
 def _start_layout_read(session: str, data: bytes) -> None:
-    if session in _layouts or session in _layout_busy or _plans.get(session, {}).get("generic"):
+    if session in _layouts or session in _layout_busy:
         return
     _layout_busy.add(session)
 
@@ -1072,15 +1054,10 @@ async def say(text: str):
 
 def mount(app) -> None:
     """Serve the coach API, the hologram viewer and its 3D assets from the backend (one URL, one server)."""
-    from .objects import OBJECTS
-    from .objects import router as objects_router
     from .shop import router as shop_router
 
     app.include_router(router)
     app.include_router(shop_router)
-    app.include_router(objects_router)
-    OBJECTS.mkdir(parents=True, exist_ok=True)
-    app.mount("/data/objects", StaticFiles(directory=OBJECTS), name="objects")   # photos, twins, step pictures learned live
 
     import logging
 
