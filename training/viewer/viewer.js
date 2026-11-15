@@ -1092,7 +1092,7 @@ setInterval(() => {
   if (pill.dataset.s === st + voiceOn) return; pill.dataset.s = st + voiceOn;
   pill.className = st; $("captState").textContent = sp ? "Spanner is speaking" : micOn ? "Listening to you" : voiceOn ? "Voice on" : "Voice off · tap to wake";
 }, 250);
-$("captPill").onclick = () => { if (performance.now() < speakingUntil) stopSpeech(); else if (!micOn) $("mic").onclick(); };
+$("captPill").onclick = () => { if (performance.now() < speakingUntil) stopSpeech(); else if (!micOn && !phoneMic) $("mic").onclick(); };
 $("say").onclick = () => { const s = plan.steps[stepIdx]; if (!s) return; if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); } narrate(`Step ${s.index}. ${s.instruction}`); };
 
 const PART_WORDS = [[/socket/, () => `socket_${brokenKey}`], [/spring|inside the switch|open the switch/, () => `switch_${brokenKey}`], [/spare|new switch|replacement/, () => "switch_spare"],
@@ -1168,8 +1168,9 @@ const echoWords = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").sp
 const STOCK = /what do you want to fix|i'm spanner|i am spanner|show it to me|step by step|replacement parts or other keyboards|heads up|people often|searching live|taking it apart|putting it back|starting over|let me work out the fix|scan the code/i;
 /** Spanner hearing its own voice: its stock phrases, or most of the words are in what it is saying (or just said). */
 function isEcho(text, graceMs = 1500) {
+  if (performance.now() > speakingUntil + graceMs) return false;           // Spanner has been quiet: that was you
   if (STOCK.test(text)) return true;
-  if (performance.now() > speakingUntil + graceMs || !currentSpeech) return false;
+  if (!currentSpeech) return false;
   const a = echoWords(text), b = echoWords(currentSpeech); if (!a.size) return true;
   let n = 0; for (const w of a) if (b.has(w)) n++; return n / a.size >= 0.6;
 }
@@ -1179,13 +1180,14 @@ let lastActed = { text: "", t: 0 };
 function hearSpeech(text, graceMs = 1500) {
   const now = performance.now();
   if (!text || !text.trim()) return;
-  if (text.trim().toLowerCase() === lastActed.text && now - lastActed.t < 4000) return;   // the final of a command already run
-  if (now < speakingUntil + graceMs) {
+  const key = text.toLowerCase().replace(/[^a-z0-9' ]/g, " ").replace(/\s+/g, " ").trim();   // "Next." and "next" are one command
+  if (key === lastActed.text && now - lastActed.t < 4000) return;   // the final of a command already run (or the phone and the laptop both heard it)
+  if (now < speakingUntil) {                                        // Spanner is talking: only a clean short command barges in
     const q = text.match(QUICK);
     if (!q || isEcho(text, graceMs) || echoWords(currentSpeech).has(q[1].toLowerCase().split(" ")[0])) return;   // ignore silently
-    text = q[0];                                                     // a clean short command from you: barge in
-  } else if (isEcho(text, graceMs)) { heard(text, "ignored: that was me talking"); return; }
-  lastActed = { text: text.trim().toLowerCase(), t: now };
+    text = q[0];
+  } else if (isEcho(text, graceMs)) { heard(text, "ignored: that was me talking"); return; }   // just stopped: drop echoes, keep the rest
+  lastActed = { text: key, t: now };
   if (now < speakingUntil) stopSpeech();
   setListen(true, "Listening · " + text.trim().slice(0, 40)); command(text);
 }
@@ -1337,7 +1339,7 @@ async function loadPlan(d) {
   plan = d.plan; card = d.parts_card || null; chosen = true;
   brokenKey = pack.keys[d.broken_key] ? d.broken_key : "F"; K = pack.keys[brokenKey];
   for (const s of plan.steps) if (!s.kind) s.kind = "other";
-  warnedSteps.clear(); world = { ...INITIAL }; agree = 0; lastDoneStep = -1; stepIdx = -1; finished = false;
+  warnedSteps.clear(); world = { ...INITIAL }; agree = 0; lastDetect = 0; lastDoneStep = -1; stepIdx = -1; finished = false;
   $("sessTitle").textContent = plan.generated ? plan.title || "Repair" : KEYL() + " key replacement";
   buildStages(); setReady(); setMode("assembled");
   await rotateTo("iso");
@@ -1358,6 +1360,9 @@ async function requestRepair(raw) {
     if (d.status === "ready") {
       await loadPlan(d);
       heard(raw, `${plan.steps.length}-step plan`); caption(d.say); narrate(d.say + " Say “start” when you’re ready.", false);
+    } else if (d.status === "fallback") {
+      await loadPlan({ plan: planJson.plan, parts_card: planJson.parts_card, broken_key: planJson.broken_key });
+      heard(raw, "standard repair"); caption(d.say); narrate(d.say + " Say “start” when you’re ready.", false);
     } else {
       if (d.status === "clarify") clarifying = raw;
       setReady(); heard(raw, d.status); caption(d.say); narrate(d.say, false);
@@ -1424,9 +1429,10 @@ function keyIdForLegend(legend) {
   const alias = { return: "ENTER", esc: "ESC", escape: "ESC", space: "SPACE", spacebar: "SPACE", backspace: "BACKSPACE", tab: "TAB", caps: "CAPS", "caps lock": "CAPS", shift: "LSHIFT", ctrl: "LCTRL", control: "LCTRL", alt: "LALT", win: "WIN", fn: "FN", menu: "MENU" };
   return pack.keys[alias[L]] ? alias[L] : null;
 }
-function setBrokenKey(id, why) {
+async function setBrokenKey(id, why) {
   if (!pack.keys[id] || id === brokenKey) return;
-  brokenKey = id; applyState(INITIAL, 0); clearTags(); clearArrow();
+  await applyState({ ...INITIAL }, 0);      // put the old key's cap and switch back while brokenKey still points at it
+  brokenKey = id; K = pack.keys[id]; clearTags(); clearArrow();
   select(null); setHighlight([`keycap_${id}`]); pulseT0 = performance.now(); focusPart(`keycap_${id}`);
   $("sk").textContent = `KEY ${pack.keys[id].label}`; showTag(`keycap_${id}`, `${pack.keys[id].label} · THIS IS THE KEY WE FIX`, "ok", 1.2);
   narrate(`I can see the ${pack.keys[id].label} keycap is off. That's the key we're fixing.`); heard(why || "camera", "broken key → " + pack.keys[id].label);
@@ -1441,6 +1447,7 @@ function onMissingKeys(c) {
 }
 function onCoach(c) {
   $("camlat").textContent = `${(c.latency_ms / 1000).toFixed(1)} s${c.crop?.cropped ? " · zoomed" : ""}`;
+  if (!chosen) return;                       // no plan yet: nothing to follow (and no "tell me what's wrong" on every frame)
   onMissingKeys(c);
   $("camconfbar").style.width = Math.round(c.confidence * 100) + "%";
   const stepTxt = c.step_index > 0 ? ` · <b>STEP ${c.step_index}</b> ${c.step_status.replace("_", " ")}` : "";
@@ -1506,7 +1513,7 @@ async function showPair() {
 function hidePair() { pairRun++; $("pair").style.display = "none"; }
 function startRemote() {
   if (camOn) toggleCamera();
-  if (micOn) $("mic").onclick();   // the phone listens; this laptop's mic would only hear its own speaker
+  // the laptop keeps listening until the phone sends its first utterance (phone.html has no microphone; the Spanner app does)
   setMode("live · phone camera");
   $("cam").style.display = "block"; $("video").style.display = "none"; $("remoteImg").style.display = "block";
   if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); }
@@ -1515,13 +1522,19 @@ function startRemote() {
   remoteTick();   // does nothing if the loop is already running (saying "use my phone" twice must not start two)
 }
 function stopRemote() { remoteOn = false; hidePair(); $("cam").style.display = "none"; setLink(camOn ? "webcam" : "idle"); }
-let remoteLoop = false, lastDataAt = 0, pollFails = 0, lastUtterId = "";
+let remoteLoop = false, lastDataAt = 0, pollFails = 0, lastUtterId = "", lastAlive = 0, phoneMic = false, seeded = false;
 async function remoteTick() {
   if (remoteLoop) return; remoteLoop = true;
   while (remoteOn) {
     try {
       const d = await fetchJson(API + "/coach/latest?session=" + SESSION, 2500);
       pollFails = 0; let fresh = false;
+      if (!seeded) {              // after a reload the server still holds the last view/utterance: don't act on them
+        seeded = true; lastUtterId = d.utterance?.id || ""; lastViewTs = d.view?.ts || 0; lastSignalTs = d.signal?.ts || 0; lastAlive = d.alive || 0;
+        if (d.alive) lastDataAt = performance.now();
+        await new Promise((r) => setTimeout(r, 300)); continue;
+      }
+      if (d.alive && d.alive !== lastAlive) { lastAlive = d.alive; fresh = true; }   // a frame arrived, even if Claude is still reading it
       if (d.view && d.view.ts !== lastViewTs) {
         lastViewTs = d.view.ts; fresh = true; onCoach(d.view);
         const img = $("remoteImg"); img.style.display = "block"; img.src = API + "/coach/preview.jpg?session=" + SESSION + "&t=" + d.view.ts;   // what the phone sees
@@ -1529,6 +1542,7 @@ async function remoteTick() {
       // speech from the phone's microphone (transcribed on the laptop): the phone listens, this laptop speaks back
       if (d.utterance && d.utterance.id !== lastUtterId) {
         lastUtterId = d.utterance.id;
+        if (!phoneMic) { phoneMic = true; if (micOn) $("mic").onclick(); }   // the phone hears: this laptop's mic would only hear its own speaker
         hearSpeech(d.utterance.text, 6000);   // the phone may have heard our own voice: transcription arrives a few seconds late
       }
       if (d.signal && d.signal.ts !== lastSignalTs) { lastSignalTs = d.signal.ts; if (d.signal.signal === "stop") quiet("✋"); }
@@ -1695,7 +1709,7 @@ function showPicker() {
   pickOpen = true; $("pick").style.display = "flex"; $("pick").style.opacity = 1; $("pickecho").textContent = ""; $("pickq").textContent = "What do you want to fix?";
   narrate("What do you want to fix?");
 }
-const FAULT_WORDS = /(keys?|keycaps?|space ?bar|enter|shift|backspace|switch(es)?|cable|chargw*|power|lights?|backlight|led|dead|broken|stuck|sticky|rattlw*|wobblw*|loose|missing|cracked|flickerw*|double|chatterw*|not (working|registering|typing)|doesn'?t|won'?t)/i;
+const FAULT_WORDS = /(\bkeys?\b|keycaps?|space ?bar|enter|shift|backspace|switch(es)?|cable|charg\w*|power|lights?|backlight|led|dead|broken|stuck|sticky|rattl\w*|wobbl\w*|loose|missing|cracked|flicker\w*|double|chatter\w*|not (working|registering|typing)|doesn'?t|won'?t)/i;
 async function chooseDevice(dev, raw = "") {
   if (!pickOpen) return;
   pickOpen = false; $("pick").style.opacity = 0; setTimeout(() => { $("pick").style.display = "none"; }, 600);
@@ -1710,7 +1724,7 @@ async function pickByVoice(raw) {   // free speech -> which device; Claude decid
   $("pickecho").textContent = "“" + raw.trim() + "”";
   if (!dev) {
     try {
-      const r = await fetch(API + "/coach/device", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: raw }) });
+      const r = await fetchT(API + "/coach/device", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: raw }) }, 12000);
       const j = r.ok ? await r.json() : {}; dev = j.device && j.device !== "none" ? j.device : null;
       if (!dev) { $("pickq").textContent = j.say || "I can fix a keyboard, an iPhone 15, Momentum 4 headphones or an iPad. Which one?"; narrate($("pickq").textContent); return; }
     } catch { $("pickq").textContent = "Say: keyboard, iPhone, headphones, or iPad."; return; }

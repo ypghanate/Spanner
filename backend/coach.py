@@ -269,6 +269,40 @@ _frame_inflight: set[str] = set()        # sessions with a vision call running: 
 
 
 _previews: dict[str, bytes] = {}      # newest phone frame per session (JPEG), shown live in the viewer
+# The missing key, once the zoomed second look has confirmed it twice, holds for the rest of the repair: the gap stays
+# visible from the keycap pull to the keycap place, and re-reading it on every frame cost a second Sonnet call (~3 s).
+_gap_cache: dict[str, dict] = {}
+GAP_CACHE_TTL_S = 180
+
+
+def _cached_gap(session: str, first_pass: str | None) -> str | None:
+    g = _gap_cache.get(session)
+    if not g or g["n"] < 2 or time.time() - g["ts"] > GAP_CACHE_TTL_S:
+        return None
+    return g["key"] if first_pass in (None, g["key"]) else None     # a different first-pass read re-opens the question
+
+
+def _remember_gap(session: str, key: str) -> None:
+    g = _gap_cache.get(session)
+    _gap_cache[session] = {"key": key, "n": g["n"] + 1 if g and g["key"] == key else 1, "ts": time.time()}
+    _verify_miss.pop(session, None)
+
+
+# When neither pass can name the key, the second look fails frame after frame (a hand over the gap, a bad angle) and
+# costs ~2 s each time. After two misses in a row it rests for a while; the first pass alone keeps the step tracking.
+_verify_miss: dict[str, dict] = {}
+VERIFY_REST_S = 45
+
+
+def _verify_resting(session: str) -> bool:
+    m = _verify_miss.get(session)
+    return bool(m and m["n"] >= 2 and time.time() - m["ts"] < VERIFY_REST_S)
+
+
+def _verify_missed(session: str) -> None:
+    m = _verify_miss.get(session)
+    n = m["n"] + 1 if m and time.time() - m["ts"] < 2 * VERIFY_REST_S else 1
+    _verify_miss[session] = {"n": n, "ts": time.time()}
 
 
 @router.get("/preview.jpg")
@@ -291,6 +325,7 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
     if session in _frame_inflight:       # the previous frame is still being read: never stack Claude calls behind it
         raise HTTPException(429, "still reading the previous frame")
     _previews[session] = data            # what the phone sees, for the laptop viewer's camera panel
+    _latest.setdefault(session, {})["alive"] = time.time()     # the phone is sending: liveness, before any slow call
     if session not in _plans:
         # The person hasn't said what is wrong yet, so there is no repair to check frames against (and no Claude call
         # to pay for). Answer with an idle view so the phone link still shows as live.
@@ -300,18 +335,40 @@ async def frame(image: UploadFile = File(...), current_step: int = Form(0), sess
         return out
     _frame_inflight.add(session)
     t0 = time.perf_counter()
+    timing: dict[str, int] = {}
     try:
         data, crop = await asyncio.to_thread(_keyboard_crop, data)
+        timing["crop"] = round((time.perf_counter() - t0) * 1000)
+        t1 = time.perf_counter()
         view = await asyncio.to_thread(_ask, base64.standard_b64encode(data).decode(), current_step, session)
+        timing["ask"] = round((time.perf_counter() - t1) * 1000)
         gap_suspected = bool(view.missing_keys or view.gap_left or view.gap_right or view.gap_x is not None)
-        verified = await asyncio.to_thread(verify_gap, data, view) if gap_suspected else None
+        first_pass = resolve_gap(view)               # a layout-validated read (both neighbours in one row) counts
+        if first_pass:
+            _remember_gap(session, first_pass)
+        cached = _cached_gap(session, first_pass) if gap_suspected else None
+        verified = None
+        if gap_suspected and not cached and not _verify_resting(session):
+            t2 = time.perf_counter()
+            verified = await asyncio.to_thread(verify_gap, data, view)
+            timing["verify"] = round((time.perf_counter() - t2) * 1000)
+            if verified:
+                _remember_gap(session, verified)
+            else:
+                _verify_missed(session)
+        elif gap_suspected and not cached:
+            crop["verify_resting"] = True
     finally:
         _frame_inflight.discard(session)
-    if verified:
+    if cached:
+        view.missing_keys = [cached]
+        crop["verified"] = "cached"
+    elif verified:
         view.missing_keys = [verified]
         crop["verified"] = True
     elif gap_suspected and not view.missing_keys:
         crop["verified"] = False
+    crop["timing_ms"] = timing
     latency = round((time.perf_counter() - t0) * 1000)
     from training.feedback import record_live_mistake, record_stage_timing
     from training.kb import current_repair_id

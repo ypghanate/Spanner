@@ -160,18 +160,29 @@ cannot do properly in one night. We spent the night on the data, not on hyperpar
 every 10-second window Claude labelled in a video, and for the step it falls in plus its neighbours, the status
 follows from the procedure's time ranges (before the step: not started; inside: in progress; after: done;
 inside with a warning: error, with the mistake named). Split is by video, never by frame, so evaluation is
-honest. Tonight's build: 610 rows, RK61 only, 60 of them errors, synthetic rows clearly marked. Live session
-frames are held out for evaluation and never trained on. Every row carries its source, so a judge can ask
+honest. Tonight's build: 907 rows, RK61 only (745 train, 162 held out; 137 of them errors), synthetic rows
+clearly marked; run 2 trains on a class-balanced 1,052-row version. Every row carries its source, so a judge can ask
 "how much of this is real?" and get an answer.
 
 **In the product.** `training/step_tracker.py`: the same system prompt and input format in training,
-evaluation and live; a strict 0.8-second budget; on timeout or bad JSON, Claude Haiku answers instead and the
-fallback is counted. The camera panel shows which judge answered and how long it took.
+evaluation and live; the fine-tuned judge is a backend (`local`: the AutoScientist adapter merged into the
+cached Qwen3.5-2B), Claude Haiku is the automatic fallback and the fallback is counted. Honest caveat: on this
+ARM laptop with no GPU the 2B model takes 9 s per decision, so the demo keeps Claude as the default and the
+local judge is opt-in. On a GPU it answers in well under a second; the architecture is the point.
 
-**The evaluation we show.** On held-out real frames: step accuracy, mistake recall, latency p50, cost per
-thousand decisions, works-offline yes/no, for the Adaption model and for Claude Haiku, with the sample size.
-Logged to MLflow, shown on the Databricks dashboard as `gold_eval_scoreboard`. [Fill in: n, accuracy,
-recall, latency, Adaptive Data quality before/after, base model, iterations, win rate.]
+**The evaluation we show** (162 held-out rows, split by video, never trained on; MLflow runs; the dashboard
+chart "before, after Adaption, and Claude Haiku"):
+
+| Judge | Step accuracy | Macro F1 | Mistakes caught | p50 per decision |
+|---|---|---|---|---|
+| Qwen3.5-2B, untouched (40 rows) | 0.38 | 0.23 | 0.00 | 8.3 s (CPU) |
+| Qwen3.5-2B + Adaption, run 1 | 0.58 | 0.58 | 0.45 | 9.3 s (CPU) |
+| Claude Haiku 5.5 | 0.72 | 0.74 | 0.83 | 1.4 s (API) |
+
+Adaptive Data graded the set C → A (6.0 → 9.6). Run 1 (`bcb8e3a0`): LoRA r 16, one epoch, one iteration of
+two completed, win rate 0.38. The spoken line is honest: "one round of Adaption took a 2B model from guessing
+to catching nearly half the mistakes; run 2 is training on balanced data for three epochs; Claude is still
+ahead today, and the next run trains on tonight's live mistakes."
 
 **What we rejected.** Fine-tuning the vision model itself: the right long-term move, but the real image data
 does not exist yet at the scale it needs, and it cannot run on a laptop without a GPU. Training on synthetic
