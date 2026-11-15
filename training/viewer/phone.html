@@ -15,13 +15,14 @@
 <body>
 <video id="v" autoplay playsinline muted></video>
 <div id="box"></div>
-<div id="hud"><span class="dot" id="dot"></span><span id="st">starting</span></div>
+<div id="hud"><span class="dot" id="dot"></span><span id="st">starting</span><span id="tl" style="margin-left:auto;color:var(--warn);white-space:nowrap"></span></div>
 <div id="start"><b>Spanner phone camera</b><small>Point the rear camera at the keyboard and your hands. Keep the whole keyboard in view and the screen on.</small><button id="go">Start the camera</button></div>
 <script type="module">
 import { watchPalm } from "./gesture.js";
+import { watchLight, videoLuma } from "./torch.js";
 const QP = new URLSearchParams(location.search), S = QP.get("s") || "phone", API = "";
 const v = document.getElementById("v"), st = document.getElementById("st"), dot = document.getElementById("dot"), box = document.getElementById("box");
-const c = document.createElement("canvas");
+const c = document.createElement("canvas"), lc = document.createElement("canvas");
 let busyFrame = false, busyPose = false, nFrames = 0, lastLat = 0, frameErr = "", lastOk = 0, wake = null, running = false;
 
 /** fetch with a deadline: a dead Wi-Fi link must not leave the loops waiting for minutes with the HUD looking fine */
@@ -72,6 +73,23 @@ async function frameLoop() {
   }
   setTimeout(frameLoop, 1500);
 }
+// 🔦 the phone's flashlight follows the room: on when it is very dark (the coach cannot read a keycap it cannot see), off when
+// the room is bright enough again. Android Chrome only: iPhone Safari has no torch control, and then this stays silent.
+// ?torch=0 turns it off; ?dark=0.17 and ?light=0.30 set the two brightness limits; ?torchdebug=1 shows the live brightness.
+let light = null;
+function startLight() {
+  if (light || QP.get("torch") === "0") return;
+  const opts = {}; if (QP.get("dark")) opts.dark = +QP.get("dark"); if (QP.get("light")) opts.light = +QP.get("light");
+  const tl = document.getElementById("tl"), dbg = QP.get("torchdebug") === "1";
+  let lastLuma = null;
+  light = watchLight({
+    getTrack: () => v.srcObject && v.srcObject.getVideoTracks()[0],
+    sampleLuma: () => { if (!streaming()) return null; try { lastLuma = videoLuma(v, lc); } catch { return null; } return lastLuma; },
+    onChange: (i) => { tl.textContent = i.label ? "🔦 " + i.label : ""; },
+    opts,
+  });
+  if (dbg) setInterval(() => { const g = light.governor; tl.textContent = `lum ${lastLuma === null ? "–" : lastLuma.toFixed(2)} · ${g.state}${g.room !== undefined ? " · room " + g.room.toFixed(2) : ""}`; }, 400);
+}
 async function keepAwake() { try { wake = await navigator.wakeLock?.request("screen"); } catch { /* not supported or refused */ } }
 async function openCamera() {
   try {
@@ -86,7 +104,7 @@ document.addEventListener("visibilitychange", async () => { if (document.visibil
 document.body.addEventListener("click", () => { if (running && !streaming()) openCamera(); });
 document.getElementById("go").onclick = async () => {
   if (!(await openCamera())) return;
-  document.getElementById("start").remove(); running = true; if (QP.get("track") === "1") poseLoop(); frameLoop();   // the hologram stays still unless ?track=1
+  document.getElementById("start").remove(); running = true; startLight(); if (QP.get("track") === "1") poseLoop(); frameLoop();   // the hologram stays still unless ?track=1
   // ✋ raised open palm = "stop talking": the laptop picks the signal up from /coach/latest
   watchPalm(v, () => { fetch(API + "/coach/signal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: S, signal: "stop" }) }).catch(() => {}); st.textContent = "✋ stop sent"; });
   if (screen.orientation?.lock) screen.orientation.lock("landscape").catch(() => {});
