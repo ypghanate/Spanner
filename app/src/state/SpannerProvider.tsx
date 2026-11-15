@@ -453,17 +453,15 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
       interrupt: () => speech.current?.stop(),
       tapScreen: () => {
         const s1 = stateRef.current;
-        if (s1.speaking || laptopSpeaking.current || Date.now() - lastBotAt.current < 8000) {
-          // cut Spanner off (phone playback and the laptop's voice) and open the microphone right now
-          speech.current?.stop();
-          void client.current?.signal("stop").catch(() => {});
-          bargeHold.current = Date.now() + 6000;
-          laptopSpeaking.current = false;
-          patch({ speaking: false, transcriptWho: "you", userText: "" });
-          if (!s1.micMuted) void listener.current?.setMuted(false);
-        } else {
-          listener.current?.flush();   // "tap once you've explained it"
-        }
+        // Every tap cuts Spanner off: phone playback and the laptop's voice (a stop signal), no matter what the
+        // speaking flags say (they can lag behind the real audio). Then the microphone is open at once.
+        speech.current?.stop();
+        void client.current?.signal("stop").catch(() => {});
+        bargeHold.current = Date.now() + 6000;
+        laptopSpeaking.current = false;
+        patch({ speaking: false, transcriptWho: "you", userText: "" });
+        if (!s1.micMuted) void listener.current?.setMuted(false);
+        listener.current?.flush();   // "tap once you've explained it": only acts if they were mid-sentence
       },
       setBotMuted: (on) => {
         patch({ botMuted: on });
