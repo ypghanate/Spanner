@@ -557,7 +557,24 @@ class Signal(BaseModel):
 async def signal(sig: Signal):
     """The phone saw a gesture (✋ = stop talking); the laptop picks it up from /coach/latest."""
     _latest.setdefault(sig.session, {})["signal"] = {"signal": sig.signal, "ts": time.time()}
+    if sig.signal == "stop":
+        _speaking[sig.session] = 0.0   # the laptop is being cut off: don't keep the phone's mic muted for it
     return {"ok": True}
+
+
+@router.get("/signal/wait")
+async def signal_wait(session: str, since: float = 0.0, timeout: float = 20.0):
+    """Long poll for the phone's signals, so a tap that cuts Spanner off reaches the laptop in one round trip instead of
+    waiting for the next /coach/latest poll. since < 0 only returns the server's clock (to start listening from now)."""
+    if since < 0:
+        return {"now": time.time(), "signal": None}
+    deadline = time.time() + max(1.0, min(timeout, 25.0))
+    while time.time() < deadline:
+        sig = _latest.get(session, {}).get("signal")
+        if sig and sig["ts"] > since:
+            return {"now": time.time(), "signal": sig}
+        await asyncio.sleep(0.04)
+    return {"now": time.time(), "signal": None}
 
 
 class Speaking(BaseModel):

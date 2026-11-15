@@ -150,6 +150,7 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
   const phonePlaying = useRef(false);
   const bargeHold = useRef(0); // after a tap: ignore the old "laptop is speaking" until it clears (or this time passes)
   const lastStop = useRef(0);
+  const lastBotAt = useRef(0); // when Spanner last had something to say (its flags can lag behind the real audio)
   const speakingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Turn the laptop's latest coach view + step tracker into the screen state the Figma UI reads. */
@@ -208,6 +209,7 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
       project(v);
       if (v.say && v.say !== l.say) {
         l.say = v.say;
+        lastBotAt.current = Date.now();
         patch({ caption: v.say, transcriptWho: "spanner", speaking: true });
         if (speakingTimer.current) clearTimeout(speakingTimer.current);
         speakingTimer.current = setTimeout(() => patch({ speaking: false }), 4000);
@@ -262,6 +264,7 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
           // what Spanner answered to the last thing said (shown in the transcript; the laptop speaks it)
           if (d.reply && d.reply.id !== l.replyId) {
             l.replyId = d.reply.id;
+            if (d.reply.say?.trim()) lastBotAt.current = Date.now();
             if (d.reply.say?.trim()) patch({ caption: d.reply.say.trim(), transcriptWho: "spanner" });
           }
           // the laptop is talking: pause the phone's mic (it would only hear Spanner), resume when it stops
@@ -442,7 +445,7 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
       interrupt: () => speech.current?.stop(),
       tapScreen: () => {
         const s1 = stateRef.current;
-        if (s1.speaking || laptopSpeaking.current) {
+        if (s1.speaking || laptopSpeaking.current || Date.now() - lastBotAt.current < 8000) {
           // cut Spanner off (phone playback and the laptop's voice) and open the microphone right now
           speech.current?.stop();
           void client.current?.signal("stop").catch(() => {});

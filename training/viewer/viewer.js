@@ -1081,6 +1081,7 @@ function pickVoice() {
 }
 if ("speechSynthesis" in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
 // Spanner's voice: ElevenLabs through the backend (/coach/say), the browser's voice as fallback.
+let hushUntil = 0;   // after a tap that cut Spanner off, lines already on their way stay silent for a moment
 let elevenOK = false, speakingUntil = 0, sayAudio = null, currentSpeech = "";   // currentSpeech: for the echo filter
 fetchJson(API + "/coach/health", 4000).then((d) => { elevenOK = !!d.tts; }).catch(() => {});
 // While Spanner talks, the mic ignores what it hears (it would hear Spanner). That window must always end: the
@@ -1109,7 +1110,7 @@ function browserSay(text) {
 function narrate(text, show = true, tries = 0) {
   if (!text) return;
   if (show) caption(text);
-  if (!voiceOn || INSTANT) return;
+  if (!voiceOn || INSTANT || performance.now() < hushUntil) return;
   stopSpeech();
   if (!elevenOK) return browserSay(text);
   const a = new Audio(API + "/coach/say?text=" + encodeURIComponent(text));
@@ -1568,6 +1569,7 @@ function startRemote() {
   if (!voiceOn) { voiceOn = true; $("voice").classList.add("on"); }
   if (!remoteOn) { remoteOn = true; lastDataAt = 0; pollFails = 0; seen("Phone camera: waiting for frames."); setLink("waiting"); }
   if (linkState !== "live") showPair();
+  signalLoop();
   remoteTick();   // does nothing if the loop is already running (saying "use my phone" twice must not start two)
 }
 /** The phone hung up: end the guide here too and go back to the start (a fresh session, ready to pair again). */
@@ -1612,6 +1614,27 @@ async function onReply(r) {
   }
   if (r.say) narrate(r.say);   // a conversational answer (or the picker asking again)
 }
+// A tap on the phone cuts Spanner off: this long poll hears it within one round trip (the 300 ms poll below is the backup).
+let signalLoopOn = false;
+async function signalLoop() {
+  if (signalLoopOn) return; signalLoopOn = true;
+  let since = -1;
+  while (remoteOn) {
+    try {
+      const d = await fetchJson(`${API}/coach/signal/wait?session=${SESSION}&since=${since}&timeout=20`, 25000);
+      if (since < 0) { since = d.now; continue; }
+      const s = d.signal;
+      if (s && s.ts > since) {
+        since = s.ts;
+        if (s.ts !== lastSignalTs) {
+          lastSignalTs = s.ts;
+          if (s.signal === "stop") { hushUntil = performance.now() + 1500; quiet("✋"); } else if (s.signal === "end") endFromPhone();
+        }
+      }
+    } catch { await new Promise((r) => setTimeout(r, 500)); }
+  }
+  signalLoopOn = false;
+}
 async function remoteTick() {
   if (remoteLoop) return; remoteLoop = true;
   while (remoteOn) {
@@ -1631,7 +1654,7 @@ async function remoteTick() {
       }
       if (d.reply && d.reply.id !== lastReplyId) { lastReplyId = d.reply.id; onReply(d.reply); }
       reportState();
-      if (d.signal && d.signal.ts !== lastSignalTs) { lastSignalTs = d.signal.ts; if (d.signal.signal === "stop") quiet("✋"); else if (d.signal.signal === "end") endFromPhone(); }
+      if (d.signal && d.signal.ts !== lastSignalTs) { lastSignalTs = d.signal.ts; if (d.signal.signal === "stop") { hushUntil = performance.now() + 1500; quiet("✋"); } else if (d.signal.signal === "end") endFromPhone(); }
       if (poseTrack.on && d.pose && d.pose.ts !== lastPoseTs) { lastPoseTs = d.pose.ts; applyPose(d.pose); }
       if (fresh) { lastDataAt = performance.now(); if (linkState !== "live") hidePair(); }
       // staleness is judged on this laptop's own clock: no new photo for a few seconds means the phone stopped
