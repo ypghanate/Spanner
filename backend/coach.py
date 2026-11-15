@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIR = ROOT / "data" / "models" / "rk61"
 COACH_MODEL = os.getenv("COACH_MODEL", "claude-sonnet-5-5")  # Sonnet reads key legends far more reliably than Haiku (~3 s, thinking off)
+FAST_MODEL = os.getenv("COACH_FAST_MODEL", "claude-haiku-5-5")  # spoken-command intents, device choice, short answers: ~0.6 s
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
@@ -399,7 +400,7 @@ async def ask(q: Ask):
 
     def run() -> str:
         resp = _client().messages.create(
-            model=COACH_MODEL, max_tokens=250, thinking=_thinking(COACH_MODEL),
+            model=FAST_MODEL, max_tokens=250, thinking=_thinking(FAST_MODEL),
             system=[{"type": "text", "text": ctx + "\n\nNow answer the user's spoken question in at most 2 short, "
                      "concrete spoken sentences. No lists, no markdown.", "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": q.question}])
@@ -442,7 +443,7 @@ async def intent(req: IntentReq):
                 "none (noise, not addressed to Spanner). Fillers like ok, please, hey Spanner are ignored.")
     def run() -> Intent:
         resp = _client().beta.messages.parse(
-            model=COACH_MODEL, max_tokens=120, thinking=_thinking(COACH_MODEL),
+            model=FAST_MODEL, max_tokens=120, thinking=_thinking(FAST_MODEL),
             system=[{"type": "text", "text": sys_text, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": f"Current step on screen: {req.current_step}. Spoken: {req.text!r}"}],
             output_format=Intent)
@@ -520,7 +521,7 @@ async def device(req: DeviceReq):
     """Free speech -> which device Spanner should open (keyboard repair, or a hologram of the others)."""
     def run() -> DevicePick:
         resp = _client().beta.messages.parse(
-            model=COACH_MODEL, max_tokens=120, thinking=_thinking(COACH_MODEL),
+            model=FAST_MODEL, max_tokens=120, thinking=_thinking(FAST_MODEL),
             system="The user was asked 'What do you want to fix?'. Map their words to one device: keyboard (a mechanical "
                    "keyboard, RK61, a dead key, typing), iphone15 (phone, mobile, iPhone), momentum4 (headphones, "
                    "Sennheiser, earcups, headset), ipad11 (iPad, tablet). If it is none of these or unclear, 'none' with "
@@ -691,8 +692,30 @@ def mount(app) -> None:
     app.include_router(router)
     app.include_router(shop_router)
 
+    import logging
+
+    http_log = logging.getLogger("spanner.http")
+    if not http_log.handlers:
+        h = logging.StreamHandler(); h.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%H:%M:%S")); http_log.addHandler(h); http_log.setLevel(logging.INFO); http_log.propagate = False
+    QUIET = ("/coach/latest", "/coach/preview.jpg", "/coach/health", "/training/viewer/", "/data/models/")
+
+    @app.middleware("http")
+    async def _log_requests(request, call_next):   # what the demo actually did: every real call with its status and time
+        t0 = time.perf_counter()
+        resp = await call_next(request)
+        path = request.url.path
+        if not any(path.startswith(q) for q in QUIET):
+            http_log.info("%s %s %s %dms", request.method, path, resp.status_code, round((time.perf_counter() - t0) * 1000))
+        return resp
+
     @app.on_event("startup")
-    async def _warm_shop() -> None:   # (main.py already warms the YOLO detector)
+    async def _warm_detector() -> None:   # the coach's keyboard crop needs YOLO loaded: the first frame must not pay 15 s
+        from backend.vision import detect as det
+
+        asyncio.get_running_loop().run_in_executor(None, det.warm)
+
+    @app.on_event("startup")
+    async def _warm_shop() -> None:
         if os.getenv("SHOP_WARMUP", "1") == "1" and os.getenv("LINKUP_API_KEY"):   # live Linkup + Tavily, cached for the demo
             from .shop import warm as warm_shop
 

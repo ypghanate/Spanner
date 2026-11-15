@@ -1740,19 +1740,13 @@ if (INSTANT || QP.get("wake") === "0" || QP.get("pick") === "0") {
   else { $("pick").classList.remove("first"); $("pick").style.display = "flex"; $("pickhint").textContent = "listening"; pickOpen = true; }
 } else {
   pickOpen = true;
-  const laptopOnly = QP.get("camera") === "1";
   const wake = () => {
+    // One tap: this laptop listens and asks straight away. The phone is only the camera (and, with the Spanner app,
+    // a second microphone): it is paired once the person has said what they want to fix, never before the question.
     removeEventListener("keydown", wake, true); $("pick").classList.remove("first"); $("pick").style.cursor = "default";
     voiceOn = true; $("voice").classList.add("on");
-    if (laptopOnly) {                     // this laptop is the camera and the microphone: ask straight away
-      if (!micOn) $("mic").onclick();
-      $("pick").style.display = "flex"; $("pickhint").textContent = "listening"; narrate("What do you want to fix?");
-      return;
-    }
-    $("pick").style.display = "none";     // show the pairing QR; the question comes once the phone is connected
-    try { startRemote(); } catch (e) { console.error("wake:", e); }
-    narrate("Hi, I'm Spanner. Scan the code with the Spanner app on your phone.");
-    const waitPhone = setInterval(() => { if (linkState === "live") { clearInterval(waitPhone); if (pickOpen) showPicker(); } }, 500);
+    if (!micOn) $("mic").onclick();
+    $("pick").style.display = "flex"; $("pickhint").textContent = "listening"; narrate("What do you want to fix?");
   };
   $("pick").addEventListener("pointerdown", wake, { once: true }); addEventListener("keydown", wake, { capture: true, once: true });
 }
