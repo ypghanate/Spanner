@@ -59,9 +59,60 @@ class Pass1Input(BaseModel):
     image_notes: list[str] = Field(default_factory=list)          # one line per attached image, in order
 
 
+# --- ignore the assistant's own voice ----------------------------------------
+
+_ECHO_WINDOW_S = 30.0
+_WORD = re.compile(r"[a-z0-9']+")
+
+
+def _words(text: str) -> list[str]:
+    return _WORD.findall(text.lower())
+
+
+def remember_spoken(session: "Session", text: str | None) -> None:
+    """Record a line the assistant says (TTS), so the mic picking it back up is not taken as the user."""
+    if not text or not text.strip():
+        return
+    said = session.brain_state.setdefault("recent_spoken", [])
+    now = time.time()
+    said.append({"ts": now, "words": _words(text)})
+    session.brain_state["recent_spoken"] = [s for s in said if now - s["ts"] < _ECHO_WINDOW_S][-8:]
+
+
+def strip_echo(session: "Session", transcript: Transcript | None) -> Transcript | None:
+    """Remove words the assistant itself just said from the transcript; None if only echo is left.
+
+    Works on runs of words: any stretch of 3+ consecutive words that also appears in a recent assistant
+    line is cut, so "step one unplug the device ... okay done" keeps "okay done"."""
+    if transcript is None or not transcript.text.strip():
+        return transcript
+    now = time.time()
+    spoken = [s["words"] for s in session.brain_state.get("recent_spoken", [])
+              if now - s.get("ts", 0) < _ECHO_WINDOW_S]
+    if not spoken:
+        return transcript
+    words = _words(transcript.text)
+    grams = {tuple(w[i:i + 3]) for w in spoken for i in range(len(w) - 2)}
+    echo = [False] * len(words)
+    for i in range(len(words) - 2):
+        if tuple(words[i:i + 3]) in grams:
+            echo[i] = echo[i + 1] = echo[i + 2] = True
+    # a short utterance that is entirely made of the assistant's last line (e.g. "okay stopped")
+    if len(words) < 3 and any(words and words == w[:len(words)] for w in spoken):
+        echo = [True] * len(words)
+    kept = [w for w, e in zip(words, echo) if not e]
+    if not any(echo):
+        return transcript
+    if not kept:
+        log.info("dropped transcript as assistant echo: %r", transcript.text)
+        return None
+    return transcript.model_copy(update={"text": " ".join(kept)})
+
+
 def build_input(session: "Session", transcript: Transcript | None,
                 perception: "Perception | None" = None) -> Pass1Input:
     step = session.current_step()
+    transcript = strip_echo(session, transcript)
     return Pass1Input(
         phase=session.phase,
         observations=list(session.observations)[-3:],
@@ -133,7 +184,7 @@ _RULES: list[tuple[str, re.Pattern]] = [
     ("need_help", re.compile(r"\b(help|stuck|confused|doesn'?t work|won'?t|can'?t|broke|broken)\b", re.I)),
     ("step_done", re.compile(r"\b(done|finished|finish|next|complete[d]?|all set|ready)\b", re.I)),
 ]
-_START = re.compile(r"\b(start|begin|fix|repair|rubbing|broken|problem)\b", re.I)
+_START = re.compile(r"\b(start|begin|fix|repair|replace|rubbing|broken|problem|fuse|blown|blew)\b", re.I)
 
 
 def fallback_report(inp: Pass1Input) -> SituationReport:

@@ -106,28 +106,85 @@ repair_documents = [
             "4. When reconnecting, push the ribbon cable straight and flat into the slot until fully seated, then snap the locking latch back down securely."
         ),
         "metadata": {"category": "general", "component": "ribbon_cables", "difficulty": "easy"}
-    }
+    },
+    {
+        "id": "doc_fuse_identify_test",
+        "text": (
+            "How to find and test a blown fuse: "
+            "1. Safety first: unplug the device from the wall, remove batteries, and for a car switch the ignition off and remove the key. Wait a minute for capacitors to discharge. "
+            "2. Locate the fuse: in a UK plug it sits under the plug cover between the pins; in appliances look for a fuse holder near the power inlet; in cars check the fuse box diagram in the lid or manual. "
+            "3. Read the rating printed on the fuse cap or body: current in amps (for example T2A or F500mA), voltage (250V), and speed letter (F fast, T slow-blow). "
+            "4. Glass fuses with a broken or blackened wire are blown. Ceramic and SMD fuses look fine when blown, so test them. "
+            "5. Test with a multimeter in continuity mode, device unplugged: a good fuse beeps or reads near 0 ohms; a blown fuse reads open or OL."
+        ),
+        "metadata": {"category": "fuses", "component": "fuse_test", "difficulty": "easy"}
+    },
+    {
+        "id": "doc_fuse_replace",
+        "text": (
+            "How to replace a fuse safely: "
+            "1. Confirm the device is unplugged or the ignition is off before touching the holder. "
+            "2. Remove the old fuse with plastic tweezers or a fuse puller, never a metal screwdriver or pliers. Twist-off holders: press in and turn a quarter turn anticlockwise. "
+            "3. The replacement must match physical size, amps exactly, voltage equal or higher, the same speed letter (F or T), and breaking capacity where marked. Never fit a higher amp fuse and never bridge the holder with wire, foil or a paperclip. "
+            "4. Seat the new fuse centered and gently between the clips until it sits flat. Do not force it; if it will not fit it is the wrong size. "
+            "5. Close the holder or plug cover fully before reconnecting power. If the new fuse blows straight away, stop: the device has a fault a fuse cannot fix."
+        ),
+        "metadata": {"category": "fuses", "component": "fuse_replace", "difficulty": "easy"}
+    },
+    {
+        "id": "doc_fuse_types",
+        "text": (
+            "Common fuse types and ratings: "
+            "UK plug fuses (BS 1362): 3 A for appliances up to about 700 W, 13 A above that, or the value in the appliance instructions. "
+            "Car blade fuses: use the same amp rating and blade size (mini, standard, maxi). Colours: 5 A tan, 7.5 A brown, 10 A red, 15 A blue, 20 A yellow, 25 A clear, 30 A green. "
+            "Glass cartridge fuses: 5x20 mm and 6.3x32 mm are the common sizes; check length and diameter. "
+            "Resettable polyfuses (PTC) on USB keyboards and mice reset by themselves after unplugging and cooling for a few minutes; repeated tripping means a cable, connector or board short."
+        ),
+        "metadata": {"category": "fuses", "component": "fuse_types", "difficulty": "easy"}
+    },
 ]
 
-# 3. Add Documents to ChromaDB (Prevents duplication if script runs multiple times)
-if collection.count() < len(repair_documents):
-    collection.add(
-        ids=[doc["id"] for doc in repair_documents],
-        documents=[doc["text"] for doc in repair_documents],
-        metadatas=[doc["metadata"] for doc in repair_documents]
-    )
-    print(f"Successfully embedded and stored {len(repair_documents)} extensive repair documents into ChromaDB!")
-else:
-    print(f"ChromaDB already contains {collection.count()} documents. Skipping insertion.")
+# Guides that must always be in the prompt for a demo, whatever the semantic search returns.
+ALWAYS_INCLUDE_BY_DEMO = {
+    "fuse_replacement": ["doc_fuse_replace"],
+}
+# 3. Add Documents to ChromaDB. upsert so guides added later (e.g. the fuse guides) reach an existing database.
+collection.upsert(
+    ids=[doc["id"] for doc in repair_documents],
+    documents=[doc["text"] for doc in repair_documents],
+    metadatas=[doc["metadata"] for doc in repair_documents]
+)
 
 
-def retrieve_repair_knowledge(query: str, top_k: int = 2) -> str:
-    """The guides most relevant to `query`, as text for a prompt (no Claude call: Pass 2 adds them to its own)."""
-    if not query.strip():
-        return ""
-    results = collection.query(query_texts=[query], n_results=top_k)
-    chunks = results["documents"][0] if results.get("documents") else []
-    return "\n\n---\n\n".join(chunks)
+def retrieve_repair_knowledge(query: str, top_k: int = 2, always_include: list[str] | None = None,
+                              category: str | None = None) -> str:
+    """The guides most relevant to `query`, as text for a prompt (no Claude call: Pass 2 adds them to its own).
+
+    `always_include`: guide ids that are always added first. `category`: search that metadata category first,
+    then fill any remaining slots from the whole collection (so a category with few guides never returns nothing)."""
+    chunks: list[str] = []
+    seen: set[str] = set()
+
+    def add(ids, docs):
+        for i, d in zip(ids, docs):
+            if i not in seen and d:
+                seen.add(i)
+                chunks.append(d)
+
+    if always_include:
+        got = collection.get(ids=list(always_include))
+        add(got.get("ids") or [], got.get("documents") or [])
+    if query.strip():
+        if category:
+            try:
+                r = collection.query(query_texts=[query], n_results=top_k, where={"category": category})
+                add(r["ids"][0], r["documents"][0])
+            except Exception:
+                pass
+        if len(chunks) < top_k:
+            r = collection.query(query_texts=[query], n_results=top_k + len(seen))
+            add(r["ids"][0], r["documents"][0])
+    return "\n\n---\n\n".join(chunks[:max(top_k, len(always_include or []))])
 
 
 # 4. Setup RAG Query Function with Claude

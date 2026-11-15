@@ -69,7 +69,7 @@ RAG_HINTS = {
     "keyboard_character": "keyboard keycap switch",
     "keyboard_chassis": "keyboard case screws opening",
     "mouse_chassis": "mouse case skates screws opening",
-    "fuse_replacement": "fuse replacement blown fuse rating",
+    "fuse_replacement": "fuse replacement blown fuse rating amps holder multimeter continuity",
 }
 RAG_CATEGORY = {"fuse_replacement": "fuses"}
 
@@ -92,12 +92,27 @@ def _warning_for(demo: str, analysis: dict) -> tuple[str, str] | None:
   return None
 
 
-def _checks_clear(demo: str, analysis: dict) -> bool:
+def _status(analysis: dict, code: str) -> str:
   checks = analysis.get("safety_checks")
-  return isinstance(checks, dict) and all(
-      isinstance(checks.get(code), dict) and checks[code].get("status") == "safe"
-      for code in DEMO_WARNINGS[demo]
-  )
+  check = checks.get(code) if isinstance(checks, dict) else None
+  return check.get("status", "unclear") if isinstance(check, dict) else "unclear"
+
+
+def _checks_clear(demo: str, analysis: dict) -> bool:
+  """No check is unsafe and the model actually returned the checks.
+
+  "unclear" no longer blocks: many codes do not apply to a given step (no fuse in hand yet ->
+  wrong_fuse_rating is unclear; markings too small to read on camera), and requiring every code to be
+  "safe" left the fuse demo stuck on "I cannot confirm this step is safe" forever."""
+  checks = analysis.get("safety_checks")
+  if not isinstance(checks, dict) or not checks:
+    return False
+  return all(_status(analysis, code) != "unsafe" for code in DEMO_WARNINGS[demo])
+
+
+def _warning_resolved(demo: str, code: str, analysis: dict) -> bool:
+  """A paused warning clears when that specific issue is now visibly safe and nothing else is unsafe."""
+  return _status(analysis, code) == "safe" and _checks_clear(demo, analysis)
 
 
 SYSTEM = """You are an expert hardware repair technician and assistant watching a live camera feed of a keyboard, mouse, or small-electronics repair (including fuse replacement).
@@ -298,6 +313,16 @@ def analyze(frames, scene_text, hand_motion, current_step, issue, repair_demo=No
 
 
 async def respond(report: SituationReport, session: Any) -> BrainResponse:
+  resp = await _respond(report, session)
+  # remember what the assistant is about to say, so Pass 1 can drop it if the mic hears it back
+  from backend.brain.pass1 import remember_spoken
+  remember_spoken(session, resp.say)
+  if resp.alert is not None:
+    remember_spoken(session, resp.alert.message)
+  return resp
+
+
+async def _respond(report: SituationReport, session: Any) -> BrainResponse:
   intent = report.user_intent
   if intent == "stop":
     return BrainResponse(phase="identifying", say="Okay, stopped. Say start when you want to go again.")
@@ -363,7 +388,7 @@ async def respond(report: SituationReport, session: Any) -> BrainResponse:
 
   # A start/step_done command must never bypass an unresolved warning.
   if pending:
-    if pending.get("demo") != demo or not _checks_clear(demo, analysis):
+    if pending.get("demo") != demo or not _warning_resolved(demo, pending.get("code", ""), analysis):
       message = pending["message"]
       return BrainResponse(
           phase="safety_stop", current_step=step.index, step_status="mistake",
@@ -394,7 +419,7 @@ async def respond(report: SituationReport, session: Any) -> BrainResponse:
         alert=Alert(severity="warn", message=correction_msg)
     )
 
-  if not _checks_clear(demo, analysis):
+  if not _checks_clear(demo, analysis) and (intent == "step_done" or analysis.get("step_complete") is True):
     message = "Pause. I cannot confirm this step is safe. Show the device, fuse markings, and tool clearly."
     return BrainResponse(
         phase="guiding", current_step=step.index, step_status="in_progress",
