@@ -5,12 +5,12 @@ import { Image } from "expo-image";
 import { useTheme } from "../theme";
 import { useSpanner } from "../state/SpannerProvider";
 import { Icon, icons, images, PrimaryCta, Txt } from "../components/ui";
-import { SafetyBanner, SpokenCaption } from "../components/call";
+import { SafetyBanner, Transcript } from "../components/call";
 
 /** Phase safety_stop: mains / gas. Spanner refuses to guide and tells the user what to do. */
 export default function SafetyScreen() {
   const { c } = useTheme();
-  const { endCall, caption, alert, speaking, plan } = useSpanner();
+  const { endCall, alert, plan } = useSpanner();
   const banner = alert?.message ?? "Repair paused · mains electricity detected";
   const advice = plan?.safety_notes?.[0] ?? "Keep clear of exposed wiring and keep other people away from the area.";
 
@@ -38,7 +38,7 @@ export default function SafetyScreen() {
         <Txt size={14}>{advice}</Txt>
 
         <View style={{ flex: 1, minHeight: 32 }} />
-        {caption ? <SpokenCaption text={caption} speaking={speaking} /> : null}
+        <Transcript />
         <View style={{ marginTop: 20 }}>
           <PrimaryCta variant="danger" label="End call" onPress={() => void endCall()} />
         </View>

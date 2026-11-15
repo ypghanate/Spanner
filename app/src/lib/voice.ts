@@ -81,7 +81,7 @@ export class VoiceListener {
 
   /** Tap on the voice action: send what has been said so far. */
   flush() {
-    this.forceFlush = true;
+    if (this.speechAt > 0) this.forceFlush = true;   // only while someone is mid-sentence, or it would cut the next one short
   }
 
   async stop() {
