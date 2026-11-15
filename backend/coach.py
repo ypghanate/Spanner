@@ -625,6 +625,7 @@ class UtteranceReq(BaseModel):
     session: str
     audio_b64: str
     filename: str = "clip.m4a"
+    forced: bool = False      # the person tapped the screen to talk to Spanner: this is for it, never an echo or room talk
 
 
 async def _warm_voice(text: str) -> None:
@@ -665,12 +666,16 @@ async def utterance(req: UtteranceReq):
     _latest.setdefault(req.session, {})["utterance"] = {"text": text, "id": turn_id, "ts": time.time()}
     # Straight on to the reply (no waiting for the laptop to notice the words): what to do + what to say, in one go.
     t_stt = time.perf_counter()
-    turn = _quick_turn(text, req.session) or await asyncio.to_thread(_converse, text, req.session)
+    turn = _quick_turn(text, req.session) or await asyncio.to_thread(_converse, text, req.session, req.forced)
+    if req.forced:
+        turn.addressed = True
     print(f"utterance: stt {1000 * (t_stt - t_in):.0f} ms, reply {1000 * (time.perf_counter() - t_stt):.0f} ms", flush=True)
     if turn.say.strip():                      # have the voice ready by the time the laptop asks for it
         asyncio.create_task(_warm_voice(turn.say.strip()[:600]))
-    _latest[req.session]["reply"] = {**turn.model_dump(), "text": text, "id": turn_id, "ts": time.time()}
-    return {"text": text, "reply": turn.model_dump()}
+    if turn.addressed and turn.say.strip():   # Spanner is about to speak: the phone mutes its mic from now, not once the audio starts
+        _speaking[req.session] = max(_speaking.get(req.session, 0.0), time.time() + _say_seconds(turn.say))
+    _latest[req.session]["reply"] = {**turn.model_dump(), "text": text, "id": turn_id, "ts": time.time(), "forced": req.forced}
+    return {"text": text, "reply": {**turn.model_dump(), "forced": req.forced}}
 
 
 # ---------------------------------------------------------------- conversation (phone mic -> one reply + action)
@@ -754,9 +759,11 @@ def _converse_prompt() -> str:
     return (Path(__file__).parent / "brain" / "prompts" / "converse.md").read_text(encoding="utf-8")
 
 
-def _converse(text: str, session: str) -> Turn:
+def _converse(text: str, session: str, forced: bool = False) -> Turn:
     hist = _history.setdefault(session, [])
     body = f"[live state]\n{_context(session)}\n\n[they said] {text}"
+    if forced:
+        body += "\n\n[they tapped the screen to talk to you: these words are addressed to you]"
     pic = _last_frame.get(session)
     if pic and time.time() - pic[1] < 10 and (session not in _plans or _LOOK.search(text)):
         # a question about what is in view (or no repair yet, so nothing else has looked): answer from the picture itself

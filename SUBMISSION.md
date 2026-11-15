@@ -15,6 +15,73 @@ Spanner is a repair coach that watches you through the laptop camera, shows the 
 3D hologram, talks you through it, warns you before the mistakes other people made, and finds a verified
 replacement part the moment you need one.
 
+## Project story
+
+*Point your phone at what's broken, and it talks you through the fix, step by step, hands-free.*
+
+### Inspiration
+
+Most people can't fix simple broken things. They don't know the part names, and text guides and 20-minute videos don't help when your hands are full and you can't tell which of two identical screws the narrator means. We wanted a repair expert who looks at what you are looking at and tells you, in real time, what to do next. "Jarvis, but for repairs."
+
+We also wanted it to be honest about danger. A dead plug fuse is an easy fix, but only if the plug is out of the wall. Spanner needed to know when to say "stop, don't do that."
+
+### What it does
+
+Open the Spanner app on an iPhone, point it at the problem and say what's wrong. Spanner:
+
+- listens to you, and understands "the fuse in my plug has blown" without a menu;
+- plans a repair for that exact fault, with Claude, in your words;
+- shows the current step as a **3D hologram** on a laptop beside you, taking the device apart to the part you need;
+- watches the camera and **only moves on when it can see the device** and the step is done;
+- speaks to you in a natural voice, and warns you when it sees a mistake;
+- finds a replacement part when you need one, searching only for what you asked to order.
+
+### How we built it
+
+- **Phone:** Expo and React Native. It streams camera frames (rear or selfie camera) and cuts speech into short clips using an adaptive noise floor.
+- **Backend:** FastAPI with Pydantic contracts. Claude does the thinking: **Haiku** for fast intent and frame checks, **Sonnet** for planning and spoken turns that include a picture.
+- **Voice:** ElevenLabs for speech and transcription.
+- **Eyes:** YOLO with tracking, and cropped, resized frames sent to Claude.
+- **Laptop viewer:** Three.js, with every hologram built procedurally from named parts so a plan can say "highlight `fuse_door`."
+- **Knowledge:** a Databricks knowledge base, ChromaDB retrieval, and Linkup and Tavily for live part search.
+- **Safety:** the planner refuses scorched, sparking, hot or damaged plugs and always makes step one "unplug it."
+
+Every stage runs on fixtures with no API keys, so each teammate could build in isolation and merge later.
+
+### Challenges
+
+**Latency.** A turn is roughly
+
+$$T_{\text{turn}} = T_{\text{stt}} + T_{\text{reply}} + T_{\text{tts}},$$
+
+and we measured $T_{\text{stt}} \approx 0.4\text{–}1.0\ \text{s}$ and $T_{\text{reply}} \approx 1.1\text{–}1.8\ \text{s}$ before the voice even starts. We cut clips shorter, moved intent checks to Haiku, cached common plans per fault and sent small photos. Phone uploads had been multi-megabyte JPEGs, which hung and failed until we shrank them.
+
+**Deciding when a step is really done.** One lucky camera frame made the guide jump forward. Requiring two agreeing frames helps. If a wrong read were independent with probability $p$ per frame, two in a row would cut it to about $p^2$. We also made the repair wait until the device was actually in view.
+
+**It heard itself, and it ignored us.** Two opposite bugs. We then measured how it discards speech. Claude itself dropped 1 of 26 realistic phrases, but our laptop echo filter dropped about 30% of what a person really says. Natural phrases like "lift the old fuse out of the clips" repeat the step's wording, so they matched Spanner's own speech. An echo test based on word overlap,
+
+$$\frac{|W_{\text{heard}} \cap W_{\text{spoken}}|}{|W_{\text{heard}}|} \ge \theta,$$
+
+is only safe when $\theta$ is high and the phrase is long enough, and ours was neither.
+
+**Merging four people's work.** After one merge, the camera handler called helper functions that no longer existed, so every frame crashed once a repair was chosen. A prompt change that said "assume it's for you" quietly stopped plans being generated.
+
+**Getting the model right.** We first built a rewireable plug with a cover screw and cord grip, then realised modern plugs are sealed, with the fuse behind a small snap-shut door. We rebuilt the model and the repair around that.
+
+### What we learned
+
+- **Measure, don't guess.** Running 24 realistic phrases through the filter showed the real cause in minutes.
+- **Prompts are code.** A one-paragraph change altered what the product does, so prompts need tests like any other file.
+- **Gate actions on evidence.** Waiting for the camera, two agreeing frames and a refusal list make the guide trustworthy.
+- **Static checks catch merges.** A simple undefined-name check would have caught the broken camera handler before anyone ran it.
+- **Voice products live in the details.** Mute timing, echo and when to stay quiet matter as much as the model.
+
+### What's next
+
+Move echo handling to the server, add an intent window so it knows when you mean it, and add more repairs beyond phones, headphones and plugs.
+
+---
+
 ## What a judge sees in two minutes
 
 1. "My F key is dead." Tap once; from then on it is voice only.

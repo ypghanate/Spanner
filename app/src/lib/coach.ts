@@ -130,14 +130,15 @@ export class CoachClient {
   }
 
   /** One spoken utterance from this phone's microphone (base64 m4a). The laptop transcribes it and acts on it. */
-  async utterance(audioB64: string): Promise<{ text: string }> {
+  async utterance(audioB64: string, forced = false): Promise<{ text: string; reply?: { say?: string; addressed?: boolean } }> {
+    // forced = the person tapped the screen to talk: the words are for Spanner, never treated as an echo or room talk
     const res = await withTimeout(
       `${this.origin}/coach/utterance`,
-      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: this.session, audio_b64: audioB64, filename: "clip.m4a" }) },
+      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: this.session, audio_b64: audioB64, filename: "clip.m4a", forced }) },
       20000,
     );
     if (!res.ok) throw new Error(`/coach/utterance ${res.status}`);
-    return (await res.json()) as { text: string };
+    return (await res.json()) as { text: string; reply?: { say?: string; addressed?: boolean } };
   }
 
   /** Where is the keyboard and how is it turned? Fast and local on the laptop, drives the hologram's rotation. */

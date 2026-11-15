@@ -389,3 +389,63 @@ def test_plug_plan_uses_plug_parts_and_starts_by_unplugging(monkeypatch, tmp_pat
     assert [c["part"] for c in r["plan"]["steps"][2]["scene3d"] if c.get("part")] == ["fuse", "fuse_holder"]
     assert "plug" in r["plan"]["steps"][0]["instruction"].lower() and "unplug" in r["plan"]["steps"][0]["title"].lower()
     assert (tmp_path / "plans" / "device-plug13a-class-fuse.json").exists()
+
+
+# ---------------------------------------------------------------- tap to talk (override) and the early mute
+def _utterance_client(monkeypatch, turn):
+    """The /coach/utterance route with speech-to-text and Claude replaced, so no keys are needed."""
+    import types
+
+    from fastapi.testclient import TestClient
+
+    from backend import coach
+    from backend.main import create_app
+    from backend.voice import stt
+
+    async def fake_stt(audio, filename, *a, **k):
+        return types.SimpleNamespace(text="lift the old fuse out of the clips")
+
+    monkeypatch.setattr(stt, "transcribe", fake_stt)
+    seen = {}
+
+    def fake_converse(text, session, forced=False):
+        seen["forced"] = forced
+        return turn.model_copy()
+
+    monkeypatch.setattr(coach, "_converse", fake_converse)
+    monkeypatch.setattr(coach, "_quick_turn", lambda *a, **k: None)
+    monkeypatch.setattr(coach, "_warm_voice", lambda text: _noop())
+    return TestClient(create_app()), coach, seen
+
+
+async def _noop():
+    return None
+
+
+def test_a_tapped_utterance_is_always_addressed(monkeypatch):
+    from backend.coach import Turn
+
+    c, coach, seen = _utterance_client(monkeypatch, Turn(addressed=False))
+    body = {"session": "tap1", "audio_b64": "AAAA", "forced": True}
+    r = c.post("/coach/utterance", json=body).json()
+    assert seen["forced"] is True
+    assert r["reply"]["addressed"] is True and r["reply"]["forced"] is True
+    assert coach._latest["tap1"]["reply"]["forced"] is True
+    # untapped: Claude's own judgement stands
+    r = c.post("/coach/utterance", json={"session": "tap2", "audio_b64": "AAAA"}).json()
+    assert r["reply"]["addressed"] is False and r["reply"]["forced"] is False
+
+
+def test_the_phone_is_told_spanner_is_speaking_as_soon_as_the_reply_exists(monkeypatch):
+    import time
+
+    from backend.coach import Turn
+
+    c, coach, _ = _utterance_client(monkeypatch, Turn(addressed=True, say="Press the fuse door shut until it clicks."))
+    c.post("/coach/utterance", json={"session": "mute1", "audio_b64": "AAAA"})
+    assert coach._speaking["mute1"] > time.time()           # /coach/latest now says speaking: the phone mutes its mic
+    assert c.get("/coach/latest", params={"session": "mute1"}).json()["speaking"] is True
+    # no spoken reply -> nothing to mute for
+    c2, coach2, _ = _utterance_client(monkeypatch, Turn(addressed=True, say="", action="next"))
+    c2.post("/coach/utterance", json={"session": "mute2", "audio_b64": "AAAA"})
+    assert coach2._speaking.get("mute2", 0) <= time.time()

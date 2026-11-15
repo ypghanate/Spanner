@@ -541,14 +541,27 @@ function reportSpeaking(ms) {
 }
 
 // ---- Spanner hearing its own voice (the phone's microphone is next to the laptop's speaker)
-const echoWords = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter((w) => w.length > 2));
-const STOCK_DEV = /what('s| is) wrong with it|i'm spanner|scan the code|taking it apart|putting it back|let me work out|heads up|step \d|all done/i;
-function isEchoDev(text, graceMs = 6000) {
-  if (STOCK_DEV.test(text)) return true;
+const tokensDev = (s) => s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter(Boolean);
+/** The longest run of words that appears, in the same order and back to back, in both lines. */
+function longestRunDev(a, b) {
+  let best = 0; const row = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    let diag = 0;
+    for (let j = 1; j <= b.length; j++) { const up = row[j]; row[j] = a[i - 1] === b[j - 1] ? diag + 1 : 0; if (row[j] > best) best = row[j]; diag = up; }
+  }
+  return best;
+}
+// Lines only Spanner says. Not "what's wrong with it", "all done" or "step 2": a person says those too.
+const STOCK_DEV = /i'm spanner|scan the code|let me work out|heads up/i;
+/** Only counts while Spanner is talking or just after. Then it is an echo if it is one of its stock lines, or (5+ words)
+ *  most of the sentence is Spanner's own words back to back. You repeating a step in your own words is not an echo, and a
+ *  tap to talk (`r.forced`) skips this check altogether. */
+function isEchoDev(text, graceMs = 3500) {
   if (performance.now() > speakingUntil + graceMs || !currentSpeech) return false;
-  const a = echoWords(text), b = echoWords(currentSpeech); if (!a.size) return true;
-  if (a.size < 3) return false;          // "start", "next", "stop": a short command is you, even if Spanner just said the word
-  let n = 0; for (const w of a) if (b.has(w)) n++; return n / a.size >= 0.6;
+  if (STOCK_DEV.test(text)) return true;
+  const a = tokensDev(text); if (!a.length) return true;
+  if (a.length < 5) return false;        // "start", "next", "the door popped off": a short line is you
+  return longestRunDev(a, tokensDev(currentSpeech)) / a.length >= 0.8;
 }
 
 // ---- pairing code (only while no phone is sending pictures)
@@ -679,7 +692,8 @@ async function requestRepair(raw) {
 
 // ---- what the server decided for something said into the phone: do it
 async function onReply(r) {
-  if (!r.addressed || isEchoDev(r.text)) { heard(r.text, "not for me"); return; }
+  if (!r.addressed) { heard(r.text, "not for me"); return; }
+  if (!r.forced && isEchoDev(r.text)) { heard(r.text, "ignored: sounded like me"); return; }   // r.forced = they tapped to talk
   if (clarifying && r.action !== "plan_repair" && r.action !== "stop") { const c = clarifying + ". " + r.text; clarifying = null; return requestRepair(c); }
   heard(r.text, r.action === "none" ? "talking" : r.action.replace(/_/g, " "));
   if (r.action !== "stop" && performance.now() < speakingUntil) stopSpeaking();

@@ -110,7 +110,7 @@ export default function CallScreen() {
       ? { action: "Show me what’s going on", hint: "Say “done” · “repeat” · “show a diagram”" }
       : understood
         ? { action: "Show me what’s going on", hint: "Say “show me how” · or ask a question" }
-        : { action: "Show me what’s going on", hint: "Tap once you’ve explained it" };
+        : { action: "Show me what’s going on", hint: "Tap to talk over Spanner · it stops and listens" };
 
   return (
     <View style={{ flex: 1, backgroundColor: camera.surface }}>

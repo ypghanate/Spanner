@@ -131,6 +131,8 @@ const Ctx = createContext<(SpannerState & Actions) | null>(null);
 
 const POLL_MS = 300; // the laptop viewer polls /coach/latest at the same rate
 const POSE_MS = 250;
+const MUTE_LEAD_MS = 1800; // mic closes the moment a spoken reply exists; this bridges the gap until the laptop's audio starts
+const MUTE_TAIL_MS = 450; // stays closed this long after Spanner's last word (room echo)
 const FRAME_MS = 0; // the next frame goes as soon as the last answer lands (frameBusy is the only gate): the camera is always being read
 
 export function SpannerProvider({ children }: { children: React.ReactNode }) {
@@ -155,6 +157,8 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
   const bargeHold = useRef(0); // after a tap: ignore the old "laptop is speaking" until it clears (or this time passes)
   const lastStop = useRef(0);
   const lastBotAt = useRef(0); // when Spanner last had something to say (its flags can lag behind the real audio)
+  const holdMuteUntil = useRef(0); // keep the mic muted until then: set as soon as a reply comes back, and a short tail after Spanner stops
+  const forcedUntil = useRef(0); // after a tap: the next thing said is for Spanner (it skips the echo and room-talk filters)
   const speakingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Turn the laptop's latest coach view + step tracker into the screen state the Figma UI reads. */
@@ -279,6 +283,7 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
           }
           if (talking !== laptopSpeaking.current) {
             laptopSpeaking.current = talking;
+            if (!talking) holdMuteUntil.current = Math.max(holdMuteUntil.current, Date.now() + MUTE_TAIL_MS); // room echo after the last word
             if (!phonePlaying.current) patch({ speaking: talking });
           }
           const s0 = stateRef.current;
@@ -286,7 +291,7 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
             lastStop.current = Date.now();
             void c.signal("stop").catch(() => {});
           }
-          void listener.current?.setMuted(talking || s0.micMuted);
+          void listener.current?.setMuted(talking || s0.micMuted || Date.now() < holdMuteUntil.current);
           if (!stateRef.current.connected) patch({ connected: true });
         } catch {
           if (stateRef.current.connected) patch({ connected: false });
@@ -305,8 +310,17 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
       const l = new VoiceListener(
         (u) => {
           if (stateRef.current.botMuted) return;   // conversation paused: nothing is sent
-          c.utterance(u.audioB64)
-            .then((r) => { if (r?.text) patch({ userText: r.text, transcriptWho: "you" }); })
+          const forced = Date.now() < forcedUntil.current;   // tapped to talk: this one is for Spanner, whatever it sounds like
+          forcedUntil.current = 0;
+          c.utterance(u.audioB64, forced)
+            .then((r) => {
+              if (r?.text) patch({ userText: r.text, transcriptWho: "you" });
+              // Spanner is about to answer out loud: close the mic now instead of waiting for the laptop's audio to start
+              if (r?.reply?.addressed !== false && r?.reply?.say?.trim()) {
+                holdMuteUntil.current = Math.max(holdMuteUntil.current, Date.now() + MUTE_LEAD_MS);
+                void listener.current?.setMuted(true);
+              }
+            })
             .catch((e) => patch({ error: "Voice failed: " + (e instanceof Error ? e.message : String(e)) }));
         },
         (level) => patch({ level }),
@@ -462,6 +476,8 @@ export function SpannerProvider({ children }: { children: React.ReactNode }) {
         speech.current?.stop();
         void client.current?.signal("stop").catch(() => {});
         bargeHold.current = Date.now() + 6000;
+        holdMuteUntil.current = 0;                    // the tap opens the mic at once: no mute tail
+        forcedUntil.current = Date.now() + 8000;      // and what is said next is for Spanner (override)
         laptopSpeaking.current = false;
         patch({ speaking: false, transcriptWho: "you", userText: "" });
         if (!s1.micMuted) void listener.current?.setMuted(false);

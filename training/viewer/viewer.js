@@ -1232,16 +1232,28 @@ async function command(raw) {
 }
 // ---- every spoken sentence, from the laptop mic or the phone mic, comes in here
 const QUICK = /^(?:\s*(?:ok(?:ay)?|hey|spanner|please|and|now|just)[,\s]*)*(close|stop|quiet|shut up|stop talking|be quiet|enough|pause|next|back|calibrate|reset|rewind|x-?ray|lights (?:on|off)|take it apart|put it back|zoom (?:in|out))\b/i;
-const echoWords = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/s+/).filter((w) => w.length > 2));
-const STOCK = /what do you want to fix|i'm spanner|i am spanner|show it to me|step by step|replacement parts or other keyboards|heads up|people often|searching live|taking it apart|putting it back|starting over|let me work out the fix|scan the code/i;
-/** Spanner hearing its own voice: its stock phrases, or most of the words are in what it is saying (or just said). */
+const echoWords = (s) => new Set(s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter((w) => w.length > 2));
+const tokens = (s) => s.toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter(Boolean);
+/** The longest run of words that appears, in the same order and back to back, in both lines. */
+function longestRun(a, b) {
+  let best = 0; const row = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    let diag = 0;
+    for (let j = 1; j <= b.length; j++) { const up = row[j]; row[j] = a[i - 1] === b[j - 1] ? diag + 1 : 0; if (row[j] > best) best = row[j]; diag = up; }
+  }
+  return best;
+}
+// Lines only Spanner says (not phrases a person would also say, like "show it to me" or "step by step").
+const STOCK = /what do you want to fix|i'm spanner|i am spanner|replacement parts or other keyboards|heads up|people often|searching live|starting over|let me work out the fix|scan the code/i;
+/** Spanner hearing its own voice. Only counts while it is talking or just after. Then it is an echo if it is one of its
+ *  stock lines, or (5+ words) most of the sentence is Spanner's own words back to back: you repeating a step in your own
+ *  words, or using the same words in another order, is not an echo. A tap to talk skips this check altogether. */
 function isEcho(text, graceMs = 1500) {
-  if (STOCK.test(text)) return true;
   if (performance.now() > speakingUntil + graceMs || !currentSpeech) return false;
-  const a = echoWords(text), b = echoWords(currentSpeech); if (!a.size) return true;
-  if (a.size < 4) return false;          // a short line is you, even if Spanner just said the word
-  if (/\b(i|i'm|i've|i'll|my|me|mine|we|there's|there is|it's not|isn't|can't|cannot|don't|won't)\b/.test(text.toLowerCase())) return false;   // first person: the user, never an echo
-  let n = 0; for (const w of a) if (b.has(w)) n++; return n / a.size >= 0.8;
+  if (STOCK.test(text)) return true;
+  const a = tokens(text); if (!a.length) return true;
+  if (a.length < 5) return false;          // a short line is you, even if Spanner just said those words
+  return longestRun(a, tokens(currentSpeech)) / a.length >= 0.8;
 }
 let lastActed = { text: "", t: 0 };
 /** While Spanner talks only a clean short command gets through (barge-in); its own voice is dropped.
@@ -1617,7 +1629,8 @@ function reportState() {
 const ACKS = ["Mm-hm.", "Okay.", "Let me see.", "Right."];
 function closePicker() { if (!pickOpen) return; pickOpen = false; $("pick").style.opacity = 0; setTimeout(() => { $("pick").style.display = "none"; }, 600); }
 async function onReply(r) {
-  if (!r.addressed || isEcho(r.text, 2500)) { heard(r.text, "not for me"); return; }
+  if (!r.addressed) { heard(r.text, "not for me"); return; }
+  if (!r.forced && isEcho(r.text, 3500)) { heard(r.text, "ignored: sounded like me"); return; }   // r.forced = they tapped to talk
   heard(r.text, r.action === "none" ? "talking" : r.action.replace(/_/g, " "));
   if (r.action !== "stop" && performance.now() < speakingUntil) stopSpeech();
   const viaCommand = { take_apart: "take it apart", reassemble: "put it back together", xray: "x-ray", zoom_in: "zoom in",
